@@ -7,8 +7,9 @@ https://dosnetwork.github.io/docs.
 
 
 #### Tools:
-- [Truffle](https://www.truffleframework.com/docs/truffle/overview)
-- [Ganache/Testrpc](https://github.com/trufflesuite/ganache-cli/blob/master/README.md)
+- Eth:
+  - [Truffle](https://www.truffleframework.com/docs/truffle/overview)
+  - [Ganache/Testrpc](https://github.com/trufflesuite/ganache-cli/blob/master/README.md)
 
 
 #### TODO:
