@@ -1,6 +1,6 @@
 pragma solidity ^0.4.24;
 
-//import "github.com/DOSNetwork/contracts/eth/contracts/DOSOnChainSDK.sol";
+//import "github.com/DOSNetwork/eth-contracts/contracts/DOSOnChainSDK.sol";
 import "../DOSOnChainSDK.sol";
 
 contract SimpleDice is DOSOnChainSDK {
