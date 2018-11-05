@@ -1,6 +1,7 @@
 pragma solidity ^0.4.24;
 
-import "github.com/DOSNetwork/contracts/eth/contracts/DOSOnChainSDK.sol";
+//import "github.com/DOSNetwork/contracts/eth/contracts/DOSOnChainSDK.sol";
+import "../DOSOnChainSDK.sol";
 
 contract SimpleDice is DOSOnChainSDK {
     address public devAddress = 0xe4E18A49c6F1210FFE9a60dBD38071c6ef78d982;
