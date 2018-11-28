@@ -66,7 +66,8 @@ contract DOSProxy {
         bytes message,
         uint[2] signature,
         uint[4] pubKey,
-        bool pass
+        bool pass,
+        uint8 version
     );
     event LogInsufficientGroupNumber();
     event LogGrouping(uint[] NodeId);
@@ -197,7 +198,8 @@ contract DOSProxy {
         uint trafficId,
         bytes data,
         BN256.G1Point signature,
-        BN256.G2Point grpPubKey
+        BN256.G2Point grpPubKey,
+        uint8 version
     )
         internal
         onlyWhitelisted
@@ -227,7 +229,8 @@ contract DOSProxy {
             message,
             [signature.x, signature.y],
             [grpPubKey.x[0], grpPubKey.x[1], grpPubKey.y[0], grpPubKey.y[1]],
-            passVerify
+            passVerify,
+            version
         );
         return passVerify;
     }
@@ -236,7 +239,8 @@ contract DOSProxy {
         uint requestId,
         uint8 trafficType,
         bytes result,
-        uint[2] sig
+        uint[2] sig,
+        uint8 version
     )
         external
     {
@@ -245,7 +249,8 @@ contract DOSProxy {
                 requestId,
                 result,
                 BN256.G1Point(sig[0], sig[1]),
-                PendingRequests[requestId].handledGroup))
+                PendingRequests[requestId].handledGroup,
+                version))
         {
             return;
         }
@@ -283,7 +288,8 @@ contract DOSProxy {
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
-                lastHandledGroup))
+                lastHandledGroup,
+                0))
         {
             return;
         }
