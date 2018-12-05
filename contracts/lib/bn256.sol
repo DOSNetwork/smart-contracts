@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity >= 0.4.24;
 
 library BN256 {
     struct G1Point {
@@ -11,11 +11,11 @@ library BN256 {
         uint[2] y;
     }
 
-    function P1() internal pure returns (G1Point) {
+    function P1() internal pure returns (G1Point memory) {
         return G1Point(1, 2);
     }
 
-    function P2() internal pure returns (G2Point) {
+    function P2() internal pure returns (G2Point memory) {
         return G2Point(
             [11559732032986387107991004021392285783925812861821192530917403151452391805634,
             10857046999023057135944570762232829481370756359578518086990519993285655852781],
@@ -25,7 +25,7 @@ library BN256 {
         );
     }
 
-    function pointAdd(G1Point p1, G1Point p2) internal returns (G1Point r) {
+    function pointAdd(G1Point memory p1, G1Point memory p2) internal returns (G1Point memory r) {
         uint[4] memory input;
         input[0] = p1.x;
         input[1] = p1.y;
@@ -38,7 +38,7 @@ library BN256 {
         }
     }
 
-    function scalarMul(G1Point p, uint s) internal returns (G1Point r) {
+    function scalarMul(G1Point memory p, uint s) internal returns (G1Point memory r) {
         uint[3] memory input;
         input[0] = p.x;
         input[1] = p.y;
@@ -50,14 +50,14 @@ library BN256 {
         }
     }
 
-    function hashToG1(bytes data) internal returns (G1Point) {
+    function hashToG1(bytes memory data) internal returns (G1Point memory) {
         uint256 h = uint256(keccak256(data));
         return scalarMul(P1(), h);
     }
 
     // @return the result of computing the pairing check
     // check passes if e(p1[0], p2[0]) *  .... * e(p1[n], p2[n]) == 1
-    function pairingCheck(G1Point[] p1, G2Point[] p2) internal returns (bool) {
+    function pairingCheck(G1Point[] memory p1, G2Point[] memory p2) internal returns (bool) {
         require(p1.length == p2.length);
         uint elements = p1.length;
         uint inputSize = elements * 6;

@@ -1,14 +1,14 @@
-pragma solidity ^0.4.24;
+pragma solidity >= 0.4.24;
 
 import "./lib/utils.sol";
 
-interface DOSProxyInterface {
-    function query(address, uint, string, string) external returns (uint);
-    function requestRandom(address, uint8, uint) external returns (uint);
+contract DOSProxyInterface {
+    function query(address, uint, string memory, string memory) public returns (uint);
+    function requestRandom(address, uint8, uint) public returns (uint);
 }
 
-interface DOSAddressBridgeInterface {
-    function getProxyAddress() external view returns (address);
+contract DOSAddressBridgeInterface {
+    function getProxyAddress() public view returns (address);
 }
 
 contract DOSOnChainSDK {
@@ -48,12 +48,12 @@ contract DOSOnChainSDK {
     //             }
     //            Check below documentation for details.
     //            (https://dosnetwork.github.io/docs/#/contents/blockchains/ethereum?id=selector).
-    function DOSQuery(uint timeout, string dataSource, string selector)
+    function DOSQuery(uint timeout, string memory dataSource, string memory selector)
         resolveAddress
         internal
         returns (uint)
     {
-        return dosProxy.query(this, timeout, dataSource, selector);
+        return dosProxy.query(address(this), timeout, dataSource, selector);
     }
 
     // @dev: Must override __callback__ to process a corresponding response. A
@@ -62,7 +62,7 @@ contract DOSOnChainSDK {
     // @queryId: A unique queryId returned by DOSQuery() for callers to
     //           differentiate parallel responses.
     // @result: Response for the specified queryId.
-    function __callback__(uint queryId, bytes result) external {
+    function __callback__(uint queryId, bytes memory result) public {
         // To be overridden in the caller contract.
     }
 
@@ -87,7 +87,7 @@ contract DOSOnChainSDK {
         internal
         returns (uint)
     {
-        return dosProxy.requestRandom(this, mode, seed);
+        return dosProxy.requestRandom(address(this), mode, seed);
     }
 
     // @dev: Must override __callback__ to process a corresponding random
@@ -97,7 +97,7 @@ contract DOSOnChainSDK {
     //             differentiate random numbers generated concurrently.
     // @generatedRandom: Generated secure random number for the specific
     //                   requestId.
-    function __callback__(uint requestId, uint generatedRandom) external {
+    function __callback__(uint requestId, uint generatedRandom) public {
         // To be overridden in the caller contract.
     }
 }

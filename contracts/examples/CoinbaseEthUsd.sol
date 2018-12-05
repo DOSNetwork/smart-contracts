@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity >= 0.4.24;
 
 //import "github.com/DOSNetwork/eth-contracts/contracts/DOSOnChainSDK.sol";
 import "../DOSOnChainSDK.sol";
@@ -26,7 +26,7 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
         _;
     }
     
-    function __callback__(uint id, bytes result) external auth {
+    function __callback__(uint id, bytes memory result) public auth {
         require(queryId == id, "Unmatched response");
         
         price_str = string(result);

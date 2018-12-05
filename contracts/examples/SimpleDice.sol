@@ -1,10 +1,10 @@
-pragma solidity ^0.4.24;
+pragma solidity >= 0.5.0;
 
 //import "github.com/DOSNetwork/eth-contracts/contracts/DOSOnChainSDK.sol";
 import "../DOSOnChainSDK.sol";
 
 contract SimpleDice is DOSOnChainSDK {
-    address public devAddress = 0xe4E18A49c6F1210FFE9a60dBD38071c6ef78d982;
+    address payable public devAddress = 0xe4E18A49c6F1210FFE9a60dBD38071c6ef78d982;
     uint public devContributed = 0;
     // 1% winning payout goes to developer account
     uint public developCut = 1;
@@ -16,7 +16,7 @@ contract SimpleDice is DOSOnChainSDK {
     struct DiceInfo {
         uint rollUnder;  // betted number, player wins if random < rollUnder
         uint amountBet;  // amount in wei
-        address player;  // better address
+        address payable player;  // better address
     }
 
     event ReceivedBet(
@@ -38,12 +38,12 @@ contract SimpleDice is DOSOnChainSDK {
         require(msg.sender == devAddress);
         _;
     }
-    
+
     function min(uint a, uint b) internal pure returns(uint) {
         return a < b ? a : b;
     }
     // Only receive bankroll funding from developer.
-    function() public payable onlyDev {
+    function() external payable onlyDev {
         devContributed += msg.value;
     }
     // Only developer can withdraw the amount up to what he has contributed.
@@ -52,7 +52,7 @@ contract SimpleDice is DOSOnChainSDK {
         devContributed = 0;
         devAddress.transfer(withdrawalAmount);
     }
-    
+
     // 100 / (rollUnder - 1) * (1 - 0.01) => 99 / (rollUnder - 1)
     // Not using SafeMath as this function cannot overflow anyway.
     function computeWinPayout(uint rollUnder) public view returns(uint) {
@@ -82,8 +82,8 @@ contract SimpleDice is DOSOnChainSDK {
         emit ReceivedBet(gameId, rollUnder, msg.value, msg.sender);
     }
 
-    function __callback__(uint requestId, uint generatedRandom) external auth {
-        address player = games[requestId].player;
+    function __callback__(uint requestId, uint generatedRandom) public auth {
+        address payable player = games[requestId].player;
         require(player != address(0x0));
 
         uint gen_rnd = generatedRandom % 100 + 1;

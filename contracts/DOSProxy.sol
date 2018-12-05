@@ -1,14 +1,14 @@
-pragma solidity ^0.4.24;
+pragma solidity >= 0.4.24;
 // Not enabled for production yet.
 //pragma experimental ABIEncoderV2;
 
 import "./lib/bn256.sol";
 
-interface UserContractInterface {
+contract UserContractInterface {
     // Query callback.
-    function __callback__(uint, bytes) external;
+    function __callback__(uint, bytes memory) public;
     // Random number callback.
-    function __callback__(uint, uint) external;
+    function __callback__(uint, uint) public;
 }
 
 contract DOSProxy {
@@ -86,7 +86,7 @@ contract DOSProxy {
         _;
     }
 
-    function initWhitelist(address[21] addresses) public {
+    function initWhitelist(address[21] memory addresses) public {
         require(!whitelistInitialized, "Whitelist already initialized!");
 
         for (uint idx = 0; idx < 21; idx++) {
@@ -105,13 +105,13 @@ contract DOSProxy {
         public
         onlyWhitelisted
     {
-        require(newWhitelistedAddr != 0x0 && newWhitelistedAddr != msg.sender);
+        require(newWhitelistedAddr != address(0x0) && newWhitelistedAddr != msg.sender);
 
         emit WhitelistAddressTransferred(msg.sender, newWhitelistedAddr);
         whitelists[isWhitelisted[msg.sender]] = newWhitelistedAddr;
     }
 
-    function getCodeSize(address addr) internal constant returns (uint size) {
+    function getCodeSize(address addr) internal view returns (uint size) {
         assembly {
             size := extcodesize(addr)
         }
@@ -122,10 +122,10 @@ contract DOSProxy {
     function query(
         address from,
         uint timeout,
-        string dataSource,
-        string selector
+        string memory dataSource,
+        string memory selector
     )
-        external
+        public
         returns (uint)
     {
         if (getCodeSize(from) > 0) {
@@ -161,7 +161,7 @@ contract DOSProxy {
 
     // Request a new user-level random number.
     function requestRandom(address from, uint8 mode, uint userSeed)
-        external
+        public
         returns (uint)
     {
         // fast mode
@@ -194,9 +194,9 @@ contract DOSProxy {
     function validateAndVerify(
         uint8 trafficType,
         uint trafficId,
-        bytes data,
-        BN256.G1Point signature,
-        BN256.G2Point grpPubKey
+        bytes memory data,
+        BN256.G1Point memory signature,
+        BN256.G2Point memory grpPubKey
     )
         internal
         onlyWhitelisted
@@ -234,10 +234,10 @@ contract DOSProxy {
     function triggerCallback(
         uint requestId,
         uint8 trafficType,
-        bytes result,
-        uint[2] sig
+        bytes memory result,
+        uint[2] memory sig
     )
-        external
+        public
     {
         if (!validateAndVerify(
                 trafficType,
@@ -250,7 +250,7 @@ contract DOSProxy {
         }
 
         address ucAddr = PendingRequests[requestId].callbackAddr;
-        if (ucAddr == 0x0) {
+        if (ucAddr == address(0x0)) {
             emit LogRequestFromNonExistentUC();
             return;
         }
@@ -270,13 +270,13 @@ contract DOSProxy {
         }
     }
 
-    function toBytes(uint x) internal pure returns (bytes b) {
+    function toBytes(uint x) internal pure returns (bytes memory b) {
         b = new bytes(32);
         assembly { mstore(add(b, 32), x) }
     }
 
     // System-level secure distributed random number generator.
-    function updateRandomness(uint[2] sig) external {
+    function updateRandomness(uint[2] memory sig) public {
         if (!validateAndVerify(
                 TrafficSystemRandom,
                 lastRandomness,
@@ -330,7 +330,7 @@ contract DOSProxy {
         }
     }
 
-    function getGroupPubKey(uint idx) public constant returns (uint[4]) {
+    function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
         require(idx < groupPubKeys.length, "group index out of range");
 
         return [

@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity >= 0.4.24;
 
 import "../Ownable.sol";
 import "../DOSOnChainSDK.sol";
@@ -38,7 +38,7 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     }
 
     // Ask me anything (AMA) off-chain through an api/url.
-    function AMA(string url, string selector) public {
+    function AMA(string memory url, string memory selector) public {
         lastQueriedUrl = url;
         lastQueriedSelector = selector;
         uint id = DOSQuery(timeout, url, selector);
@@ -51,7 +51,7 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     }
 
     // User-defined callback function handling query response.
-    function __callback__(uint queryId, bytes result) external auth(queryId) {
+    function __callback__(uint queryId, bytes memory result) public auth(queryId) {
         response = string(result);
         emit QueryResponseReady(queryId, response);
         delete _valid[queryId];
@@ -77,7 +77,7 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     // User-defined callback function handling newly generated secure
     // random number.
     function __callback__(uint requestId, uint generatedRandom)
-        external
+        public
         auth(requestId)
     {
         random = generatedRandom;
