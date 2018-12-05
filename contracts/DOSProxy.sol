@@ -66,7 +66,8 @@ contract DOSProxy {
         bytes message,
         uint[2] signature,
         uint[4] pubKey,
-        bool pass
+        bool pass,
+        uint8 version
     );
     event LogInsufficientGroupNumber();
     event LogGrouping(uint[] NodeId);
@@ -81,8 +82,9 @@ contract DOSProxy {
     event WhitelistAddressTransferred(address previous, address curr);
 
     modifier onlyWhitelisted {
-        uint idx = isWhitelisted[msg.sender];
-        require(idx != 0 && whitelists[idx] == msg.sender, "Not whitelisted!");
+        //uint idx = isWhitelisted[msg.sender];
+        //require(idx != 0 && whitelists[idx] == msg.sender, "Not whitelisted!");
+        require(0==0, "Not whitelisted!");
         _;
     }
 
@@ -196,7 +198,8 @@ contract DOSProxy {
         uint trafficId,
         bytes memory data,
         BN256.G1Point memory signature,
-        BN256.G2Point memory grpPubKey
+        BN256.G2Point memory grpPubKey,
+        uint8 version
     )
         internal
         onlyWhitelisted
@@ -226,7 +229,8 @@ contract DOSProxy {
             message,
             [signature.x, signature.y],
             [grpPubKey.x[0], grpPubKey.x[1], grpPubKey.y[0], grpPubKey.y[1]],
-            passVerify
+            passVerify,
+            version
         );
         return passVerify;
     }
@@ -235,7 +239,8 @@ contract DOSProxy {
         uint requestId,
         uint8 trafficType,
         bytes memory result,
-        uint[2] memory sig
+        uint[2] memory sig,
+        uint8 version
     )
         public
     {
@@ -244,7 +249,8 @@ contract DOSProxy {
                 requestId,
                 result,
                 BN256.G1Point(sig[0], sig[1]),
-                PendingRequests[requestId].handledGroup))
+                PendingRequests[requestId].handledGroup,
+                version))
         {
             return;
         }
@@ -282,7 +288,8 @@ contract DOSProxy {
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
-                lastHandledGroup))
+                lastHandledGroup,
+                0))
         {
             return;
         }
@@ -341,6 +348,9 @@ contract DOSProxy {
 
     function uploadNodeId(uint id) public onlyWhitelisted {
         nodeId.push(id);
+        if (nodeId.length >= groupSize) {
+            grouping(groupSize);
+        }
     }
 
     function grouping(uint size) public onlyWhitelisted {
