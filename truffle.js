@@ -21,5 +21,11 @@ module.exports = {
       network_id: 4,
       gas: 8000000  // Gas limit used for deploys, choose block gas limit
     },
+  },
+  solc: {
+    optimizer: {
+      enabled: true,
+      runs: 200
+    }
   }
 };

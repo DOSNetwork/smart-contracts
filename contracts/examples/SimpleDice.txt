@@ -1,5 +1,10 @@
 pragma solidity >= 0.5.0;
 
+// Wait till truffle integrates with latest solc, as currently it's only
+// compilable with solc v0.5.x.
+// There're many breaking changes between v0.4.x and v0.5.x, see:
+// https://solidity.readthedocs.io/en/v0.5.1/050-breaking-changes.html.
+
 //import "github.com/DOSNetwork/eth-contracts/contracts/DOSOnChainSDK.sol";
 import "../DOSOnChainSDK.sol";
 
