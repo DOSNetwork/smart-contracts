@@ -5,7 +5,7 @@ import "../contracts/lib/bn256.sol";
 
 contract TestBN256 {
     
-    function testPointAdd() returns(bool) {
+    function testPointAdd() external returns(bool) {
         BN256.G1Point memory p1 = BN256.P1();
         BN256.G1Point memory p2 = BN256.P1();           
         BN256.G1Point memory sum = BN256.pointAdd(p1, p2);
@@ -13,14 +13,14 @@ contract TestBN256 {
         return (sum.x == p3.x && sum.y == p3.y);
     }
 
-    function testScarlarMul() returns(bool) {
+    function testScarlarMul() external returns(bool) {
         BN256.G1Point memory p;
         p.x = 1;  p.y = 2;
         p = BN256.scalarMul(p,2);
         return (p.x == 2 && p.y ==4);
     }
 
-    function testPairingCheck() returns(bool) {
+    function testPairingCheck() external returns(bool) {
         BN256.G1Point[] memory g1points = new BN256.G1Point[](2);
         BN256.G2Point[] memory g2points = new BN256.G2Point[](2);
         g1points[0] = BN256.P1();
