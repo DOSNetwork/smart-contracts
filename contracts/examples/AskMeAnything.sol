@@ -1,7 +1,7 @@
 pragma solidity >= 0.4.24;
 
-import "../Ownable.sol";
-import "../DOSOnChainSDK.sol";
+import "./Ownable.sol";
+import "./DOSOnChainSDK.sol";
 
 // A user contract asks anything from off-chain world through a url.
 contract AskMeAnything is Ownable, DOSOnChainSDK {
@@ -15,11 +15,12 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     string public lastQueriedUrl;
     string public lastQueriedSelector;
     uint public lastRequestedRandom;
+    uint8 public lastQueryInternalSerial;
 
     event SetTimeout(uint previousTimeout, uint newTimeout);
     event QueryResponseReady(uint queryId, string result);
-    event RequestSent(bool succ, uint requestId);
-    event RandomReady(uint generatedRandom);
+    event RequestSent(address indexed msgSender, uint8 internalSerial, bool succ, uint requestId);
+    event RandomReady(uint requestId, uint generatedRandom);
 
     modifier auth(uint id) {
         require(msg.sender == fromDOSProxyContract(),
@@ -38,13 +39,14 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     }
 
     // Ask me anything (AMA) off-chain through an api/url.
-    function AMA(string memory url, string memory selector) public {
+    function AMA(uint8 internalSerial, string memory url, string memory selector) public {
         lastQueriedUrl = url;
         lastQueriedSelector = selector;
+        lastQueryInternalSerial = internalSerial;
         uint id = DOSQuery(timeout, url, selector);
         if (id != 0x0) {
             _valid[id] = true;
-            emit RequestSent(true, id);
+            emit RequestSent(msg.sender, internalSerial, true, id);
         } else {
             revert("Invalid query id.");
         }
@@ -57,7 +59,7 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
         delete _valid[queryId];
 
         if (repeatedCall) {
-            AMA(lastQueriedUrl, lastQueriedSelector);
+            AMA(lastQueryInternalSerial, lastQueriedUrl, lastQueriedSelector);
         }
     }
 
@@ -67,11 +69,11 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
         random = DOSRandom(0, now);
     }
 
-    function requestSafeRandom() public {
+    function requestSafeRandom(uint8 internalSerial) public {
         lastRequestedRandom = random;
         uint requestId = DOSRandom(1, now);
         _valid[requestId] = true;
-        emit RequestSent(true, requestId);
+        emit RequestSent(msg.sender, internalSerial, true, requestId);
     }
 
     // User-defined callback function handling newly generated secure
@@ -81,7 +83,7 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
         auth(requestId)
     {
         random = generatedRandom;
-        emit RandomReady(generatedRandom);
+        emit RandomReady(requestId, generatedRandom);
         delete _valid[requestId];
     }
 }
