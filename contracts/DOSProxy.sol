@@ -2,7 +2,7 @@ pragma solidity >= 0.4.24;
 // Not enabled for production yet.
 //pragma experimental ABIEncoderV2;
 
-import "./lib/bn256.sol";
+import "./lib/BN256.sol";
 
 contract UserContractInterface {
     // Query callback.

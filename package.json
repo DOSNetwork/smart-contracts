@@ -2,6 +2,7 @@
   "name": "contracts",
   "version": "1.0.0",
   "dependencies": {
+    "ganache-cli": "^6.2.3",
     "npm": "^6.4.1",
     "truffle-hdwallet-provider": "0.0.6"
   }
