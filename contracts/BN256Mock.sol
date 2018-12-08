@@ -1,6 +1,6 @@
 pragma solidity >= 0.4.24;
  import "./lib/BN256.sol";
- // Exporting as public functions for javascript tests.
+ 
 contract BN256Mock {
     uint public flag = 0;
     function P1() public pure returns (uint[2] memory) {

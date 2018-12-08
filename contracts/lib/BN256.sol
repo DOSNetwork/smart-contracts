@@ -39,7 +39,7 @@ library BN256 {
             }
         }
     }
-    // @return the negation of p, i.e. p.add(p.negate()) should be zero.
+    
     function negate(G1Point p) internal returns (G1Point) {
 		uint q = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
 		if (p.x == 0 && p.y == 0)
