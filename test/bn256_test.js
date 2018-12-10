@@ -13,7 +13,7 @@ const BN256Mock = artifacts.require("BN256Mock");
      assert.equal(sum1[0].toString(10), sum2[0].toString(10), "x coordinate value equals");
     assert.equal(sum1[1].toString(10), sum2[1].toString(10), "y coordinate value equals");
   });
-
+   
    it("Testing pairing", async () => {
      let g1points = new Array(2);
      let g2points = new Array(2);

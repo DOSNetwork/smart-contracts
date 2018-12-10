@@ -13,7 +13,7 @@ contract("Utils test", async() => {
         let resultOverflow = await utils.byte2Uint.call(numOverflow);
         assert.equal(result, 6, "transfer byte to uint");
         assert.equal(resultOverflow, 10, "transfer overflow");
-    })
+    })   
 
     it("Test transfer hexByte to uint", async() => {
         let num = await utils.createByte.call();

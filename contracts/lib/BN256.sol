@@ -80,7 +80,7 @@ library BN256 {
             input[i * 6 + 3] = p2[i].x[1];
             input[i * 6 + 4] = p2[i].y[0];
             input[i * 6 + 5] = p2[i].y[1];
-        } 
+        }    
 
         uint[1] memory out;
         bool success;
