@@ -282,14 +282,14 @@ contract DOSProxy {
     }
 
     // System-level secure distributed random number generator.
-    function updateRandomness(uint[2] memory sig) public {
+    function updateRandomness(uint[2] memory sig, uint8 version) public {
         if (!validateAndVerify(
                 TrafficSystemRandom,
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
                 lastHandledGroup,
-                0))
+                version))
         {
             return;
         }
