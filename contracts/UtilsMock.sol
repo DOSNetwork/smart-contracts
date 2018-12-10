@@ -45,7 +45,7 @@ contract UtilsMock {
 
     // function bytesConcat(bytes memory a, bytes memory b) public pure returns(bytes memory) {
     //     return Utils.bytesConcat(a,b);
-    // }
+    // }  
 
     function strConcat(string memory a, string memory b) public pure returns(string memory) {
         return Utils.strConcat(a,b);

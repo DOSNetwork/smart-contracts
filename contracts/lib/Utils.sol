@@ -153,7 +153,7 @@ library Utils {
 
     function bytesConcat(bytes memory a, bytes memory b) internal pure returns(bytes memory) {
         bytes memory concated = new bytes(a.length + b.length);
-        uint i = 0;
+        uint i = 0;  
         uint k = 0;
         while (i < a.length) { concated[k++] = a[i++]; }
         i = 0;

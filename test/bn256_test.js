@@ -21,7 +21,7 @@ const BN256Mock = artifacts.require("BN256Mock");
      g1points[1] = await bn256.P1.call();
      g1points[1] = await bn256.negate(g1points[1]);
      g2points[0] = await bn256.P2.call();
-     g2points[1] = await bn256.P2.call();
+     g2points[1] = await bn256.P2.call(); 
      
      await bn256.pairingCheck(g1points,g2points);
      let result = await bn256.flag.call();

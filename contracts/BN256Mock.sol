@@ -25,7 +25,7 @@ contract BN256Mock {
     }
      function scalarMul(uint[2] memory p1, uint s)
         public
-        returns (uint[2] memory)
+        returns (uint[2] memory) 
     {
         BN256.G1Point memory prod =
             BN256.scalarMul(BN256.G1Point(p1[0], p1[1]), s);
