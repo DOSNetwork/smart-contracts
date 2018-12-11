@@ -1,6 +1,6 @@
 pragma solidity >= 0.4.24;
 
-import "./lib/utils.sol";
+import "./lib/Utils.sol";
 
 contract DOSProxyInterface {
     function query(address, uint, string memory, string memory) public returns (uint);
@@ -12,7 +12,7 @@ contract DOSAddressBridgeInterface {
 }
 
 contract DOSOnChainSDK {
-    using utils for *;
+    using Utils for *;
 
     DOSProxyInterface dosProxy;
     DOSAddressBridgeInterface dosAddrBridge =

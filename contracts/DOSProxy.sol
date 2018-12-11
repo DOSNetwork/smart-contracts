@@ -196,16 +196,9 @@ contract DOSProxy {
     function validateAndVerify(
         uint8 trafficType,
         uint trafficId,
-<<<<<<< 2366b38a375b7bef794083c41fba618b9bcb90d0
         bytes memory data,
         BN256.G1Point memory signature,
         BN256.G2Point memory grpPubKey
-=======
-        bytes data,
-        BN256.G1Point signature,
-        BN256.G2Point grpPubKey,
-        uint8 version
->>>>>>> [Add version field to distinguish same requestId]
     )
         internal
         onlyWhitelisted
@@ -241,14 +234,8 @@ contract DOSProxy {
     function triggerCallback(
         uint requestId,
         uint8 trafficType,
-<<<<<<< 2366b38a375b7bef794083c41fba618b9bcb90d0
         bytes memory result,
         uint[2] memory sig
-=======
-        bytes result,
-        uint[2] sig,
-        uint8 version
->>>>>>> [Add version field to distinguish same requestId]
     )
         public
     {
