@@ -1,7 +1,7 @@
 pragma solidity >= 0.4.24;
 
 // Util functions imported in OnChainSDK for caller to use.
-library Utils {
+library utils {
     uint constant UINT256MAX = ~uint(0);
 
     // A decimal byte to uint. Return value of 10 indicating invalid input.

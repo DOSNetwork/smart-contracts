@@ -4,7 +4,6 @@ import "../lib/BN256.sol";
 
 // Exporting as public functions for javascript tests.
 contract BN256Mock {
-    uint public flag = 0;
     function P1() public pure returns (uint[2] memory) {
         return [ BN256.P1().x, BN256.P1().y ];
     }
@@ -60,7 +59,6 @@ contract BN256Mock {
             b_p2[i] = BN256.G2Point([p2[i][0][0], p2[i][0][1]],
                                     [p2[i][1][0], p2[i][1][1]]);
         }
-        require(BN256.pairingCheck(b_p1, b_p2) == false) ;
-        flag = 1;
+        return BN256.pairingCheck(b_p1, b_p2);
     }
 }
