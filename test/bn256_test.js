@@ -25,12 +25,11 @@ contract("BN256 Test", async (accounts) => {
     let g2points = new Array(2);
     g1points[0] = await bn256.P1.call();
     g1points[1] = await bn256.P1.call();
-    g1points[1] = await bn256.negate(g1points[1]);
+    g1points[1] = await bn256.negate.call(g1points[1]);
     g2points[0] = await bn256.P2.call();
     g2points[1] = await bn256.P2.call(); 
-    
-    await bn256.pairingCheck(g1points,g2points);
-    let result = await bn256.flag.call();
-    assert.equal(result,1,"check e(P1, P2)e(-P1, P2) == 0");
+      
+    let result = await bn256.pairingCheck.call(g1points,g2points);
+    assert.equal(result,false,"check e(P1, P2)e(-P1, P2) == 0");
   });
 })
