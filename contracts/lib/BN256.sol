@@ -50,6 +50,14 @@ library BN256 {
         }
     }
 
+    function negate(G1Point memory p) internal pure returns (G1Point memory) {
+        if (p.x == 0 && p.y == 0) {
+            return p;
+        }
+        uint q = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
+        return G1Point(p.x, q - p.y % q);
+    }
+
     function hashToG1(bytes memory data) internal returns (G1Point memory) {
         uint256 h = uint256(keccak256(data));
         return scalarMul(P1(), h);
@@ -57,6 +65,7 @@ library BN256 {
 
     // @return the result of computing the pairing check
     // check passes if e(p1[0], p2[0]) *  .... * e(p1[n], p2[n]) == 1
+    // E.g. pairing([p1, p1.negate()], [p2, p2]) should return true.
     function pairingCheck(G1Point[] memory p1, G2Point[] memory p2) internal returns (bool) {
         require(p1.length == p2.length);
         uint elements = p1.length;
