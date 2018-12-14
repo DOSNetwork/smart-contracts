@@ -71,7 +71,7 @@ contract("BN256 Test", async (accounts) => {
 
     let msg = "test random bytes";
     let hashed_msg = await bn256.hashToG1.call(msg);
-    let sig = await bn256.scalarMul.call(hashed_msg, sk);
+    let sig = await bn256.scalarMul.call(hashed_msg, SK);
     let sig_n = await bn256.negate.call(sig);
     let G2 = await bn256.P2.call();
 
