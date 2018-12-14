@@ -6,7 +6,7 @@ contract("DOSProxy Test", async(accounts) => {
     let proxyMock;
 
     before(async() => {
-        proxy = await DOSProxy.deployed();
+        proxy = await DOSProxy.deployed({from:accounts[0]});
         proxyMock = await DOSProxyMock.new();
     })
 
@@ -44,6 +44,20 @@ contract("DOSProxy Test", async(accounts) => {
 
     it("Test query", async() => {
         //how to find the example about datasource&selector
+        //queryId = DOSQuery(30, "https://api.coinbase.com/v2/prices/ETH-USD/spot", "$.data.amount");
+        let from = accounts[0];
+        let invalidFrom = accounts[1];
+        let timeout = 30;
+        let dataSource = "https://api.coinbase.com/v2/prices/ETH-USD/spot";
+        let selector = "$.data.amount";
+        let invalidSelector = "*data.amount";
+        // let queryId = await proxy.query(from,timeout,dataSource,selector);
+        // console.log(queryId);
+        let invalidContract = await proxy.query.call(invalidFrom,timeout,dataSource,selector);
+        let invalidId = await proxy.query.call(from,timeout,dataSource,invalidSelector);
+        //assert.equal(queryId.toString(10),0,"fail to generate query id");
+        assert.equal(invalidContract,0,"fail to generate query id");
+        assert.equal(invalidId,0,"fail to generate query id");
     })
 
     it("Test requestRandom", async() =>{
