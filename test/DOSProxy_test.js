@@ -52,7 +52,7 @@ contract("DOSProxy Test", async(accounts) => {
         let selector = "$.data.amount";
         let invalidSelector = "*data.amount";
         // let queryId = await proxy.query(from,timeout,dataSource,selector);
-        // console.log(queryId);
+        //???????????????????????????????? console.log(queryId);
         let invalidContract = await proxy.query.call(invalidFrom,timeout,dataSource,selector);
         let invalidId = await proxy.query.call(from,timeout,dataSource,invalidSelector);
         //assert.equal(queryId.toString(10),0,"fail to generate query id");
@@ -62,5 +62,6 @@ contract("DOSProxy Test", async(accounts) => {
 
     it("Test requestRandom", async() =>{
         //how to find the userSeed
+        let from = accounts[0];
     })
 })
