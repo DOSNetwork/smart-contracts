@@ -15,9 +15,6 @@ contract BN256Mock {
         ];
     }
 
-    function negate(uint[2] memory p) public pure returns(uint[2] memory) {
-        return [ BN256.negate(BN256.G1Point(p[0],p[1])).x, BN256.negate(BN256.G1Point(p[0],p[1])).y];
-    }
     function pointAdd(uint[2] memory p1, uint[2] memory p2)
         public
         returns (uint[2] memory)
