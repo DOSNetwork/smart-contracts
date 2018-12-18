@@ -210,15 +210,12 @@ contract DOSProxy {
         // 1. Check msg.sender from registered and staked node operator.
         // 2. Check msg.sender is a member in Group(grpPubKey).
         // Clients actually signs (data || addr(selected_submitter)).
-        // TODO: Sync and change to sign ( sha256(data) || address )
         bytes memory message = abi.encodePacked(data, msg.sender);
 
         // Verification
         BN256.G1Point[] memory p1 = new BN256.G1Point[](2);
         BN256.G2Point[] memory p2 = new BN256.G2Point[](2);
-        // The signature has already been applied neg() function offchainly to
-        // fit requirement of pairingCheck function
-        p1[0] = signature;
+        p1[0] = BN256.negate(signature);
         p1[1] = BN256.hashToG1(message);
         p2[0] = BN256.P2();
         p2[1] = grpPubKey;
