@@ -35,19 +35,6 @@ contract("BN256 Test", async (accounts) => {
                  "After addition, y coordinate value equals");
   });
 
-<<<<<<< HEAD
-  it("Testing pairing", async () => {
-    let g1points = new Array(2);
-    let g2points = new Array(2);
-    g1points[0] = await bn256.P1.call();
-    g1points[1] = await bn256.P1.call();
-    g1points[1] = await bn256.negate.call(g1points[1]);
-    g2points[0] = await bn256.P2.call();
-    g2points[1] = await bn256.P2.call(); 
-      
-    let result = await bn256.pairingCheck.call(g1points,g2points);
-    assert.equal(result,false,"check e(P1, P2)e(-P1, P2) == 0");
-=======
   it("Test negate", async () => {
     let p1 = await bn256.P1.call();
     let pr = await bn256.scalarMul.call(
@@ -66,7 +53,6 @@ contract("BN256 Test", async (accounts) => {
     let pass = await bn256.pairingCheck.call([p1_0, p1_1], [p2, p2]);
 
     assert(pass, "Basic pairing check e({p1, p2}, {-p1, p2}) should be true");
->>>>>>> f0819a2526ae58a1b2dbc829eaffed519da2c629
   });
 
   it("Test complex pairing check", async () => {
