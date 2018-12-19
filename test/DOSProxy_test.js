@@ -21,15 +21,15 @@ contract("DOSProxy Test", async(accounts) => {
                     console.log("   selector: " + result.args.selector);
                     console.log("   randomness: " + result.args.randomness);
                     console.log("   dispatchedGroup: " + result.args.dispatchedGroup);
+                } else if (result.event == "LogNonSupportedType") {
+                    console.log("   invalidSelector: " + result.args.invalidSelector);
+                } else if (result.event == "LogNonContractCall") {
+                    console.log("   from: " + result.args.from);
                 } else if (result.event == "LogRequestUserRandom") {
                     console.log("   requestId: " + result.args.requestId);
                     console.log("   lastSystemRandomness: " + result.args.lastSystemRandomness);
                     console.log("   userSeed: " + result.args.userSeed);
                     console.log("   dispatchedGroup: " + result.args.dispatchedGroup);
-                } else if (result.event == "LogNonSupportedType") {
-                    console.log("   invalidSelector: " + result.args.invalidSelector);
-                } else if (result.event == "LogNonContractCall") {
-                    console.log("   from: " + result.args.from);
                 } else if (result.event == "LogCallbackTriggeredFor") {
                     console.log("   callbackAddr: " + result.args.callbackAddr);
                 } else if (result.event == "LogRequestFromNonExistentUC") {
@@ -67,120 +67,208 @@ contract("DOSProxy Test", async(accounts) => {
         proxyinstance = instance;
     });
 
-    it("Test initWhitelist", async() => {
-        //!!!pay attention: create 21 local address first
-        let proxy;
-        proxy = await proxyinstance;
-        let addresses = new Array(21);
-        for(let i = 0; i < 21; i++) {
-            addresses[i] = accounts[i];
-            //console.log(addresses[i]);
-            //web3.personal.newAccount()
-            //web3.eth.accounts
-            //use these commands to make sure that there are enough accounts in your net
-        }
-        await proxy.initWhitelist(addresses);
-        let result = await proxy.whitelistInitialized.call();
-        assert.equal(result, true,"Whitelist already initialized");
-    })
-
-    it("Test getWhitelistAddress", async() => {
-        //need to initWHitelist, or the value equals zero;
-        let proxy;
-        proxy = await proxyinstance;
-        let idx0 = 1;
-        let address0 = accounts[idx0-1];
-        let idx1 = 21;
-        let address1 = accounts[idx1-1];
-        let result0 = await proxy.getWhitelistAddress.call(idx0);
-        assert.equal(result0.toString(10),address0.toString(10),"can not equal");
-        let result1 = await proxy.getWhitelistAddress.call(idx1);
-        assert.equal(result1.toString(10),address1.toString(10),"can not equal");
-    })
-
-    it("Test transferWhitelistAddress", async() => {
-        //need to initWHitelist, or the value equals zero;
-        let proxy;
-        proxy = await proxyinstance;
-        let newWhitelistedAddr = accounts[21];
-        await proxy.transferWhitelistAddress(newWhitelistedAddr);
-        let result = await proxy.getWhitelistAddress.call(1);
-        assert.equal(result.toString(10), newWhitelistedAddr.toString(10),"can not transfer");
-    })
-
-    it("Test query", async() => {
-        let proxy;
-        proxy = await proxyinstance;
-        let from = proxy.address;
-        let invalidFrom = accounts[1];
-        let timeout = 30;
-        let dataSource = "https://api.coinbase.com/v2/prices/ETH-USD/spot";
-        let selector = "$.data.amount";
-        let invalidSelector = "*data.amount";
-        await proxy.setPublicKey(1,2,2,1);
-        let queryId1 = await proxy.query(from,timeout,dataSource,selector);
-        let queryId2 = await proxy.query(from,timeout,dataSource,selector);
-        let invalidContract = await proxy.query.call(invalidFrom,timeout,dataSource,selector);
-        let invalidId = await proxy.query.call(from,timeout,dataSource,invalidSelector);
-        assert.equal(queryId1 == queryId2,false,"fail to generate query id");
-        assert.equal(invalidContract,0,"fail to generate query id");
-        assert.equal(invalidId,0,"fail to generate query id");
-    })
-
-    it("Test requestRandom", async() =>{
-        let proxy;
-        proxy = await proxyinstance;
-        let from = proxy.address;
-        let fastMode = 0;
-        let safeMode = 1;
-        let userSeed = 100;
-        let fastResult0 = await proxy.requestRandom(from, fastMode, userSeed);
-        let fastResult1 = await proxy.requestRandom(from, fastMode, userSeed);
-        await proxy.setPublicKey(1,2,2,1);
-        let safeResult0 = await proxy.requestRandom(from, safeMode, userSeed);
-        let safeResult1 = await proxy.requestRandom(from, safeMode, userSeed);
-        assert.equal(fastResult0 == fastResult1, false, "fail to generate requestID in fast mode");
-        assert.equal(safeResult0 == safeResult1, false, "fail to generate requestID in safe mode");
-    })
-    //-----------------------------------------------------------------------------------------------------------
-    //?????????????????????????????????????????????????????
-    // it("Test validateAndVerify", async() => {
+    // it("Test initWhitelist", async() => {
+    //     //!!!pay attention: create 21 local address first
     //     let proxy;
-    //     proxy = await proxyinstance;       
-    //     let SK = new BigNumber('0x250ebf796264728de1dc24d208c4cec4f813b1bcc2bb647ac8cf66206568db03');
-    //     let PK = [
-    //       [
-    //         new BigNumber('0x25d7caf90ac28ba3cd8a96aff5c5bf004fc16d9bdcc2cead069e70f783397e5b'),
-    //         new BigNumber('0x04ef63f195409b451179767b06673758e621d9db71a058231623d1cb2e594460')
-    //       ],
-    //       [
-    //         new BigNumber('0x15729e3589dcb871cd46eb6774388aad867521dc07d1e0c0d9c99f444f93ca53'),
-    //         new BigNumber('0x15db87d74b02df70d62f7f8afe5811ade35ca08bdb2308b4153624083fcf580e')
-    //       ]
-    //     ];
+    //     proxy = await proxyinstance;
+    //     let addresses = new Array(21);
+    //     for(let i = 0; i < 21; i++) {
+    //         addresses[i] = accounts[i];
+    //         //console.log(addresses[i]);
+    //         //web3.personal.newAccount()
+    //         //web3.eth.accounts
+    //         //use these commands to make sure that there are enough accounts in your net
+    //     }
+    //     await proxy.initWhitelist(addresses);
+    //     let result = await proxy.whitelistInitialized.call();
+    //     assert.equal(result, true,"Whitelist already initialized");
+    // })
+
+    // it("Test getWhitelistAddress", async() => {
+    //     //need to initWHitelist, or the value equals zero;
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     let idx0 = 1;
+    //     let address0 = accounts[idx0-1];
+    //     let idx1 = 21;
+    //     let address1 = accounts[idx1-1];
+    //     let result0 = await proxy.getWhitelistAddress.call(idx0);
+    //     assert.equal(result0.toString(10),address0.toString(10),"can not equal");
+    //     let result1 = await proxy.getWhitelistAddress.call(idx1);
+    //     assert.equal(result1.toString(10),address1.toString(10),"can not equal");
+    // })
+
+    // it("Test transferWhitelistAddress", async() => {
+    //     //need to initWHitelist, or the value equals zero;
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     let newWhitelistedAddr = accounts[21];
+    //     await proxy.transferWhitelistAddress(newWhitelistedAddr);
+    //     let result = await proxy.getWhitelistAddress.call(1);
+    //     assert.equal(result.toString(10), newWhitelistedAddr.toString(10),"can not transfer");
+    // })
+
+    // it("Test query", async() => {
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     let from = proxy.address;
+    //     let invalidFrom = accounts[1];
+    //     let timeout = 30;
+    //     let dataSource = "https://api.coinbase.com/v2/prices/ETH-USD/spot";
+    //     let selector = "$.data.amount";
+    //     let invalidSelector = "*data.amount";
+    //     await proxy.setPublicKey(1,2,2,1);
+    //     let queryId1 = await proxy.query(from,timeout,dataSource,selector);
+    //     let queryId2 = await proxy.query(from,timeout,dataSource,selector);
+    //     await proxy.query(invalidFrom,timeout,dataSource,selector);
+    //     await proxy.query(from,timeout,dataSource,invalidSelector);
+    //     assert.equal(queryId1 == queryId2,false,"fail to generate query id");
+    // })
+
+    // it("Test requestRandom", async() =>{
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     await proxy.resetContract();
+    //     let from = proxy.address;
+    //     let fastMode = 0;
+    //     let safeMode = 1;
+    //     let userSeed = 100;
+    //     let fastResult0 = await proxy.requestRandom(from, fastMode, userSeed);
+    //     let fastResult1 = await proxy.requestRandom(from, fastMode, userSeed);
+    //     await proxy.setPublicKey(1,2,2,1);
+    //     let safeResult0 = await proxy.requestRandom(from, safeMode, userSeed);
+    //     let safeResult1 = await proxy.requestRandom(from, safeMode, userSeed);
+    //     assert.equal(fastResult0 == fastResult1, false, "fail to generate requestID in fast mode");
+    //     assert.equal(safeResult0 == safeResult1, false, "fail to generate requestID in safe mode");
+    // })
+
+    it("Test validateAndVerify", async() => {
+        let proxy;
+        proxy = await proxyinstance;       
+        let SK = new BigNumber('0x250ebf796264728de1dc24d208c4cec4f813b1bcc2bb647ac8cf66206568db03');
+        let PK = [
+          [
+            new BigNumber('0x25d7caf90ac28ba3cd8a96aff5c5bf004fc16d9bdcc2cead069e70f783397e5b'),
+            new BigNumber('0x04ef63f195409b451179767b06673758e621d9db71a058231623d1cb2e594460')
+          ],
+          [
+            new BigNumber('0x15729e3589dcb871cd46eb6774388aad867521dc07d1e0c0d9c99f444f93ca53'),
+            new BigNumber('0x15db87d74b02df70d62f7f8afe5811ade35ca08bdb2308b4153624083fcf580e')
+          ]
+        ];
     
-    //     let data = "test random bytes";
-    //     let msg = await proxy.getMessage.call(data);
-    //     let hashed_msg = await bn256.hashToG1.call(msg);
-    //     let sig = await bn256.scalarMul.call(hashed_msg, SK);
-    //     let trafficType = 1;
-    //     let trafficId = 100;
-    //     let version = 1;
-    //     let pass = await proxy.getvalidateAndVerify.call(trafficType,trafficId,msg,sig,PK,version);
-    //     assert(pass,"Pairing check e({HM, PublicKey}, {-Sig, G2}) should be true");
-    // })
-    //------------------------------------------------------------------------------------------------------------
-    // it("Test triggerCallback", async() => {
-    //     let proxy;
-    //     proxy = await proxyinstance;       
-    // })
-
+        let data = "test random bytes";
+        let msg = await proxy.getMessage.call(data);
+        let hashed_msg = await bn256.hashToG1.call(msg);
+        let sig = await bn256.scalarMul.call(hashed_msg, SK);
+        let trafficType = 1;
+        let trafficId = 100;
+        let version = 1;
+        let pass = await proxy.getvalidateAndVerify.call(trafficType,trafficId,data,sig,PK,version);
+        assert(pass,"Pairing check e({HM, PublicKey}, {-Sig, G2}) should be true");
+    })
+    
+    // it seems like that we need to run setpublicKey first
     // it ("Test updateRandomness", async() => {
     //     let proxy;
     //     proxy = await proxyinstance;
+    //     await proxy.grouping(3);
+    //     let SK = new BigNumber('0x250ebf796264728de1dc24d208c4cec4f813b1bcc2bb647ac8cf66206568db03');
+    //     let PK = [
+    //         [
+    //           new BigNumber('0x25d7caf90ac28ba3cd8a96aff5c5bf004fc16d9bdcc2cead069e70f783397e5b'),
+    //           new BigNumber('0x04ef63f195409b451179767b06673758e621d9db71a058231623d1cb2e594460')
+    //         ],
+    //         [
+    //           new BigNumber('0x15729e3589dcb871cd46eb6774388aad867521dc07d1e0c0d9c99f444f93ca53'),
+    //           new BigNumber('0x15db87d74b02df70d62f7f8afe5811ade35ca08bdb2308b4153624083fcf580e')
+    //         ]
+    //       ];
+    //     await proxy.setPublicKey(PK[0][0],PK[0][1],PK[1][0],PK[1][1]);
+    //     await proxy.setPublicKey(PK[0][0],PK[0][1],PK[1][0],PK[1][1]);
+    //     await proxy.fireRandom();
+    //     let rand = await proxy.lastRandomness.call();
+    //     let data = await proxy.getToBytes.call(rand);
+    //     let msg = await proxy.getMessage.call(data);
+    //     let hashed_msg = await bn256.hashToG1.call(msg);
+    //     let sig = await bn256.scalarMul.call(hashed_msg, SK);
+    //     await proxy.updateRandomness(sig);
     // })
 
-    after(async () => {
+    // it ("Test fireRandom", async() => {
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     await proxy.grouping(3);
+    //     await proxy.setPublicKey(P1,2,2,1);
+    //     //should emit event LogPublicKeyAccepted
+    //     await proxy.setPublicKey(1,2,2,1);
+    //     await proxy.fireRandom();
+    //     //event LogUpdateRandom should be emitted
+    // })
+
+    // it ("Test handleTimeout", async() => {
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    // })
+    //do grouping first
+    // it ("Test setPublicKey", async() => {
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     await proxy.grouping(3);
+    //     await proxy.setPublicKey(1,2,2,1);
+    //     //should emit event LogPublicKeyAccepted
+    //     await proxy.setPublicKey(1,2,2,1);
+    // })
+    
+    // it ("Test getGroupPubKey", async() => {
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     await proxy.grouping(3);
+    //     await proxy.setPublicKey(1,2,2,1);
+    //     await proxy.setPublicKey(1,2,2,1);
+    //     let result = await proxy.getGroupPubKey.call(0);
+    //     assert.equal(result[0],1,"x[0] should equal 1");
+    //     assert.equal(result[1],2,"x[0] should equal 1");
+    //     assert.equal(result[2],2,"x[0] should equal 1");
+    //     assert.equal(result[3],1,"x[0] should equal 1");
+
+    // })
+
+    // it ("Test grouping & uploadNodeId", async() => {
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     let result00 = await proxy.grouping.call(0);
+    //     let result03 = await proxy.grouping.call(3);
+    //     await proxy.uploadNodeId(1);
+    //     let result10 = await proxy.grouping.call(0);
+    //     let result13 = await proxy.grouping.call(3);
+    //     await proxy.uploadNodeId(1);
+    //     await proxy.uploadNodeId(1);
+    //     await proxy.uploadNodeId(2);
+    //     await proxy.uploadNodeId(2);
+    //     let result20 = await proxy.grouping.call(0);
+    //     let result23 = await proxy.grouping.call(3);
+    //     assert.equal(result00, true, "size 0 nodelength 0 should return true");
+    //     assert.equal(result03, false, "size 3 nodelength 0 should return true");
+    //     assert.equal(result10, true, "size 0 nodelength 1 should return true");
+    //     assert.equal(result13, false, "size 3 nodelength 1 should return true");
+    //     assert.equal(result20, true, "size 0 nodelength 4 should return true");
+    //     assert.equal(result23, true, "size 3 nodelength 4 should return true");
+    // })
+
+    // it ("Test resetContract", async() => {
+    //     let proxy;
+    //     proxy = await proxyinstance;
+    //     let result = await proxy.resetContract.call();
+    //     assert.equal(result, true, "reset contract should be true");
+    // })
+
+    it('延迟结束，为event捕获预留时间函数',() => {
+        var now = new Date().getTime();
+        while(new Date().getTime() < now + 5000){ /* do nothing */ }
+    });
+
+    after(() => {
         console.log("Test finished.");
     });
 })
