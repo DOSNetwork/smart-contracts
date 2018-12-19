@@ -199,15 +199,15 @@ contract DOSProxy {
     function getvalidateAndVerify(
         uint8 trafficType,
         uint trafficId,
-        string memory _data,
+        bytes memory data,
         uint[2] memory p1,
         uint[2][2] memory p2,
         uint8 version
     )
         public 
+        onlyWhitelisted
         returns(bool)
     {
-        bytes memory data = bytes(_data);
         BN256.G1Point memory signature;
         BN256.G2Point memory grpPubKey;
         signature = BN256.G1Point(p1[0], p1[1]);
@@ -215,10 +215,9 @@ contract DOSProxy {
         return validateAndVerify(trafficType,trafficId,data,signature,grpPubKey,version);
     }
 
-    function getMessage(string memory _data) public view returns(string memory) {
-        bytes memory data = bytes(_data);
+    function getMessage(bytes memory data) public view onlyWhitelisted returns(bytes memory) {
         bytes memory message = abi.encodePacked(data, msg.sender);
-        string(message);
+        return message;
     }
 
     // Random submitter validation + group signature verification.
@@ -307,6 +306,10 @@ contract DOSProxy {
         assembly { mstore(add(b, 32), x) }
     }
 
+    function getToBytes(uint x) public pure returns(bytes memory) {
+        return toBytes(x);
+    }
+
     // System-level secure distributed random number generator.
     function updateRandomness(uint[2] memory sig) public {
         if (!validateAndVerify(
@@ -384,17 +387,18 @@ contract DOSProxy {
         uint[] memory toBeGrouped = new uint[](size);
         if (nodeId.length < size) {
             emit LogInsufficientGroupNumber();
-            return;
         }
         for (uint i = 0; i < size; i++) {
             toBeGrouped[i] = nodeId[nodeId.length.sub(1)];
             nodeId.length = nodeId.length.sub(1);
         }
+
         emit LogGrouping(toBeGrouped);
     }
 
-    function resetContract() public onlyWhitelisted {
+    function resetContract() public onlyWhitelisted returns(bool){
         nodeId.length = 0;
         groupPubKeys.length = 0;
+        return true;
     }
 }
