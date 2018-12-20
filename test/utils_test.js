@@ -68,8 +68,7 @@ contract("Utils test", async() => {
     it("Test address to string", async() => {
         let hexAddr = "0x0e7ad63d2a305a7b9f46541c386aafbd2af6b263";
         let hexAddrResult = await utils.addr2Str.call(hexAddr);
-        assert.equal(hexAddrResult, "0x0e7ad63d2a305a7b9f46541c386aafbd2af6b263");
-
+        assert.equal(hexAddrResult, "0x0e7ad63d2a305a7b9f46541c386aafbd2af6b263", "transfer address to string");
     })
 
     it("Test uint to hex string", async() => {
