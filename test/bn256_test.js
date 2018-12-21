@@ -1,5 +1,5 @@
 const BN256Mock = artifacts.require("BN256Mock");
-const BN = require('bn.js');
+const BigNumber = require('bignumber.js');
 
 contract("BN256 Test", async (accounts) => {
   let bn256;
@@ -51,31 +51,32 @@ contract("BN256 Test", async (accounts) => {
     let p1_1 = await bn256.negate.call(p1_0);
     let p2 = await bn256.P2.call();
     let pass = await bn256.pairingCheck.call([p1_0, p1_1], [p2, p2]);
+
     assert(pass, "Basic pairing check e({p1, p2}, {-p1, p2}) should be true");
   });
 
   it("Test complex pairing check", async () => {
     // Generated secret key / public key pair.
-    let SK = new BN('3');
+    let SK = new BigNumber('0x250ebf796264728de1dc24d208c4cec4f813b1bcc2bb647ac8cf66206568db03');
     let PK = [
-        new BN('7273165102799931111715871471550377909735733521218303035754523677688038059653'),
-        new BN('2725019753478801796453339367788033689375851816420509565303521482350756874229'),
-        new BN('957874124722006818841961785324909313781880061366718538693995380805373202866'),
-        new BN('2512659008974376214222774206987427162027254181373325676825515531566330959255')
-        ];
+      [
+        new BigNumber('0x25d7caf90ac28ba3cd8a96aff5c5bf004fc16d9bdcc2cead069e70f783397e5b'),
+        new BigNumber('0x04ef63f195409b451179767b06673758e621d9db71a058231623d1cb2e594460')
+      ],
+      [
+        new BigNumber('0x15729e3589dcb871cd46eb6774388aad867521dc07d1e0c0d9c99f444f93ca53'),
+        new BigNumber('0x15db87d74b02df70d62f7f8afe5811ade35ca08bdb2308b4153624083fcf580e')
+      ]
+    ];
 
-    let str = "Hello Boneh-Lynn-Shacham";
-    let bytes = [];
-    for (var i = 0; i < str.length; ++i) {
-        var code = str.charCodeAt(i);
-        bytes = bytes.concat([code]);
-    }
-    let hashed_msg = await bn256.hashToG1.call(bytes);
+    let msg = "test random bytes";
+    let hashed_msg = await bn256.hashToG1.call(msg);
     let sig = await bn256.scalarMul.call(hashed_msg, SK);
     let sig_n = await bn256.negate.call(sig);
     let G2 = await bn256.P2.call();
-    let pass = await bn256.pairingCheck.call([sig_n, hashed_msg], [G2, PK]);
-    assert(pass, "Pairing check e({HM, PublicKey}, {-Sig, G2}) should be true");
 
+    let pass = await bn256.pairingCheck.call([sig_n, hashed_msg], [G2, PK]);
+
+    assert(pass, "Pairing check e({HM, PublicKey}, {-Sig, G2}) should be true");
   })
 })
