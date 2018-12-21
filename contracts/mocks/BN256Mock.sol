@@ -8,11 +8,11 @@ contract BN256Mock {
         return [ BN256.P1().x, BN256.P1().y ];
     }
 
-    function P2() public pure returns (uint[2][2] memory) {
+    function P2() public pure returns (uint[4] memory) {
         return [
-            [BN256.P2().x[0], BN256.P2().x[1]],
-            [BN256.P2().y[0], BN256.P2().y[1]]
-        ];
+                 BN256.P2().x[0], BN256.P2().x[1],
+                 BN256.P2().y[0], BN256.P2().y[1]
+               ];
     }
 
     function pointAdd(uint[2] memory p1, uint[2] memory p2)
@@ -43,7 +43,7 @@ contract BN256Mock {
         return [p1.x, p1.y];
     }
 
-    function pairingCheck(uint[2][] memory p1, uint[2][2][] memory p2)
+    function pairingCheck(uint[2][] memory p1, uint[4][] memory p2)
         public
         returns (bool)
     {
@@ -53,8 +53,8 @@ contract BN256Mock {
         BN256.G2Point[] memory b_p2 = new BN256.G2Point[](p1.length);
         for (uint i = 0; i < p1.length; i++) {
             b_p1[i] = BN256.G1Point(p1[i][0], p1[i][1]);
-            b_p2[i] = BN256.G2Point([p2[i][0][0], p2[i][0][1]],
-                                    [p2[i][1][0], p2[i][1][1]]);
+            b_p2[i] = BN256.G2Point([p2[i][0], p2[i][1]],
+                                    [p2[i][2], p2[i][3]]);
         }
         return BN256.pairingCheck(b_p1, b_p2);
     }
