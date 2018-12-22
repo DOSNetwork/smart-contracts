@@ -1,3 +1,4 @@
+<<<<<<< c96e7712e9d4f0e6787398dbeb327bb8d7d1ecfc
 <<<<<<< 0e7904660e90ddcf44e1194b7aa8c00703fc95cb
 const DOSProxy = artifacts.require("DOSProxy");
 =======
@@ -214,3 +215,5 @@ contract("DOSProxy Test", async(accounts) => {
         console.log("Test finished.");
     });
 })
+=======
+>>>>>>> delete proxy_mock and clean proxy_test

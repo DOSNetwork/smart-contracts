@@ -3,7 +3,6 @@ pragma solidity >= 0.4.24;
 //pragma experimental ABIEncoderV2;
 
 import "./lib/BN256.sol";
-import "./lib/SafeMath.sol";
 
 contract UserContractInterface {
     // Query callback.
@@ -14,7 +13,6 @@ contract UserContractInterface {
 
 contract DOSProxy {
     using BN256 for *;
-    using SafeMath for uint256;
 
     struct PendingRequest {
         uint requestId;
@@ -68,8 +66,7 @@ contract DOSProxy {
         bytes message,
         uint[2] signature,
         uint[4] pubKey,
-        bool pass,
-        uint8 version
+        bool pass
     );
     event LogInsufficientGroupNumber();
     event LogGrouping(uint[] NodeId);
@@ -84,9 +81,8 @@ contract DOSProxy {
     event WhitelistAddressTransferred(address previous, address curr);
 
     modifier onlyWhitelisted {
-        //uint idx = isWhitelisted[msg.sender];
-        //require(idx != 0 && whitelists[idx] == msg.sender, "Not whitelisted!");
-        require(0==0, "Not whitelisted!");
+        uint idx = isWhitelisted[msg.sender];
+        require(idx != 0 && whitelists[idx] == msg.sender, "Not whitelisted!");
         _;
     }
 
@@ -95,7 +91,7 @@ contract DOSProxy {
 
         for (uint idx = 0; idx < 21; idx++) {
             whitelists[idx+1] = addresses[idx];
-            isWhitelisted[addresses[idx]] = idx.add(1);
+            isWhitelisted[addresses[idx]] = idx+1;
         }
         whitelistInitialized = true;
     }
@@ -140,8 +136,7 @@ contract DOSProxy {
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
-                uint idx = lastRandomness.mod(groupPubKeys.length);
-                //setPublicKey first, or groupPubKeys.length equals zero;
+                uint idx = lastRandomness % groupPubKeys.length;
                 PendingRequests[queryId] =
                     PendingRequest(queryId, groupPubKeys[idx], from);
                 emit LogUrl(
@@ -178,8 +173,7 @@ contract DOSProxy {
             // TODO: restrict request from paid calling contract address.
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
-            uint idx = lastRandomness.mod(groupPubKeys.length);
-            //setPublicKey first, or groupPubKeys.length equals zero;
+            uint idx = lastRandomness % groupPubKeys.length;
             PendingRequests[requestId] =
                 PendingRequest(requestId, groupPubKeys[idx], from);
             // sign(requestId ||lastSystemRandomness || userSeed) with
@@ -194,30 +188,6 @@ contract DOSProxy {
         } else {
             revert("Non-supported random request");
         }
-    }
-
-    function getvalidateAndVerify(
-        uint8 trafficType,
-        uint trafficId,
-        bytes memory data,
-        uint[2] memory p1,
-        uint[2][2] memory p2,
-        uint8 version
-    )
-        public 
-        onlyWhitelisted
-        returns(bool)
-    {
-        BN256.G1Point memory signature;
-        BN256.G2Point memory grpPubKey;
-        signature = BN256.G1Point(p1[0], p1[1]);
-        grpPubKey = BN256.G2Point([p2[0][0], p2[0][1]], [p2[1][0], p2[1][1]]);
-        return validateAndVerify(trafficType,trafficId,data,signature,grpPubKey,version);
-    }
-
-    function getMessage(bytes memory data) public view onlyWhitelisted returns(bytes memory) {
-        bytes memory message = abi.encodePacked(data, msg.sender);
-        return message;
     }
 
     // Random submitter validation + group signature verification.
@@ -253,8 +223,7 @@ contract DOSProxy {
             message,
             [signature.x, signature.y],
             [grpPubKey.x[0], grpPubKey.x[1], grpPubKey.y[0], grpPubKey.y[1]],
-            passVerify,
-            version
+            passVerify
         );
         return passVerify;
     }
@@ -272,8 +241,7 @@ contract DOSProxy {
                 requestId,
                 result,
                 BN256.G1Point(sig[0], sig[1]),
-                PendingRequests[requestId].handledGroup,
-                version))
+                PendingRequests[requestId].handledGroup))
         {
             return;
         }
@@ -304,10 +272,6 @@ contract DOSProxy {
         assembly { mstore(add(b, 32), x) }
     }
 
-    function getToBytes(uint x) public pure returns(bytes memory) {
-        return toBytes(x);
-    }
-
     // System-level secure distributed random number generator.
     function updateRandomness(uint[2] memory sig) public {
         if (!validateAndVerify(
@@ -315,15 +279,14 @@ contract DOSProxy {
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
-                lastHandledGroup,
-                0))
+                lastHandledGroup))
         {
             return;
         }
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
-        lastUpdatedBlock = block.number.sub(1);
-        uint idx = lastRandomness.mod(groupPubKeys.length);
+        lastUpdatedBlock = block.number - 1;
+        uint idx = lastRandomness % groupPubKeys.length;
         lastHandledGroup = groupPubKeys[idx];
         // Signal selected off-chain clients to collectively generate a new
         // system level random number for next round.
@@ -334,16 +297,16 @@ contract DOSProxy {
     // or timeout.
     function fireRandom() public onlyWhitelisted {
         lastRandomness = uint(keccak256(abi.encode(blockhash(block.number - 1))));
-        lastUpdatedBlock = block.number.sub(1);
-        uint idx = lastRandomness.mod(groupPubKeys.length);
+        lastUpdatedBlock = block.number - 1;
+        uint idx = lastRandomness % groupPubKeys.length;
         lastHandledGroup = groupPubKeys[idx];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
     }
 
     function handleTimeout() public onlyWhitelisted {
-        uint currentBlockNumber = block.number.sub(1);
-        if (currentBlockNumber.sub(lastUpdatedBlock) > 5) {
+        uint currentBlockNumber = block.number - 1;
+        if (currentBlockNumber - lastUpdatedBlock > 5) {
             fireRandom();
         }
     }
@@ -355,7 +318,7 @@ contract DOSProxy {
         bytes32 groupId = keccak256(abi.encodePacked(x1, x2, y1, y2));
         require(!groups[groupId], "group has already registered");
 
-        pubKeyCounter[groupId] = pubKeyCounter[groupId].add(1);
+        pubKeyCounter[groupId] = pubKeyCounter[groupId] + 1;
         if (pubKeyCounter[groupId] > groupSize / 2) {
             groupPubKeys.push(BN256.G2Point([x1, x2], [y1, y2]));
             groups[groupId] = true;
@@ -375,9 +338,6 @@ contract DOSProxy {
 
     function uploadNodeId(uint id) public onlyWhitelisted {
         nodeId.push(id);
-        if (nodeId.length >= groupSize) {
-            grouping(groupSize);
-        }
     }
 
     function grouping(uint size) public onlyWhitelisted {
@@ -385,18 +345,17 @@ contract DOSProxy {
         uint[] memory toBeGrouped = new uint[](size);
         if (nodeId.length < size) {
             emit LogInsufficientGroupNumber();
+            return;
         }
         for (uint i = 0; i < size; i++) {
-            toBeGrouped[i] = nodeId[nodeId.length.sub(1)];
-            nodeId.length = nodeId.length.sub(1);
+            toBeGrouped[i] = nodeId[nodeId.length - 1];
+            nodeId.length--;
         }
-
         emit LogGrouping(toBeGrouped);
     }
 
-    function resetContract() public onlyWhitelisted returns(bool){
+    function resetContract() public onlyWhitelisted {
         nodeId.length = 0;
         groupPubKeys.length = 0;
-        return true;
     }
 }
