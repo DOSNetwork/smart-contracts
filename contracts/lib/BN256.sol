@@ -63,6 +63,10 @@ library BN256 {
         return scalarMul(P1(), h);
     }
 
+    function G2Equal(G2Point memory p1, G2Point memory p2) internal pure returns (bool) {
+        return p1.x[0] == p2.x[0] && p1.x[1] == p2.x[1] && p1.y[0] == p2.y[0] && p1.y[1] == p2.y[1];
+    }
+
     // @return the result of computing the pairing check
     // check passes if e(p1[0], p2[0]) *  .... * e(p1[n], p2[n]) == 1
     // E.g. pairing([p1, p1.negate()], [p2, p2]) should return true.

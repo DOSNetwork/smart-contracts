@@ -16,26 +16,33 @@ contract DOSProxy {
 
     struct PendingRequest {
         uint requestId;
-        BN256.G2Point handledGroup;
+        Group handledGroup;
         // User contract issued the query.
         address callbackAddr;
     }
 
+    struct Group {
+        address[] adds;
+        mapping(bytes32 => uint8) pubKeyCounts;
+        BN256.G2Point finPubKey;
+    }
+
     uint requestIdSeed;
-    uint groupSize;
-    uint[] nodeId;
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
+
+    uint groupSize;
+    uint groupingThreshold;
+    uint constant groupToPick = 2;
+    address[] nodePool;
     // Note: Make atomic changes to group metadata below.
-    BN256.G2Point[] groupPubKeys;
-    // groupIdentifier => isExisted
-    mapping(bytes32 => bool) groups;
-    //publicKey => publicKey appearance
-    mapping(bytes32 => uint) pubKeyCounter;
+    Group[] workingGroup;
+    Group[] pendingGroup;
     // Note: Make atomic changes to randomness metadata below.
+
     uint public lastUpdatedBlock;
     uint public lastRandomness;
-    BN256.G2Point lastHandledGroup;
+    Group lastHandledGroup;
     uint8 constant TrafficSystemRandom = 0;
     uint8 constant TrafficUserRandom = 1;
     uint8 constant TrafficUserQuery = 2;
@@ -70,8 +77,10 @@ contract DOSProxy {
         uint8 version
     );
     event LogInsufficientGroupNumber();
-    event LogGrouping(uint[] NodeId);
-    event LogPublicKeyAccepted(uint x1, uint x2, uint y1, uint y2);
+    event LogGrouping(address[] NodeId);
+    event LogDuplicatePubKey(uint[4] pubKey);
+    event LogAddressNotFound(uint[4] pubKey);
+    event LogPublicKeyAccepted(uint[4] pubKey);
 
     // whitelist state variables used only for alpha release.
     // Index starting from 1.
@@ -138,9 +147,9 @@ contract DOSProxy {
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
-                uint idx = lastRandomness % groupPubKeys.length;
+                uint idx = lastRandomness % workingGroup.length;
                 PendingRequests[queryId] =
-                    PendingRequest(queryId, groupPubKeys[idx], from);
+                    PendingRequest(queryId, workingGroup[idx], from);
                 emit LogUrl(
                     queryId,
                     timeout,
@@ -175,9 +184,9 @@ contract DOSProxy {
             // TODO: restrict request from paid calling contract address.
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
-            uint idx = lastRandomness % groupPubKeys.length;
+            uint idx = lastRandomness % workingGroup.length;
             PendingRequests[requestId] =
-                PendingRequest(requestId, groupPubKeys[idx], from);
+                PendingRequest(requestId, workingGroup[idx], from);
             // sign(requestId ||lastSystemRandomness || userSeed) with
             // selected group
             emit LogRequestUserRandom(
@@ -246,7 +255,7 @@ contract DOSProxy {
                 requestId,
                 result,
                 BN256.G1Point(sig[0], sig[1]),
-                PendingRequests[requestId].handledGroup,
+                PendingRequests[requestId].handledGroup.finPubKey,
                 version))
         {
             return;
@@ -285,7 +294,7 @@ contract DOSProxy {
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
-                lastHandledGroup,
+                lastHandledGroup.finPubKey,
                 version))
         {
             return;
@@ -293,8 +302,8 @@ contract DOSProxy {
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
         lastUpdatedBlock = block.number - 1;
-        uint idx = lastRandomness % groupPubKeys.length;
-        lastHandledGroup = groupPubKeys[idx];
+        uint idx = lastRandomness % workingGroup.length;
+        lastHandledGroup = workingGroup[idx];
         // Signal selected off-chain clients to collectively generate a new
         // system level random number for next round.
         emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
@@ -305,8 +314,8 @@ contract DOSProxy {
     function fireRandom() public onlyWhitelisted {
         lastRandomness = uint(keccak256(abi.encode(blockhash(block.number - 1))));
         lastUpdatedBlock = block.number - 1;
-        uint idx = lastRandomness % groupPubKeys.length;
-        lastHandledGroup = groupPubKeys[idx];
+        uint idx = lastRandomness % workingGroup.length;
+        lastHandledGroup = workingGroup[idx];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
     }
@@ -318,54 +327,125 @@ contract DOSProxy {
         }
     }
 
-    function setPublicKey(uint x1, uint x2, uint y1, uint y2)
+    function setPublicKey(uint[4] memory pubKey)
         public
         onlyWhitelisted
     {
-        bytes32 groupId = keccak256(abi.encodePacked(x1, x2, y1, y2));
-        require(!groups[groupId], "group has already registered");
-
-        pubKeyCounter[groupId] = pubKeyCounter[groupId] + 1;
-        if (pubKeyCounter[groupId] > groupSize / 2) {
-            groupPubKeys.push(BN256.G2Point([x1, x2], [y1, y2]));
-            groups[groupId] = true;
-            delete(pubKeyCounter[groupId]);
-            emit LogPublicKeyAccepted(x1, x2, y1, y2);
+        BN256.G2Point memory newPubKey = BN256.G2Point([pubKey[0], pubKey[1]], [pubKey[2], pubKey[3]]);
+        bytes32 newPubKeyId = keccak256(abi.encodePacked(pubKey[0], pubKey[1], pubKey[2], pubKey[3]));
+        for (uint i = 0; i < pendingGroup.length; i++) {
+            for (uint j = 0; j < pendingGroup[i].adds.length; j++) {
+                if (pendingGroup[i].adds[j] == msg.sender) {
+                    pendingGroup[i].pubKeyCounts[newPubKeyId] = pendingGroup[i].pubKeyCounts[newPubKeyId] + 1;
+                    if (pendingGroup[i].pubKeyCounts[newPubKeyId] > groupSize / 2) {
+                        pendingGroup[i].finPubKey = newPubKey;
+                        for (uint l = 0; l < workingGroup.length; l++) {
+                            if (BN256.G2Equal(workingGroup[l].finPubKey, newPubKey)) {
+                                emit LogDuplicatePubKey(pubKey);
+                                return;
+                            }
+                        }
+                        workingGroup.push(pendingGroup[i]);
+                        pendingGroup[i] = pendingGroup[pendingGroup.length - 1];
+                        pendingGroup.length -= 1;
+                        emit LogPublicKeyAccepted(pubKey);
+                    }
+                    return;
+                }
+            }
         }
+        emit LogAddressNotFound(pubKey);
     }
 
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
-        require(idx < groupPubKeys.length, "group index out of range");
+        require(idx < workingGroup.length, "group index out of range");
 
         return [
-            groupPubKeys[idx].x[0], groupPubKeys[idx].x[1],
-            groupPubKeys[idx].y[0], groupPubKeys[idx].y[1]
+            workingGroup[idx].finPubKey.x[0], workingGroup[idx].finPubKey.x[1],
+            workingGroup[idx].finPubKey.y[0], workingGroup[idx].finPubKey.y[1]
         ];
     }
 
-    function uploadNodeId(uint id) public onlyWhitelisted {
-        nodeId.push(id);
-        if (nodeId.length >= groupSize) {
-            grouping(groupSize);
+    function uploadNodeId() public onlyWhitelisted {
+        nodePool.push(msg.sender);
+        if (nodePool.length >= groupingThreshold) {
+            genNewGroups();
         }
     }
 
-    function grouping(uint size) public onlyWhitelisted {
+    function genNewGroups() private {
+        uint candidatesSize = groupSize;
+        if (workingGroup.length >= groupToPick) {
+            candidatesSize += groupToPick * groupSize;
+        }
+        address[] memory candidates = new address[](candidatesSize);
+        storageShuffle();
+        uint8 idx = 0;
+        for (uint i = 0; i < groupSize; i++) {
+            candidates[idx++] = nodePool[nodePool.length - 1];
+            nodePool.length = nodePool.length - 1;
+        }
+        if (workingGroup.length >= groupToPick) {
+            for (uint j = 0; j < groupToPick; j++) {
+                for (uint k = 0; k < groupSize; k++) {
+                    candidates[idx++] = workingGroup[(lastRandomness + j) % workingGroup.length].adds[k];
+                }
+            }
+        }
+        memShuffle(candidates);
+        grouping(candidates, groupSize);
+    }
+
+    function memShuffle(address[] memory target) private view {
+        uint randomNumber = lastRandomness;
+        for (uint idx = target.length - 1; idx >0; idx--) {
+            memSwap(target, idx, randomNumber % (idx + 1));
+            randomNumber = uint(keccak256(abi.encodePacked(randomNumber, target[idx])));
+        }
+    }
+
+    function memSwap(address[] memory target, uint i, uint j) private pure {
+        address temp = target[i];
+        target[i] = target[j];
+        target[j] = temp;
+    }
+
+    function storageShuffle() private {
+        uint randomNumber = lastRandomness;
+        for (uint idx = nodePool.length - 1; idx >0; idx--) {
+            storageSwap(idx, randomNumber % (idx + 1));
+            randomNumber = uint(keccak256(abi.encodePacked(randomNumber, nodePool[idx])));
+        }
+    }
+
+    function storageSwap(uint i, uint j) private {
+        address temp = nodePool[i];
+        nodePool[i] = nodePool[j];
+        nodePool[j] = temp;
+    }
+
+    function grouping(address[] memory candidates, uint size) public onlyWhitelisted {
         groupSize = size;
-        uint[] memory toBeGrouped = new uint[](size);
-        if (nodeId.length < size) {
+        groupingThreshold = groupSize * 2;
+        if (candidates.length < groupSize) {
             emit LogInsufficientGroupNumber();
             return;
         }
-        for (uint i = 0; i < size; i++) {
-            toBeGrouped[i] = nodeId[nodeId.length - 1];
-            nodeId.length--;
+        uint index = 0;
+        while (candidates.length >= index + groupSize) {
+            address[] memory toBeGrouped = new address[](groupSize);
+            for (uint i = 0; i < groupSize; i++) {
+                toBeGrouped[i] = candidates[index++];
+            }
+            BN256.G2Point memory finPubKey;
+            pendingGroup.push(Group({adds:toBeGrouped, finPubKey: finPubKey}));
+            emit LogGrouping(toBeGrouped);
         }
-        emit LogGrouping(toBeGrouped);
     }
 
     function resetContract() public onlyWhitelisted {
-        nodeId.length = 0;
-        groupPubKeys.length = 0;
+        nodePool.length = 0;
+        workingGroup.length = 0;
+        pendingGroup.length = 0;
     }
 }
