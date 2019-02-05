@@ -25,6 +25,7 @@ contract DOSProxy {
         address[] adds;
         mapping(bytes32 => uint8) pubKeyCounts;
         BN256.G2Point finPubKey;
+        uint birthBlkTS;
     }
 
     uint requestIdSeed;
@@ -34,6 +35,7 @@ contract DOSProxy {
     uint groupSize;
     uint groupingThreshold;
     uint constant groupToPick = 2;
+    uint constant maxLifetime = 1200; //in second
     address[] nodePool;
     // Note: Make atomic changes to group metadata below.
     Group[] workingGroup;
@@ -81,6 +83,7 @@ contract DOSProxy {
     event LogDuplicatePubKey(uint[4] pubKey);
     event LogAddressNotFound(uint[4] pubKey);
     event LogPublicKeyAccepted(uint[4] pubKey);
+    event LogGroupDismiss(uint[4] pubKey);
 
     // whitelist state variables used only for alpha release.
     // Index starting from 1.
@@ -128,6 +131,24 @@ contract DOSProxy {
         }
     }
 
+    function dispatchJob() internal returns (uint idx) {
+        idx = lastRandomness % workingGroup.length;
+        while (block.timestamp - workingGroup[idx].birthBlkTS > maxLifetime) {
+            if (workingGroup.length == 1) {
+                break;
+            } else {
+                uint[4] memory pubKey = [workingGroup[idx].finPubKey.x[0], workingGroup[idx].finPubKey.x[1], workingGroup[idx].finPubKey.y[0], workingGroup[idx].finPubKey.y[1]];
+                emit LogGroupDismiss(pubKey);
+                workingGroup[idx] = workingGroup[workingGroup.length - 1];
+                workingGroup.length--;
+                if (idx == workingGroup.length) {
+                    idx--;
+                }
+            }
+        }
+        return idx;
+    }
+
     // Returns query id.
     // TODO: restrict query from subscribed/paid calling contracts.
     function query(
@@ -147,7 +168,7 @@ contract DOSProxy {
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
-                uint idx = lastRandomness % workingGroup.length;
+                uint idx = dispatchJob();
                 PendingRequests[queryId] =
                     PendingRequest(queryId, workingGroup[idx], from);
                 emit LogUrl(
@@ -184,7 +205,7 @@ contract DOSProxy {
             // TODO: restrict request from paid calling contract address.
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
-            uint idx = lastRandomness % workingGroup.length;
+            uint idx = dispatchJob();
             PendingRequests[requestId] =
                 PendingRequest(requestId, workingGroup[idx], from);
             // sign(requestId ||lastSystemRandomness || userSeed) with
@@ -302,7 +323,7 @@ contract DOSProxy {
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
         lastUpdatedBlock = block.number - 1;
-        uint idx = lastRandomness % workingGroup.length;
+        uint idx = dispatchJob();
         lastHandledGroup = workingGroup[idx];
         // Signal selected off-chain clients to collectively generate a new
         // system level random number for next round.
@@ -314,7 +335,7 @@ contract DOSProxy {
     function fireRandom() public onlyWhitelisted {
         lastRandomness = uint(keccak256(abi.encode(blockhash(block.number - 1))));
         lastUpdatedBlock = block.number - 1;
-        uint idx = lastRandomness % workingGroup.length;
+        uint idx = dispatchJob();
         lastHandledGroup = workingGroup[idx];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
@@ -438,7 +459,7 @@ contract DOSProxy {
                 toBeGrouped[i] = candidates[index++];
             }
             BN256.G2Point memory finPubKey;
-            pendingGroup.push(Group({adds:toBeGrouped, finPubKey: finPubKey}));
+            pendingGroup.push(Group({adds:toBeGrouped, finPubKey: finPubKey, birthBlkTS:block.timestamp}));
             emit LogGrouping(toBeGrouped);
         }
     }
