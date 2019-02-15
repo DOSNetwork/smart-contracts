@@ -366,6 +366,7 @@ contract DOSProxy {
                                 return;
                             }
                         }
+                        pendingGroup[i].birthBlkTS = block.timestamp;
                         workingGroup.push(pendingGroup[i]);
                         pendingGroup[i] = pendingGroup[pendingGroup.length - 1];
                         pendingGroup.length -= 1;
@@ -385,6 +386,14 @@ contract DOSProxy {
             workingGroup[idx].finPubKey.x[0], workingGroup[idx].finPubKey.x[1],
             workingGroup[idx].finPubKey.y[0], workingGroup[idx].finPubKey.y[1]
         ];
+    }
+
+    function getWorkingGroupSize() public view returns (uint) {
+        return workingGroup.length;
+    }
+
+    function getPendingGroupSize() public view returns (uint) {
+        return pendingGroup.length;
     }
 
     function uploadNodeId() public onlyWhitelisted {
