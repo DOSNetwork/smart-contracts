@@ -22,6 +22,7 @@ contract DOSProxy {
     }
 
     struct Group {
+        uint groupId;
         address[] adds;
         mapping(bytes32 => uint8) pubKeyCounts;
         BN256.G2Point finPubKey;
@@ -34,7 +35,7 @@ contract DOSProxy {
 
     uint groupSize;
     uint groupingThreshold;
-    uint constant groupToPick = 2;
+    uint constant groupToPick = 1;
     uint constant maxLifetime = 80; //in block number
     address[] nodePool;
     // Note: Make atomic changes to group metadata below.
@@ -79,10 +80,11 @@ contract DOSProxy {
         uint8 version
     );
     event LogInsufficientGroupNumber();
-    event LogGrouping(address[] NodeId);
-    event LogDuplicatePubKey(uint[4] pubKey);
-    event LogAddressNotFound(uint[4] pubKey);
-    event LogPublicKeyAccepted(uint[4] pubKey);
+    event LogGrouping(uint groupId, address[] NodeId);
+    event LogDuplicatePubKey(uint groupId, uint[4] pubKey);
+    event LogAddressNotFound(uint groupId, uint[4] pubKey);
+    event LogPublicKeyAccepted(uint groupId, uint[4] pubKey);
+    event LogPublicKeyUploaded(uint groupId, uint[4] pubKey);
     event LogGroupDismiss(uint[4] pubKey);
 
     // whitelist state variables used only for alpha release.
@@ -348,35 +350,34 @@ contract DOSProxy {
         }
     }
 
-    function setPublicKey(uint[4] memory pubKey)
+    function setPublicKey(uint groupId, uint[4] memory pubKey)
         public
         onlyWhitelisted
     {
         BN256.G2Point memory newPubKey = BN256.G2Point([pubKey[0], pubKey[1]], [pubKey[2], pubKey[3]]);
         bytes32 newPubKeyId = keccak256(abi.encodePacked(pubKey[0], pubKey[1], pubKey[2], pubKey[3]));
         for (uint i = 0; i < pendingGroup.length; i++) {
-            for (uint j = 0; j < pendingGroup[i].adds.length; j++) {
-                if (pendingGroup[i].adds[j] == msg.sender) {
-                    pendingGroup[i].pubKeyCounts[newPubKeyId] = pendingGroup[i].pubKeyCounts[newPubKeyId] + 1;
-                    if (pendingGroup[i].pubKeyCounts[newPubKeyId] > groupSize / 2) {
-                        pendingGroup[i].finPubKey = newPubKey;
-                        for (uint l = 0; l < workingGroup.length; l++) {
-                            if (BN256.G2Equal(workingGroup[l].finPubKey, newPubKey)) {
-                                emit LogDuplicatePubKey(pubKey);
-                                return;
-                            }
+            if (pendingGroup[i].groupId == groupId) {
+                pendingGroup[i].pubKeyCounts[newPubKeyId] = pendingGroup[i].pubKeyCounts[newPubKeyId] + 1;
+                emit LogPublicKeyUploaded(groupId, pubKey);
+                if (pendingGroup[i].pubKeyCounts[newPubKeyId] > groupSize / 2) {
+                    pendingGroup[i].finPubKey = newPubKey;
+                    for (uint l = 0; l < workingGroup.length; l++) {
+                        if (BN256.G2Equal(workingGroup[l].finPubKey, newPubKey)) {
+                            emit LogDuplicatePubKey(groupId, pubKey);
+                            return;
                         }
-                        pendingGroup[i].birthBlkN = block.number;
-                        workingGroup.push(pendingGroup[i]);
-                        pendingGroup[i] = pendingGroup[pendingGroup.length - 1];
-                        pendingGroup.length -= 1;
-                        emit LogPublicKeyAccepted(pubKey);
                     }
-                    return;
+                    pendingGroup[i].birthBlkN = block.number;
+                    workingGroup.push(pendingGroup[i]);
+                    pendingGroup[i] = pendingGroup[pendingGroup.length - 1];
+                    pendingGroup.length -= 1;
+                    emit LogPublicKeyAccepted(groupId, pubKey);
                 }
+                return;
             }
         }
-        emit LogAddressNotFound(pubKey);
+        emit LogAddressNotFound(groupId, pubKey);
     }
 
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
@@ -400,6 +401,10 @@ contract DOSProxy {
         return workingGroup[idx].adds;
     }
 
+    function getWorkingGroupId(uint idx) public view returns (uint) {
+        return workingGroup[idx].groupId;
+    }
+
     function getPendingGroupSize() public view returns (uint) {
         return pendingGroup.length;
     }
@@ -410,6 +415,10 @@ contract DOSProxy {
 
     function getPendingGroupAdds(uint idx) public view returns (address[] memory) {
         return pendingGroup[idx].adds;
+    }
+
+    function getPendingGroupId(uint idx) public view returns (uint) {
+        return pendingGroup[idx].groupId;
     }
 
     function uploadNodeId() public onlyWhitelisted {
@@ -484,8 +493,10 @@ contract DOSProxy {
                 toBeGrouped[i] = candidates[index++];
             }
             BN256.G2Point memory finPubKey;
-            pendingGroup.push(Group({adds:toBeGrouped, finPubKey: finPubKey, birthBlkN:block.number}));
-            emit LogGrouping(toBeGrouped);
+            uint groupId = uint(keccak256(abi.encodePacked(
+                    ++requestIdSeed, lastRandomness, toBeGrouped[lastRandomness % groupSize])));
+            pendingGroup.push(Group({groupId: groupId, adds: toBeGrouped, finPubKey: finPubKey, birthBlkN: block.number}));
+            emit LogGrouping(groupId, toBeGrouped);
         }
     }
 
