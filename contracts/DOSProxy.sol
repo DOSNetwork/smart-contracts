@@ -25,7 +25,7 @@ contract DOSProxy {
         address[] adds;
         mapping(bytes32 => uint8) pubKeyCounts;
         BN256.G2Point finPubKey;
-        uint birthBlkTS;
+        uint birthBlkN;
     }
 
     uint requestIdSeed;
@@ -35,7 +35,7 @@ contract DOSProxy {
     uint groupSize;
     uint groupingThreshold;
     uint constant groupToPick = 2;
-    uint constant maxLifetime = 1200; //in second
+    uint constant maxLifetime = 80; //in block number
     address[] nodePool;
     // Note: Make atomic changes to group metadata below.
     Group[] workingGroup;
@@ -133,7 +133,7 @@ contract DOSProxy {
 
     function dispatchJob() internal returns (uint idx) {
         idx = lastRandomness % workingGroup.length;
-        while (block.timestamp - workingGroup[idx].birthBlkTS > maxLifetime) {
+        while (block.number - workingGroup[idx].birthBlkN > maxLifetime) {
             if (workingGroup.length == 1) {
                 break;
             } else {
@@ -366,7 +366,7 @@ contract DOSProxy {
                                 return;
                             }
                         }
-                        pendingGroup[i].birthBlkTS = block.timestamp;
+                        pendingGroup[i].birthBlkN = block.number;
                         workingGroup.push(pendingGroup[i]);
                         pendingGroup[i] = pendingGroup[pendingGroup.length - 1];
                         pendingGroup.length -= 1;
@@ -392,8 +392,24 @@ contract DOSProxy {
         return workingGroup.length;
     }
 
+    function getWorkingGroupBlkN(uint idx) public view returns (uint) {
+        return workingGroup[idx].birthBlkN;
+    }
+
+    function getWorkingGroupAdds(uint idx) public view returns (address[] memory) {
+        return workingGroup[idx].adds;
+    }
+
     function getPendingGroupSize() public view returns (uint) {
         return pendingGroup.length;
+    }
+
+    function getPendingGroupBlkN(uint idx) public view returns (uint) {
+        return pendingGroup[idx].birthBlkN;
+    }
+
+    function getPendingGroupAdds(uint idx) public view returns (address[] memory) {
+        return pendingGroup[idx].adds;
     }
 
     function uploadNodeId() public onlyWhitelisted {
@@ -468,7 +484,7 @@ contract DOSProxy {
                 toBeGrouped[i] = candidates[index++];
             }
             BN256.G2Point memory finPubKey;
-            pendingGroup.push(Group({adds:toBeGrouped, finPubKey: finPubKey, birthBlkTS:block.timestamp}));
+            pendingGroup.push(Group({adds:toBeGrouped, finPubKey: finPubKey, birthBlkN:block.number}));
             emit LogGrouping(toBeGrouped);
         }
     }
