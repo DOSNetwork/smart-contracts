@@ -40,7 +40,8 @@ contract DOSProxy {
     address[] nodePool;
     // Note: Make atomic changes to group metadata below.
     Group[] workingGroup;
-    Group[] pendingGroup;
+    mapping(uint => Group) pendingGroup;
+    Group[] pendingGroupTracker;
     // Note: Make atomic changes to randomness metadata below.
 
     uint public lastUpdatedBlock;
@@ -83,8 +84,8 @@ contract DOSProxy {
     event LogGrouping(uint groupId, address[] NodeId);
     event LogDuplicatePubKey(uint groupId, uint[4] pubKey);
     event LogAddressNotFound(uint groupId, uint[4] pubKey);
-    event LogPublicKeyAccepted(uint groupId, uint[4] pubKey);
-    event LogPublicKeyUploaded(uint groupId, uint[4] pubKey);
+    event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint workingGroupSize);
+    event LogPublicKeyUploaded(uint groupId, uint[4] pubKey, uint count, uint groupSize);
     event LogGroupDismiss(uint[4] pubKey);
 
     // whitelist state variables used only for alpha release.
@@ -354,30 +355,31 @@ contract DOSProxy {
         public
         onlyWhitelisted
     {
+        require(pendingGroup[groupId].groupId != uint(0), "requestId not found");
         BN256.G2Point memory newPubKey = BN256.G2Point([pubKey[0], pubKey[1]], [pubKey[2], pubKey[3]]);
         bytes32 newPubKeyId = keccak256(abi.encodePacked(pubKey[0], pubKey[1], pubKey[2], pubKey[3]));
-        for (uint i = 0; i < pendingGroup.length; i++) {
-            if (pendingGroup[i].groupId == groupId) {
-                pendingGroup[i].pubKeyCounts[newPubKeyId] = pendingGroup[i].pubKeyCounts[newPubKeyId] + 1;
-                emit LogPublicKeyUploaded(groupId, pubKey);
-                if (pendingGroup[i].pubKeyCounts[newPubKeyId] > groupSize / 2) {
-                    pendingGroup[i].finPubKey = newPubKey;
-                    for (uint l = 0; l < workingGroup.length; l++) {
-                        if (BN256.G2Equal(workingGroup[l].finPubKey, newPubKey)) {
-                            emit LogDuplicatePubKey(groupId, pubKey);
-                            return;
-                        }
-                    }
-                    pendingGroup[i].birthBlkN = block.number;
-                    workingGroup.push(pendingGroup[i]);
-                    pendingGroup[i] = pendingGroup[pendingGroup.length - 1];
-                    pendingGroup.length -= 1;
-                    emit LogPublicKeyAccepted(groupId, pubKey);
+        pendingGroup[groupId].pubKeyCounts[newPubKeyId] = pendingGroup[groupId].pubKeyCounts[newPubKeyId] + 1;
+        emit LogPublicKeyUploaded(groupId, pubKey, pendingGroup[groupId].pubKeyCounts[newPubKeyId], groupSize);
+        if (pendingGroup[groupId].pubKeyCounts[newPubKeyId] > groupSize / 2) {
+            pendingGroup[groupId].finPubKey = newPubKey;
+            for (uint i = 0; i < workingGroup.length; i++) {
+                if (BN256.G2Equal(workingGroup[i].finPubKey, newPubKey)) {
+                    emit LogDuplicatePubKey(groupId, pubKey);
+                    return;
                 }
-                return;
             }
+            pendingGroup[groupId].birthBlkN = block.number;
+            workingGroup.push(pendingGroup[groupId]);
+            for (i = 0; i < pendingGroupTracker.length; i++) {
+                if (pendingGroupTracker[i].groupId == pendingGroup[groupId].groupId) {
+                    pendingGroupTracker[i] = pendingGroupTracker[pendingGroupTracker.length - 1];
+                    pendingGroupTracker.length--;
+                    break;
+                }
+            }
+            delete pendingGroup[groupId];
+            emit LogPublicKeyAccepted(groupId, pubKey, workingGroup.length);
         }
-        emit LogAddressNotFound(groupId, pubKey);
     }
 
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
@@ -406,19 +408,19 @@ contract DOSProxy {
     }
 
     function getPendingGroupSize() public view returns (uint) {
-        return pendingGroup.length;
+        return pendingGroupTracker.length;
     }
 
     function getPendingGroupBlkN(uint idx) public view returns (uint) {
-        return pendingGroup[idx].birthBlkN;
+        return pendingGroupTracker[idx].birthBlkN;
     }
 
     function getPendingGroupAdds(uint idx) public view returns (address[] memory) {
-        return pendingGroup[idx].adds;
+        return pendingGroupTracker[idx].adds;
     }
 
     function getPendingGroupId(uint idx) public view returns (uint) {
-        return pendingGroup[idx].groupId;
+        return pendingGroupTracker[idx].groupId;
     }
 
     function uploadNodeId() public onlyWhitelisted {
@@ -495,7 +497,9 @@ contract DOSProxy {
             BN256.G2Point memory finPubKey;
             uint groupId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, lastRandomness, toBeGrouped[lastRandomness % groupSize])));
-            pendingGroup.push(Group({groupId: groupId, adds: toBeGrouped, finPubKey: finPubKey, birthBlkN: block.number}));
+            Group memory newGroup = Group({groupId: groupId, adds: toBeGrouped, finPubKey: finPubKey, birthBlkN: block.number});
+            pendingGroupTracker.push(newGroup);
+            pendingGroup[newGroup.groupId] = newGroup;
             emit LogGrouping(groupId, toBeGrouped);
         }
     }
@@ -503,6 +507,6 @@ contract DOSProxy {
     function resetContract() public onlyWhitelisted {
         nodePool.length = 0;
         workingGroup.length = 0;
-        pendingGroup.length = 0;
+        pendingGroupTracker.length = 0;
     }
 }
