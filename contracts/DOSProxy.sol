@@ -444,9 +444,14 @@ contract DOSProxy {
         }
         if (workingGroup.length >= groupToPick) {
             for (uint j = 0; j < groupToPick; j++) {
+                uint workingGroupIdx = lastRandomness % workingGroup.length;
                 for (uint k = 0; k < groupSize; k++) {
-                    candidates[idx++] = workingGroup[(lastRandomness + j) % workingGroup.length].adds[k];
+                    candidates[idx++] = workingGroup[workingGroupIdx].adds[k];
                 }
+                uint[4] memory pubKey = [workingGroup[workingGroupIdx].finPubKey.x[0], workingGroup[workingGroupIdx].finPubKey.x[1], workingGroup[workingGroupIdx].finPubKey.y[0], workingGroup[workingGroupIdx].finPubKey.y[1]];
+                emit LogGroupDismiss(pubKey);
+                workingGroup[workingGroupIdx] = workingGroup[workingGroup.length - 1];
+                workingGroup.length--;
             }
         }
         memShuffle(candidates);
@@ -455,7 +460,7 @@ contract DOSProxy {
 
     function memShuffle(address[] memory target) private view {
         uint randomNumber = lastRandomness;
-        for (uint idx = target.length - 1; idx >0; idx--) {
+        for (uint idx = target.length - 1; idx > 0; idx--) {
             memSwap(target, idx, randomNumber % (idx + 1));
             randomNumber = uint(keccak256(abi.encodePacked(randomNumber, target[idx])));
         }
