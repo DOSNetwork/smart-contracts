@@ -385,7 +385,7 @@ contract DOSProxy is Ownable {
 
     // callback to handle re-grouping.
     // Using generated random number as random number seed.
-    function __callback__(uint requestId, uint rndSeed) public {
+    function __callback__(uint requestId, uint rndSeed) internal {
         require(msg.sender == address(this), "Unauthenticated response");
         require(workingGroupIds.length >= groupToPick,
                 "No enough working group");
@@ -440,7 +440,7 @@ contract DOSProxy is Ownable {
 
         for (uint i = 0; i < groupToPick + 1; i++) {
             uint groupId = 0;
-            // Generated groupId = sha3(member 1, member 2, ..., member n)
+            // Generated groupId = sha3(...(sha3(sha3(member 1), member 2), ...), member n)
             for (uint j = 0; j < groupSize; j++) {
                 groupId = uint(keccak256(abi.encodePacked(groupId, candidates[i * groupSize + j])));
             }
@@ -461,8 +461,8 @@ contract DOSProxy is Ownable {
     }
 
     // TODO: restrict msg.sender from registered and staked node operator.
-    // registerGroupPubKey
-    function setPublicKey(uint groupId, uint[4] memory suggestedPubKey) public {
+    // Formerly setPublicKey().
+    function registerGroupPubKey(uint groupId, uint[4] memory suggestedPubKey) public {
         PendingGroup storage pgrp = pendingGroups[groupId];
         require(pgrp.groupId != 0, "No such pending group to be registered");
         require(pgrp.isMember[msg.sender], "Not from authorized group member");
