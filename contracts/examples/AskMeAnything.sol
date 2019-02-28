@@ -1,7 +1,7 @@
-pragma solidity >= 0.4.24;
+pragma solidity ^0.5.0;
 
-import "./Ownable.sol";
-import "./DOSOnChainSDK.sol";
+import "../Ownable.sol";
+import "../DOSOnChainSDK.sol";
 
 // A user contract asks anything from off-chain world through a url.
 contract AskMeAnything is Ownable, DOSOnChainSDK {

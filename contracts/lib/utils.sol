@@ -1,4 +1,4 @@
-pragma solidity >= 0.4.24;
+pragma solidity ^0.5.0;
 
 // Util functions imported in OnChainSDK for caller to use.
 library utils {

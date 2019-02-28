@@ -1,8 +1,8 @@
-pragma solidity >= 0.4.24;
-// Not enabled for production yet.
-//pragma experimental ABIEncoderV2;
+pragma solidity ^0.5.0;
+pragma experimental ABIEncoderV2;
 
 import "./lib/BN256.sol";
+import "./Ownable.sol";
 
 contract UserContractInterface {
     // Query callback.
@@ -11,42 +11,58 @@ contract UserContractInterface {
     function __callback__(uint, uint) public;
 }
 
-contract DOSProxy {
+contract DOSProxy is Ownable {
     using BN256 for *;
 
     struct PendingRequest {
         uint requestId;
-        Group handledGroup;
+        uint handledGroupId;
         // User contract issued the query.
         address callbackAddr;
     }
 
+    // Metadata of registered group.
     struct Group {
         uint groupId;
-        address[] adds;
-        mapping(bytes32 => uint8) pubKeyCounts;
-        BN256.G2Point finPubKey;
+        BN256.G2Point groupPubKey;
         uint birthBlkN;
+        uint numCurrentProcessing;
+        address[] members;
+    }
+
+    // Metadata of a to-be-registered group whose members are determined already.
+    struct PendingGroup {
+        uint groupId;
+        mapping(bytes32 => uint) pubKeyCounts;
+        address[] members;
+        mapping(address => bool) isMember;
     }
 
     uint requestIdSeed;
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
-    uint groupSize;
-    uint groupingThreshold;
-    uint constant groupToPick = 1;
-    uint constant maxLifetime = 80; //in block number
-    address[] nodePool;
-    // Note: Make atomic changes to group metadata below.
-    Group[] workingGroup;
-    mapping(uint => Group) pendingGroup;
-    Group[] pendingGroupTracker;
-    // Note: Make atomic changes to randomness metadata below.
+    uint public refreshSystemRandomHardLimit = 60; // blocks, ~15min
+    uint public groupMaturityPeriod = 11520; // blocks, ~2days
+    // When regrouping, picking @gropToPick working groups, plus one group from pending nodes.
+    uint public groupToPick = 2;
+    uint public groupSize = 21;
+    // decimal 2. TODO: should be >= 100 ???
+    uint public groupingThreshold = 150;
+    // Newly registered ungrouped nodes.
+    address[] public pendingNodes;
+    // groupId => Group
+    mapping(uint => Group) public workingGroups;
+    // Index:groupId
+    uint[] public workingGroupIds;
+    // groupId => PendingGroup
+    mapping(uint => PendingGroup) pendingGroups;
+    uint public numPendingGroups = 0;
 
     uint public lastUpdatedBlock;
     uint public lastRandomness;
-    Group lastHandledGroup;
+    Group public lastHandledGroup;
+    // TODO: Change to enum
     uint8 constant TrafficSystemRandom = 0;
     uint8 constant TrafficUserRandom = 1;
     uint8 constant TrafficUserQuery = 2;
@@ -80,52 +96,42 @@ contract DOSProxy {
         bool pass,
         uint8 version
     );
-    event LogInsufficientGroupNumber();
-    event LogGrouping(uint groupId, address[] NodeId);
-    event LogDuplicatePubKey(uint groupId, uint[4] pubKey);
+    event LogInsufficientPendingNode(uint numPendingNodes);
+    event LogInsufficientWorkingGroup(uint numWorkingGroups);
+    event LogGrouping(uint groupId, address[] nodeId);
+    event LogDuplicateWorkingGroup(uint groupId, address[] members);
     event LogAddressNotFound(uint groupId, uint[4] pubKey);
     event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint workingGroupSize);
-    event LogPublicKeyUploaded(uint groupId, uint[4] pubKey, uint count, uint groupSize);
+    event LogPublicKeySuggested(uint groupId, uint[4] pubKey, uint count, uint groupSize);
     event LogGroupDismiss(uint[4] pubKey);
+    event UpdateGroupToPick(uint oldNum, uint newNum);
+    event UpdateGroupSize(uint oldSize, uint newSize);
+    event UpdateGroupingThreshold(uint oldThreshold, uint newThreshold);
+    event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
 
-    // whitelist state variables used only for alpha release.
-    // Index starting from 1.
-    address[22] whitelists;
-    // whitelisted address => index in whitelists.
-    mapping(address => uint) isWhitelisted;
-    bool public whitelistInitialized = false;
-    event WhitelistAddressTransferred(address previous, address curr);
-
-    modifier onlyWhitelisted {
-        //uint idx = isWhitelisted[msg.sender];
-        //require(idx != 0 && whitelists[idx] == msg.sender, "Not whitelisted!");
-        require(0==0, "Not whitelisted!");
-        _;
+    function setGroupToPick(uint newNum) public onlyOwner {
+        require(newNum != groupToPick && newNum != 0);
+        emit UpdateGroupToPick(groupToPick, newNum);
+        groupToPick = newNum;
     }
 
-    function initWhitelist(address[21] memory addresses) public {
-        require(!whitelistInitialized, "Whitelist already initialized!");
-
-        for (uint idx = 0; idx < 21; idx++) {
-            whitelists[idx+1] = addresses[idx];
-            isWhitelisted[addresses[idx]] = idx+1;
-        }
-        whitelistInitialized = true;
+    // groupSize must be an odd number.
+    function setGroupSize(uint newSize) public onlyOwner {
+        require(newSize != groupSize && newSize % 2 != 0);
+        emit UpdateGroupSize(groupSize, newSize);
+        groupSize = newSize;
     }
 
-    function getWhitelistAddress(uint idx) public view returns (address) {
-        require(idx > 0 && idx <= 21, "Index out of range");
-        return whitelists[idx];
+    function setGroupingThreshold(uint newThreshold) public onlyOwner {
+        require(newThreshold != groupingThreshold && newThreshold >= 100);
+        emit UpdateGroupMaturityPeriod(groupingThreshold, newThreshold);
+        groupingThreshold = newThreshold;
     }
 
-    function transferWhitelistAddress(address newWhitelistedAddr)
-        public
-        onlyWhitelisted
-    {
-        require(newWhitelistedAddr != address(0x0) && newWhitelistedAddr != msg.sender);
-
-        emit WhitelistAddressTransferred(msg.sender, newWhitelistedAddr);
-        whitelists[isWhitelisted[msg.sender]] = newWhitelistedAddr;
+    function setGroupMaturityPeriod(uint newPeriod) public onlyOwner {
+        require(newPeriod != groupMaturityPeriod && newPeriod != 0);
+        emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
+        groupMaturityPeriod = newPeriod;
     }
 
     function getCodeSize(address addr) internal view returns (uint size) {
@@ -135,21 +141,24 @@ contract DOSProxy {
     }
 
     function dispatchJob() internal returns (uint idx) {
-        idx = lastRandomness % workingGroup.length;
-        while (block.number - workingGroup[idx].birthBlkN > maxLifetime) {
-            if (workingGroup.length == 1) {
-                break;
+        do {
+            // TODO: still keep request receipt and emit event, do not revert
+            if (workingGroupIds.length == 0) revert("No active working group");
+
+            idx = lastRandomness % workingGroupIds.length;
+            Group storage group = workingGroups[workingGroupIds[idx]];
+            if (block.number - group.birthBlkN < groupMaturityPeriod) {
+                return idx;
             } else {
-                uint[4] memory pubKey = [workingGroup[idx].finPubKey.x[0], workingGroup[idx].finPubKey.x[1], workingGroup[idx].finPubKey.y[0], workingGroup[idx].finPubKey.y[1]];
-                emit LogGroupDismiss(pubKey);
-                workingGroup[idx] = workingGroup[workingGroup.length - 1];
-                workingGroup.length--;
-                if (idx == workingGroup.length) {
-                    idx--;
-                }
+                // TODO: Deregister expired group and remove metadata
+                emit LogGroupDismiss(getGroupPubKey(idx));
+
+                // Delete expired group metadata
+                delete workingGroups[workingGroupIds[idx]];
+                workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
+                workingGroupIds.length--;
             }
-        }
-        return idx;
+        } while(true);
     }
 
     // Returns query id.
@@ -172,8 +181,10 @@ contract DOSProxy {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
                 uint idx = dispatchJob();
+                Group storage grp = workingGroups[workingGroupIds[idx]];
+                grp.numCurrentProcessing++;
                 PendingRequests[queryId] =
-                    PendingRequest(queryId, workingGroup[idx], from);
+                    PendingRequest(queryId, grp.groupId, from);
                 emit LogUrl(
                     queryId,
                     timeout,
@@ -209,8 +220,10 @@ contract DOSProxy {
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
             uint idx = dispatchJob();
+            Group storage grp = workingGroups[workingGroupIds[idx]];
+            grp.numCurrentProcessing++;
             PendingRequests[requestId] =
-                PendingRequest(requestId, workingGroup[idx], from);
+                PendingRequest(requestId, grp.groupId, from);
             // sign(requestId ||lastSystemRandomness || userSeed) with
             // selected group
             emit LogRequestUserRandom(
@@ -235,7 +248,6 @@ contract DOSProxy {
         uint8 version
     )
         internal
-        onlyWhitelisted
         returns (bool)
     {
         // Validation
@@ -274,24 +286,26 @@ contract DOSProxy {
     )
         public
     {
-        if (!validateAndVerify(
-                trafficType,
-                requestId,
-                result,
-                BN256.G1Point(sig[0], sig[1]),
-                PendingRequests[requestId].handledGroup.finPubKey,
-                version))
-        {
-            return;
-        }
-
         address ucAddr = PendingRequests[requestId].callbackAddr;
         if (ucAddr == address(0x0)) {
             emit LogRequestFromNonExistentUC();
             return;
         }
 
+        Group storage handledGroup = workingGroups[PendingRequests[requestId].handledGroupId];
+        if (!validateAndVerify(
+                trafficType,
+                requestId,
+                result,
+                BN256.G1Point(sig[0], sig[1]),
+                handledGroup.groupPubKey,
+                version))
+        {
+            return;
+        }
+
         emit LogCallbackTriggeredFor(ucAddr);
+        handledGroup.numCurrentProcessing--;
         delete PendingRequests[requestId];
         if (trafficType == TrafficUserQuery) {
             UserContractInterface(ucAddr).__callback__(requestId, result);
@@ -318,200 +332,157 @@ contract DOSProxy {
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
-                lastHandledGroup.finPubKey,
+                lastHandledGroup.groupPubKey,
                 version))
         {
             return;
         }
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
-        lastUpdatedBlock = block.number - 1;
+        lastUpdatedBlock = block.number;
         uint idx = dispatchJob();
-        lastHandledGroup = workingGroup[idx];
+        lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal selected off-chain clients to collectively generate a new
         // system level random number for next round.
         emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
     }
 
-    // For alpha. To trigger first random number after grouping has done
-    // or timeout.
-    function fireRandom() public onlyWhitelisted {
-        lastRandomness = uint(keccak256(abi.encode(blockhash(block.number - 1))));
-        lastUpdatedBlock = block.number - 1;
-        uint idx = dispatchJob();
-        lastHandledGroup = workingGroup[idx];
-        // Signal off-chain clients
-        emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
-    }
-
-    function handleTimeout() public onlyWhitelisted {
-        uint currentBlockNumber = block.number - 1;
-        if (currentBlockNumber - lastUpdatedBlock > 5) {
-            fireRandom();
-        }
-    }
-
-    function setPublicKey(uint groupId, uint[4] memory pubKey)
-        public
-        onlyWhitelisted
-    {
-        require(pendingGroup[groupId].groupId != uint(0), "requestId not found");
-        BN256.G2Point memory newPubKey = BN256.G2Point([pubKey[0], pubKey[1]], [pubKey[2], pubKey[3]]);
-        bytes32 newPubKeyId = keccak256(abi.encodePacked(pubKey[0], pubKey[1], pubKey[2], pubKey[3]));
-        pendingGroup[groupId].pubKeyCounts[newPubKeyId] = pendingGroup[groupId].pubKeyCounts[newPubKeyId] + 1;
-        emit LogPublicKeyUploaded(groupId, pubKey, pendingGroup[groupId].pubKeyCounts[newPubKeyId], groupSize);
-        if (pendingGroup[groupId].pubKeyCounts[newPubKeyId] > groupSize / 2) {
-            pendingGroup[groupId].finPubKey = newPubKey;
-            for (uint i = 0; i < workingGroup.length; i++) {
-                if (BN256.G2Equal(workingGroup[i].finPubKey, newPubKey)) {
-                    emit LogDuplicatePubKey(groupId, pubKey);
-                    return;
-                }
-            }
-            pendingGroup[groupId].birthBlkN = block.number;
-            workingGroup.push(pendingGroup[groupId]);
-            for (i = 0; i < pendingGroupTracker.length; i++) {
-                if (pendingGroupTracker[i].groupId == pendingGroup[groupId].groupId) {
-                    pendingGroupTracker[i] = pendingGroupTracker[pendingGroupTracker.length - 1];
-                    pendingGroupTracker.length--;
-                    break;
-                }
-            }
-            delete pendingGroup[groupId];
-            emit LogPublicKeyAccepted(groupId, pubKey, workingGroup.length);
+    function handleTimeout() public {
+        if (block.number - lastUpdatedBlock > refreshSystemRandomHardLimit) {
+            lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, blockhash(block.number - 1))));
+            lastUpdatedBlock = block.number;
+            uint idx = dispatchJob();
+            lastHandledGroup = workingGroups[workingGroupIds[idx]];
+            // Signal off-chain clients
+            emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
         }
     }
 
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
-        require(idx < workingGroup.length, "group index out of range");
+        require(idx < workingGroupIds.length, "group index out of range");
 
-        return [
-            workingGroup[idx].finPubKey.x[0], workingGroup[idx].finPubKey.x[1],
-            workingGroup[idx].finPubKey.y[0], workingGroup[idx].finPubKey.y[1]
-        ];
+        BN256.G2Point storage pubKey = workingGroups[workingGroupIds[idx]].groupPubKey;
+        return [pubKey.x[0], pubKey.x[1], pubKey.y[0], pubKey.y[1]];
     }
 
     function getWorkingGroupSize() public view returns (uint) {
-        return workingGroup.length;
+        return workingGroupIds.length;
     }
 
-    function getWorkingGroupBlkN(uint idx) public view returns (uint) {
-        return workingGroup[idx].birthBlkN;
-    }
-
-    function getWorkingGroupAdds(uint idx) public view returns (address[] memory) {
-        return workingGroup[idx].adds;
-    }
-
-    function getWorkingGroupId(uint idx) public view returns (uint) {
-        return workingGroup[idx].groupId;
-    }
-
-    function getPendingGroupSize() public view returns (uint) {
-        return pendingGroupTracker.length;
-    }
-
-    function getPendingGroupBlkN(uint idx) public view returns (uint) {
-        return pendingGroupTracker[idx].birthBlkN;
-    }
-
-    function getPendingGroupAdds(uint idx) public view returns (address[] memory) {
-        return pendingGroupTracker[idx].adds;
-    }
-
-    function getPendingGroupId(uint idx) public view returns (uint) {
-        return pendingGroupTracker[idx].groupId;
-    }
-
-    function uploadNodeId() public onlyWhitelisted {
-        nodePool.push(msg.sender);
-        if (nodePool.length >= groupingThreshold) {
-            genNewGroups();
+    // TODO: restrict msg.sender from registered and staked node operator.
+    // Formerly, uploadNodeId()
+    function registerNewNode() public {
+        pendingNodes.push(msg.sender);
+        // Generate new groups from newly registered nodes and nodes from existing working group.
+        if (pendingNodes.length < groupSize * groupingThreshold / 100) {
+            emit LogInsufficientPendingNode(pendingNodes.length);
+        } else if (workingGroupIds.length < groupToPick) {
+            emit LogInsufficientWorkingGroup(workingGroupIds.length);
+        } else {
+            requestRandom(address(this), 1, block.number);
         }
     }
 
-    function genNewGroups() private {
-        uint candidatesSize = groupSize;
-        if (workingGroup.length >= groupToPick) {
-            candidatesSize += groupToPick * groupSize;
+    // callback to handle re-grouping.
+    // Using generated random number as random number seed.
+    function __callback__(uint requestId, uint rndSeed) public {
+        require(msg.sender == address(this), "Unauthenticated response");
+        require(workingGroupIds.length >= groupToPick,
+                "No enough working group");
+        require(pendingNodes.length >= groupSize * groupingThreshold / 100,
+                "No enough newly registered nodes");
+
+        uint arrSize = groupSize * (groupToPick + 1);
+        address[] memory candidates = new address[](arrSize);
+        uint num = 0;
+        for (uint i = 1; i <= groupToPick; i++) {
+            uint idx = uint(keccak256(abi.encodePacked(rndSeed, requestId, i))) % workingGroupIds.length;
+            Group storage grpToDisolve = workingGroups[workingGroupIds[idx]];
+            for (uint j = 0; j < groupSize; j++) {
+                candidates[num++] = grpToDisolve.members[j];
+            }
+            // TODO: Deregister selected group and remove Metadata
+            emit LogGroupDismiss(getGroupPubKey(idx));
+
+            // Delete expired group metadata
+            delete workingGroups[workingGroupIds[idx]];
+            workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
+            workingGroupIds.length--;
         }
-        address[] memory candidates = new address[](candidatesSize);
-        storageShuffle();
-        uint8 idx = 0;
-        for (uint i = 0; i < groupSize; i++) {
-            candidates[idx++] = nodePool[nodePool.length - 1];
-            nodePool.length = nodePool.length - 1;
-        }
-        if (workingGroup.length >= groupToPick) {
-            for (uint j = 0; j < groupToPick; j++) {
-                uint workingGroupIdx = lastRandomness % workingGroup.length;
-                for (uint k = 0; k < groupSize; k++) {
-                    candidates[idx++] = workingGroup[workingGroupIdx].adds[k];
-                }
-                uint[4] memory pubKey = [workingGroup[workingGroupIdx].finPubKey.x[0], workingGroup[workingGroupIdx].finPubKey.x[1], workingGroup[workingGroupIdx].finPubKey.y[0], workingGroup[workingGroupIdx].finPubKey.y[1]];
-                emit LogGroupDismiss(pubKey);
-                workingGroup[workingGroupIdx] = workingGroup[workingGroup.length - 1];
-                workingGroup.length--;
+
+        for (uint i = 0; i < pendingNodes.length; i++) {
+            if (i < groupSize) {
+                candidates[num++] = pendingNodes[i];
+            } else {
+                pendingNodes[i - groupSize] = pendingNodes[i];
             }
         }
-        memShuffle(candidates);
-        grouping(candidates, groupSize);
+        pendingNodes.length -= groupSize;
+
+        shuffle(candidates, rndSeed);
+
+        regroup(candidates);
     }
 
-    function memShuffle(address[] memory target) private view {
-        uint randomNumber = lastRandomness;
-        for (uint idx = target.length - 1; idx > 0; idx--) {
-            memSwap(target, idx, randomNumber % (idx + 1));
-            randomNumber = uint(keccak256(abi.encodePacked(randomNumber, target[idx])));
+    // Shuffle a memory array using a secure random seed.
+    function shuffle(address[] memory arr, uint rndSeed) private pure {
+        for (uint i = arr.length - 1; i > 0; i--) {
+            uint j = uint(keccak256(abi.encodePacked(rndSeed, i, arr[i]))) % (i + 1);
+            address tmp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = tmp;
         }
     }
 
-    function memSwap(address[] memory target, uint i, uint j) private pure {
-        address temp = target[i];
-        target[i] = target[j];
-        target[j] = temp;
-    }
+    // Regroup a shuffled node array.
+    function regroup(address[] memory candidates) internal {
+        require(candidates.length == groupSize * (groupToPick + 1));
 
-    function storageShuffle() private {
-        uint randomNumber = lastRandomness;
-        for (uint idx = nodePool.length - 1; idx >0; idx--) {
-            storageSwap(idx, randomNumber % (idx + 1));
-            randomNumber = uint(keccak256(abi.encodePacked(randomNumber, nodePool[idx])));
-        }
-    }
-
-    function storageSwap(uint i, uint j) private {
-        address temp = nodePool[i];
-        nodePool[i] = nodePool[j];
-        nodePool[j] = temp;
-    }
-
-    function grouping(address[] memory candidates, uint size) public onlyWhitelisted {
-        groupSize = size;
-        groupingThreshold = groupSize * 2;
-        if (candidates.length < groupSize) {
-            emit LogInsufficientGroupNumber();
-            return;
-        }
-        uint index = 0;
-        while (candidates.length >= index + groupSize) {
-            address[] memory toBeGrouped = new address[](groupSize);
-            for (uint i = 0; i < groupSize; i++) {
-                toBeGrouped[i] = candidates[index++];
+        for (uint i = 0; i < groupToPick + 1; i++) {
+            uint groupId = 0;
+            // Generated groupId = sha3(member 1, member 2, ..., member n)
+            for (uint j = 0; j < groupSize; j++) {
+                groupId = uint(keccak256(abi.encodePacked(groupId, candidates[i * groupSize + j])));
             }
-            BN256.G2Point memory finPubKey;
-            uint groupId = uint(keccak256(abi.encodePacked(
-                    ++requestIdSeed, lastRandomness, toBeGrouped[lastRandomness % groupSize])));
-            Group memory newGroup = Group({groupId: groupId, adds: toBeGrouped, finPubKey: finPubKey, birthBlkN: block.number});
-            pendingGroupTracker.push(newGroup);
-            pendingGroup[newGroup.groupId] = newGroup;
-            emit LogGrouping(groupId, toBeGrouped);
+            PendingGroup storage pgrp = pendingGroups[groupId];
+            pgrp.groupId = groupId;
+            numPendingGroups++;
+            for (uint j = 0; j < groupSize; j++) {
+                address member = candidates[i * groupSize + j];
+                pgrp.isMember[member] = true;
+                pgrp.members.push(member);
+            }
+            // TODO: monitor this event
+            if (workingGroups[groupId].groupId != 0) {
+                emit LogDuplicateWorkingGroup(groupId, pgrp.members);
+            }
+            emit LogGrouping(groupId, pgrp.members);
         }
     }
 
-    function resetContract() public onlyWhitelisted {
-        nodePool.length = 0;
-        workingGroup.length = 0;
-        pendingGroupTracker.length = 0;
+    // TODO: restrict msg.sender from registered and staked node operator.
+    // registerGroupPubKey
+    function setPublicKey(uint groupId, uint[4] memory suggestedPubKey) public {
+        PendingGroup storage pgrp = pendingGroups[groupId];
+        require(pgrp.groupId != 0, "No such pending group to be registered");
+        require(pgrp.isMember[msg.sender], "Not from authorized group member");
+
+        bytes32 hashedPubKey = keccak256(abi.encodePacked(
+            suggestedPubKey[0], suggestedPubKey[1], suggestedPubKey[2], suggestedPubKey[3]));
+        pgrp.pubKeyCounts[hashedPubKey]++;
+        emit LogPublicKeySuggested(groupId, suggestedPubKey, pgrp.pubKeyCounts[hashedPubKey], groupSize);
+        if (pgrp.pubKeyCounts[hashedPubKey] > groupSize / 2) {
+            workingGroups[groupId] = Group(
+                groupId,
+                BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
+                block.number,
+                0,
+                pgrp.members);
+            workingGroupIds.push(groupId);
+
+            delete pendingGroups[groupId];
+            numPendingGroups--;
+            emit LogPublicKeyAccepted(groupId, suggestedPubKey, workingGroupIds.length);
+        }
     }
 }
