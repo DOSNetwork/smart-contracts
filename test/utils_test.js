@@ -8,7 +8,7 @@ contract("Utils test", async() => {
 
     it("Test transfer byte to uint", async() => {
         let num = await utils.createByte.call();
-        let numOverflow = 'A';
+        let numOverflow = web3.utils.toHex('A');
         let result = await utils.byte2Uint.call(num);
         let resultOverflow = await utils.byte2Uint.call(numOverflow);
         assert.equal(result, 6, "transfer byte to uint");
@@ -17,8 +17,8 @@ contract("Utils test", async() => {
 
     it("Test transfer hexByte to uint", async() => {
         let num = await utils.createByte.call();
-        let char = 'F';
-        let charOverflow = 'G';
+        let char = web3.utils.toHex('F');
+        let charOverflow = web3.utils.toHex('G');
         let result = await utils.byte2Uint.call(num);
         let charResult = await utils.hexByte2Uint.call(char);
         let charResultOverflow = await utils.hexByte2Uint.call(charOverflow);
