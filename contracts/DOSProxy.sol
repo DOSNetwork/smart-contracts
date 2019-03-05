@@ -1,5 +1,6 @@
 pragma solidity ^0.5.0;
-pragma experimental ABIEncoderV2;
+// Do not use in production
+// pragma experimental ABIEncoderV2;
 
 import "./lib/BN256.sol";
 import "./Ownable.sol";
@@ -47,12 +48,13 @@ contract DOSProxy is Ownable {
     // When regrouping, picking @gropToPick working groups, plus one group from pending nodes.
     uint public groupToPick = 2;
     uint public groupSize = 21;
-    // decimal 2. TODO: should be >= 100 ???
+    // decimal 2.
     uint public groupingThreshold = 150;
     // Newly registered ungrouped nodes.
     address[] public pendingNodes;
+    mapping(address => bool) pendingNodeMap;
     // groupId => Group
-    mapping(uint => Group) public workingGroups;
+    mapping(uint => Group) workingGroups;
     // Index:groupId
     uint[] public workingGroupIds;
     // groupId => PendingGroup
@@ -61,7 +63,7 @@ contract DOSProxy is Ownable {
 
     uint public lastUpdatedBlock;
     uint public lastRandomness;
-    Group public lastHandledGroup;
+    Group lastHandledGroup;
     // TODO: Change to enum
     uint8 constant TrafficSystemRandom = 0;
     uint8 constant TrafficUserRandom = 1;
@@ -73,6 +75,7 @@ contract DOSProxy is Ownable {
         string dataSource,
         string selector,
         uint randomness,
+        uint dispatchedGroupId,
         // Log G2Point struct directly is an experimental feature, use with care.
         uint[4] dispatchedGroup
     );
@@ -80,6 +83,7 @@ contract DOSProxy is Ownable {
         uint requestId,
         uint lastSystemRandomness,
         uint userSeed,
+        uint dispatchedGroupId,
         uint[4] dispatchedGroup
     );
     event LogNonSupportedType(string invalidSelector);
@@ -93,8 +97,9 @@ contract DOSProxy is Ownable {
         bytes message,
         uint[2] signature,
         uint[4] pubKey,
-        bool pass,
-        uint8 version
+        uint groupId,
+        uint8 version,
+        bool pass
     );
     event LogInsufficientPendingNode(uint numPendingNodes);
     event LogInsufficientWorkingGroup(uint numWorkingGroups);
@@ -103,11 +108,33 @@ contract DOSProxy is Ownable {
     event LogAddressNotFound(uint groupId, uint[4] pubKey);
     event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint workingGroupSize);
     event LogPublicKeySuggested(uint groupId, uint[4] pubKey, uint count, uint groupSize);
-    event LogGroupDismiss(uint[4] pubKey);
+    event LogGroupDismiss(uint groupId, uint[4] pubKey);
+    event LogRegisteredNewPendingNode(address node);
+    event LogGroupingInitiated(uint pendingNodePool, uint groupsize, uint groupingthreshold);
     event UpdateGroupToPick(uint oldNum, uint newNum);
     event UpdateGroupSize(uint oldSize, uint newSize);
     event UpdateGroupingThreshold(uint oldThreshold, uint newThreshold);
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
+
+    function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
+        return (
+            lastHandledGroup.groupId,
+            getGroupPubKey(lastHandledGroup.groupId),
+            lastHandledGroup.birthBlkN,
+            lastHandledGroup.numCurrentProcessing,
+            lastHandledGroup.members
+        );
+    }
+
+    function getWorkingGroupById(uint groupId) public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
+        return (
+            workingGroups[groupId].groupId,
+            getGroupPubKey(groupId),
+            workingGroups[groupId].birthBlkN,
+            workingGroups[groupId].numCurrentProcessing,
+            workingGroups[groupId].members
+        );
+    }
 
     function setGroupToPick(uint newNum) public onlyOwner {
         require(newNum != groupToPick && newNum != 0);
@@ -150,10 +177,10 @@ contract DOSProxy is Ownable {
             if (block.number - group.birthBlkN < groupMaturityPeriod) {
                 return idx;
             } else {
-                // TODO: Deregister expired group and remove metadata
-                emit LogGroupDismiss(getGroupPubKey(idx));
-
-                // Delete expired group metadata
+                /// Deregister expired working group and remove metadata.
+                /// @notice Client may need to call registerNewNode() once expired
+                /// node doesn't belong to multiple groups.
+                emit LogGroupDismiss(group.groupId, getGroupPubKey(idx));
                 delete workingGroups[workingGroupIds[idx]];
                 workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                 workingGroupIds.length--;
@@ -191,6 +218,7 @@ contract DOSProxy is Ownable {
                     dataSource,
                     selector,
                     lastRandomness,
+                    grp.groupId,
                     getGroupPubKey(idx)
                 );
                 return queryId;
@@ -230,6 +258,7 @@ contract DOSProxy is Ownable {
                 requestId,
                 lastRandomness,
                 userSeed,
+                grp.groupId,
                 getGroupPubKey(idx)
             );
             return requestId;
@@ -245,6 +274,7 @@ contract DOSProxy is Ownable {
         bytes memory data,
         BN256.G1Point memory signature,
         BN256.G2Point memory grpPubKey,
+        uint groupId,
         uint8 version
     )
         internal
@@ -271,8 +301,9 @@ contract DOSProxy is Ownable {
             message,
             [signature.x, signature.y],
             [grpPubKey.x[0], grpPubKey.x[1], grpPubKey.y[0], grpPubKey.y[1]],
-            passVerify,
-            version
+            groupId,
+            version,
+            passVerify
         );
         return passVerify;
     }
@@ -299,6 +330,7 @@ contract DOSProxy is Ownable {
                 result,
                 BN256.G1Point(sig[0], sig[1]),
                 handledGroup.groupPubKey,
+                handledGroup.groupId,
                 version))
         {
             return;
@@ -333,6 +365,7 @@ contract DOSProxy is Ownable {
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
                 lastHandledGroup.groupPubKey,
+                lastHandledGroup.groupId,
                 version))
         {
             return;
@@ -372,7 +405,11 @@ contract DOSProxy is Ownable {
     // TODO: restrict msg.sender from registered and staked node operator.
     // Formerly, uploadNodeId()
     function registerNewNode() public {
+        require(!pendingNodeMap[msg.sender], "Duplicated pending node");
+
         pendingNodes.push(msg.sender);
+        pendingNodeMap[msg.sender] = true;
+        emit LogRegisteredNewPendingNode(msg.sender);
         // Generate new groups from newly registered nodes and nodes from existing working group.
         if (pendingNodes.length < groupSize * groupingThreshold / 100) {
             emit LogInsufficientPendingNode(pendingNodes.length);
@@ -380,11 +417,11 @@ contract DOSProxy is Ownable {
             emit LogInsufficientWorkingGroup(workingGroupIds.length);
         } else {
             requestRandom(address(this), 1, block.number);
+            emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
         }
     }
 
-    // callback to handle re-grouping.
-    // Using generated random number as random number seed.
+    // callback to handle re-grouping using generated random number as random seed.
     function __callback__(uint requestId, uint rndSeed) internal {
         require(msg.sender == address(this), "Unauthenticated response");
         require(workingGroupIds.length >= groupToPick,
@@ -401,10 +438,10 @@ contract DOSProxy is Ownable {
             for (uint j = 0; j < groupSize; j++) {
                 candidates[num++] = grpToDisolve.members[j];
             }
-            // TODO: Deregister selected group and remove Metadata
-            emit LogGroupDismiss(getGroupPubKey(idx));
-
-            // Delete expired group metadata
+            /// Deregister selected working group and remove metadata.
+            /// @notice Client may need to call registerNewNode() once dismissed
+            /// node doesn't belong to multiple groups.
+            emit LogGroupDismiss(grpToDisolve.groupId, getGroupPubKey(idx));
             delete workingGroups[workingGroupIds[idx]];
             workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
             workingGroupIds.length--;
@@ -413,6 +450,7 @@ contract DOSProxy is Ownable {
         for (uint i = 0; i < pendingNodes.length; i++) {
             if (i < groupSize) {
                 candidates[num++] = pendingNodes[i];
+                delete pendingNodeMap[pendingNodes[i]];
             } else {
                 pendingNodes[i - groupSize] = pendingNodes[i];
             }
