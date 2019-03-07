@@ -371,6 +371,7 @@ contract DOSProxy is Ownable {
             return;
         }
         // Update new randomness = sha3(collectively signed group signature)
+        // TODO: include and test with blockhash.
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
         lastUpdatedBlock = block.number;
         uint idx = dispatchJob();
