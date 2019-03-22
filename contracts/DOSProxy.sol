@@ -64,10 +64,11 @@ contract DOSProxy is Ownable {
     uint public lastUpdatedBlock;
     uint public lastRandomness;
     Group lastHandledGroup;
-    // TODO: Change to enum
-    uint8 constant TrafficSystemRandom = 0;
-    uint8 constant TrafficUserRandom = 1;
-    uint8 constant TrafficUserQuery = 2;
+    enum TrafficType {
+        SystemRandom,
+        UserRandom,
+        UserQuery
+    }
 
     event LogUrl(
         uint queryId,
@@ -115,6 +116,7 @@ contract DOSProxy is Ownable {
     event UpdateGroupSize(uint oldSize, uint newSize);
     event UpdateGroupingThreshold(uint oldThreshold, uint newThreshold);
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
+    event Bite(uint blkNum, address biter);
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
         return (
@@ -167,12 +169,13 @@ contract DOSProxy is Ownable {
         }
     }
 
-    function dispatchJob() internal returns (uint idx) {
+    function dispatchJobCore(TrafficType trafficType, uint pseudoSeed) private returns(uint idx) {
+        uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness)));
         do {
             // TODO: still keep request receipt and emit event, do not revert
             if (workingGroupIds.length == 0) revert("No active working group");
 
-            idx = lastRandomness % workingGroupIds.length;
+            idx = rnd % workingGroupIds.length;
             Group storage group = workingGroups[workingGroupIds[idx]];
             if (block.number - group.birthBlkN < groupMaturityPeriod) {
                 return idx;
@@ -186,6 +189,21 @@ contract DOSProxy is Ownable {
                 workingGroupIds.length--;
             }
         } while(true);
+    }
+
+    function dispatchJob(TrafficType trafficType, uint pseudoSeed) internal returns(uint) {
+        if (block.number - lastUpdatedBlock > refreshSystemRandomHardLimit) {
+            kickoffRandom();
+        }
+        return dispatchJobCore(trafficType, pseudoSeed);
+    }
+
+    function kickoffRandom() internal {
+        lastUpdatedBlock = block.number;
+        uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
+        lastHandledGroup = workingGroups[workingGroupIds[idx]];
+        // Signal off-chain clients
+        emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
     }
 
     // Returns query id.
@@ -207,7 +225,7 @@ contract DOSProxy is Ownable {
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
-                uint idx = dispatchJob();
+                uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 Group storage grp = workingGroups[workingGroupIds[idx]];
                 grp.numCurrentProcessing++;
                 PendingRequests[queryId] =
@@ -247,13 +265,13 @@ contract DOSProxy is Ownable {
             // TODO: restrict request from paid calling contract address.
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
-            uint idx = dispatchJob();
+            uint idx = dispatchJob(TrafficType.UserRandom, requestId);
             Group storage grp = workingGroups[workingGroupIds[idx]];
             grp.numCurrentProcessing++;
             PendingRequests[requestId] =
                 PendingRequest(requestId, grp.groupId, from);
-            // sign(requestId ||lastSystemRandomness || userSeed) with
-            // selected group
+            // sign(requestId ||lastSystemRandomness || userSeed ||
+            // selected sender in group)
             emit LogRequestUserRandom(
                 requestId,
                 lastRandomness,
@@ -339,9 +357,9 @@ contract DOSProxy is Ownable {
         emit LogCallbackTriggeredFor(ucAddr);
         handledGroup.numCurrentProcessing--;
         delete PendingRequests[requestId];
-        if (trafficType == TrafficUserQuery) {
+        if (trafficType == uint8(TrafficType.UserQuery)) {
             UserContractInterface(ucAddr).__callback__(requestId, result);
-        } else if (trafficType == TrafficUserRandom) {
+        } else if (trafficType == uint8(TrafficType.UserRandom)) {
             // Safe random number is the collectively signed threshold signature
             // of the message (requestId || lastRandomness || userSeed ||
             // selected sender in group).
@@ -360,7 +378,7 @@ contract DOSProxy is Ownable {
     // System-level secure distributed random number generator.
     function updateRandomness(uint[2] memory sig, uint8 version) public {
         if (!validateAndVerify(
-                TrafficSystemRandom,
+                uint8(TrafficType.SystemRandom),
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
@@ -374,22 +392,18 @@ contract DOSProxy is Ownable {
         // TODO: include and test with blockhash.
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
         lastUpdatedBlock = block.number;
-        uint idx = dispatchJob();
-        lastHandledGroup = workingGroups[workingGroupIds[idx]];
-        // Signal selected off-chain clients to collectively generate a new
-        // system level random number for next round.
-        emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
     }
 
-    function handleTimeout() public {
-        if (block.number - lastUpdatedBlock > refreshSystemRandomHardLimit) {
-            lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, blockhash(block.number - 1))));
-            lastUpdatedBlock = block.number;
-            uint idx = dispatchJob();
-            lastHandledGroup = workingGroups[workingGroupIds[idx]];
-            // Signal off-chain clients
-            emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
-        }
+    // Formerly "handleTimeout()"
+    // Anyone can be a biter to kickoff random sequence if it's not kicked off within timeout.
+    // TODO: Tune biter algorithm.
+    // TODO: Reward biter nodes.
+    function bite() public {
+        require(block.number - lastUpdatedBlock > refreshSystemRandomHardLimit,
+                "Not right time to bite yet");
+
+        kickoffRandom();
+        emit Bite(block.number, msg.sender);
     }
 
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
@@ -404,7 +418,6 @@ contract DOSProxy is Ownable {
     }
 
     // TODO: restrict msg.sender from registered and staked node operator.
-    // Formerly, uploadNodeId()
     function registerNewNode() public {
         require(!pendingNodeMap[msg.sender], "Duplicated pending node");
 
@@ -500,7 +513,6 @@ contract DOSProxy is Ownable {
     }
 
     // TODO: restrict msg.sender from registered and staked node operator.
-    // Formerly setPublicKey().
     function registerGroupPubKey(uint groupId, uint[4] memory suggestedPubKey) public {
         PendingGroup storage pgrp = pendingGroups[groupId];
         require(pgrp.groupId != 0, "No such pending group to be registered");
