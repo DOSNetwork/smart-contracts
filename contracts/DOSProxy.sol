@@ -18,8 +18,8 @@ contract DOSProxy is Ownable {
     // Metadata of pending request.
     struct PendingRequest {
         uint requestId;
-        uint handledGroupId;
-        // User contract issued the query.
+        BN256.G2Point handledGroupPubKey;
+        // Calling contract who issues the request.
         address callbackAddr;
     }
 
@@ -28,7 +28,6 @@ contract DOSProxy is Ownable {
         uint groupId;
         BN256.G2Point groupPubKey;
         uint birthBlkN;
-        uint numCurrentProcessing;
         address[] members;
     }
 
@@ -88,7 +87,7 @@ contract DOSProxy is Ownable {
         string selector,
         uint randomness,
         uint dispatchedGroupId,
-        // Log G2Point struct directly is an experimental feature, use with care.
+        // TODO: Sync with client to remove this event argument.
         uint[4] dispatchedGroup
     );
     event LogRequestUserRandom(
@@ -96,6 +95,7 @@ contract DOSProxy is Ownable {
         uint lastSystemRandomness,
         uint userSeed,
         uint dispatchedGroupId,
+        // TODO: Sync with client to remove this event argument.
         uint[4] dispatchedGroup
     );
     event LogNonSupportedType(string invalidSelector);
@@ -109,7 +109,6 @@ contract DOSProxy is Ownable {
         bytes message,
         uint[2] signature,
         uint[4] pubKey,
-        uint groupId,
         uint8 version,
         bool pass
     );
@@ -129,22 +128,20 @@ contract DOSProxy is Ownable {
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
     event Bite(uint blkNum, address indexed guardian);
 
-    function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
+    function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
         return (
             lastHandledGroup.groupId,
             getGroupPubKey(lastHandledGroup.groupId),
             lastHandledGroup.birthBlkN,
-            lastHandledGroup.numCurrentProcessing,
             lastHandledGroup.members
         );
     }
 
-    function getWorkingGroupById(uint groupId) public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
+    function getWorkingGroupById(uint groupId) public view returns(uint, uint[4] memory, uint, address[] memory) {
         return (
             workingGroups[groupId].groupId,
             getGroupPubKey(groupId),
             workingGroups[groupId].birthBlkN,
-            workingGroups[groupId].numCurrentProcessing,
             workingGroups[groupId].members
         );
     }
@@ -252,9 +249,8 @@ contract DOSProxy is Ownable {
                     ++requestIdSeed, from, timeout, dataSource, selector)));
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 Group storage grp = workingGroups[workingGroupIds[idx]];
-                grp.numCurrentProcessing++;
                 PendingRequests[queryId] =
-                    PendingRequest(queryId, grp.groupId, from);
+                    PendingRequest(queryId, grp.groupPubKey, from);
                 emit LogUrl(
                     queryId,
                     timeout,
@@ -292,9 +288,8 @@ contract DOSProxy is Ownable {
                 ++requestIdSeed, from, userSeed)));
             uint idx = dispatchJob(TrafficType.UserRandom, requestId);
             Group storage grp = workingGroups[workingGroupIds[idx]];
-            grp.numCurrentProcessing++;
             PendingRequests[requestId] =
-                PendingRequest(requestId, grp.groupId, from);
+                PendingRequest(requestId, grp.groupPubKey, from);
             // sign(requestId ||lastSystemRandomness || userSeed ||
             // selected sender in group)
             emit LogRequestUserRandom(
@@ -317,7 +312,6 @@ contract DOSProxy is Ownable {
         bytes memory data,
         BN256.G1Point memory signature,
         BN256.G2Point memory grpPubKey,
-        uint groupId,
         uint8 version
     )
         internal
@@ -344,7 +338,6 @@ contract DOSProxy is Ownable {
             message,
             [signature.x, signature.y],
             [grpPubKey.x[0], grpPubKey.x[1], grpPubKey.y[0], grpPubKey.y[1]],
-            groupId,
             version,
             passVerify
         );
@@ -366,21 +359,18 @@ contract DOSProxy is Ownable {
             return;
         }
 
-        Group storage handledGroup = workingGroups[PendingRequests[requestId].handledGroupId];
         if (!validateAndVerify(
                 trafficType,
                 requestId,
                 result,
                 BN256.G1Point(sig[0], sig[1]),
-                handledGroup.groupPubKey,
-                handledGroup.groupId,
+                PendingRequests[requestId].handledGroupPubKey,
                 version))
         {
             return;
         }
 
         emit LogCallbackTriggeredFor(ucAddr);
-        handledGroup.numCurrentProcessing--;
         delete PendingRequests[requestId];
         if (trafficType == uint8(TrafficType.UserQuery)) {
             UserContractInterface(ucAddr).__callback__(requestId, result);
@@ -408,7 +398,6 @@ contract DOSProxy is Ownable {
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
                 lastHandledGroup.groupPubKey,
-                lastHandledGroup.groupId,
                 version))
         {
             return;
@@ -582,7 +571,6 @@ contract DOSProxy is Ownable {
                 groupId,
                 BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
                 block.number,
-                0,
                 pgrp.members);
             workingGroupIds.push(groupId);
 
