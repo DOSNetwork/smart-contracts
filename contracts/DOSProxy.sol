@@ -15,6 +15,7 @@ contract UserContractInterface {
 contract DOSProxy is Ownable {
     using BN256 for *;
 
+    // Metadata of pending request.
     struct PendingRequest {
         uint requestId;
         uint handledGroupId;
@@ -39,6 +40,14 @@ contract DOSProxy is Ownable {
         mapping(address => bool) isMember;
     }
 
+    // Metadata of registered node.
+    struct Node {
+        // Key: working groupId node is in
+        mapping(uint => bool) inGroups;
+        // Number of working groups node is in
+        uint inGroupCount;
+    }
+
     uint requestIdSeed;
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
@@ -53,6 +62,8 @@ contract DOSProxy is Ownable {
     // Newly registered ungrouped nodes.
     address[] public pendingNodes;
     mapping(address => bool) pendingNodeMap;
+    // node => working groupIds node is in.
+    mapping(address => Node) workingNodeMap;
     // groupId => Group
     mapping(uint => Group) workingGroups;
     // Index:groupId
@@ -116,7 +127,7 @@ contract DOSProxy is Ownable {
     event UpdateGroupSize(uint oldSize, uint newSize);
     event UpdateGroupingThreshold(uint oldThreshold, uint newThreshold);
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
-    event Bite(uint blkNum, address biter);
+    event Bite(uint blkNum, address indexed guardian);
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
         return (
@@ -172,7 +183,6 @@ contract DOSProxy is Ownable {
     function dispatchJobCore(TrafficType trafficType, uint pseudoSeed) private returns(uint idx) {
         uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness)));
         do {
-            // TODO: still keep request receipt and emit event, do not revert
             if (workingGroupIds.length == 0) revert("No active working group");
 
             idx = rnd % workingGroupIds.length;
@@ -180,13 +190,7 @@ contract DOSProxy is Ownable {
             if (block.number - group.birthBlkN < groupMaturityPeriod) {
                 return idx;
             } else {
-                /// Deregister expired working group and remove metadata.
-                /// @notice Client may need to call registerNewNode() once expired
-                /// node doesn't belong to multiple groups.
-                emit LogGroupDismiss(group.groupId, getGroupPubKey(idx));
-                delete workingGroups[workingGroupIds[idx]];
-                workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
-                workingGroupIds.length--;
+                dissolveWorkingGroup(idx);
             }
         } while(true);
     }
@@ -204,6 +208,27 @@ contract DOSProxy is Ownable {
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
+    }
+
+    /// @notice Caller ensures no index overflow.
+    function dissolveWorkingGroup(uint idx) internal {
+        /// Deregister expired working group and remove metadata.
+        Group storage grp = workingGroups[workingGroupIds[idx]];
+        for (uint i = 0; i < grp.members.length; i++) {
+            delete workingNodeMap[grp.members[i]].inGroups[grp.groupId];
+            if (--workingNodeMap[grp.members[i]].inGroupCount == 0) {
+                // Put member node into pendingNodes pool once it doesn't belong to any working group.
+                // Notice: Guardian may need to signal group formation.
+                pendingNodes.push(grp.members[i]);
+                pendingNodeMap[grp.members[i]] = true;
+                emit LogRegisteredNewPendingNode(grp.members[i]);
+            }
+        }
+        emit LogGroupDismiss(grp.groupId, getGroupPubKey(idx));
+
+        delete workingGroups[workingGroupIds[idx]];
+        workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
+        workingGroupIds.length--;
     }
 
     // Returns query id.
@@ -394,17 +419,46 @@ contract DOSProxy is Ownable {
         lastUpdatedBlock = block.number;
     }
 
+    /// Guardian node functions
     // Formerly "handleTimeout()"
-    // Anyone can be a biter to kickoff random sequence if it's not kicked off within timeout.
-    // TODO: Tune biter algorithm.
-    // TODO: Reward biter nodes.
-    function bite() public {
+    // TODO: Tune guardian signal algorithm.
+    // TODO: Reward guardian nodes.
+    /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
+    ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
+    function signalRandom() public {
         require(block.number - lastUpdatedBlock > refreshSystemRandomHardLimit,
-                "Not right time to bite yet");
+                "Not right time to trigger random yet");
 
         kickoffRandom();
         emit Bite(block.number, msg.sender);
     }
+    // TODO: Reward guardian nodes.
+    /// @dev Guardian signals to dissolve expired working group and claim for guardian rewards.
+    /// @param idx The index in workingGroupIds array.
+    function signalDissolve(uint idx) public {
+        require(idx < workingGroupIds.length, "Working groups index overflow");
+        require(block.number - workingGroups[workingGroupIds[idx]].birthBlkN > groupMaturityPeriod,
+                "Not right time to signal dissolve yet");
+
+        dissolveWorkingGroup(idx);
+        emit Bite(block.number, msg.sender);
+    }
+    // TODO: Reward guardian nodes.
+    /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
+    ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
+    function signalGroupFormation() public {
+        require(pendingNodes.length >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
+
+        if (workingGroupIds.length >= groupToPick) {
+            requestRandom(address(this), 1, block.number);
+            emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
+        } else {
+            // There're enough pending nodes but with non-sufficient working groups.
+            emit LogInsufficientWorkingGroup(workingGroupIds.length);
+            // TODO: Bootstrap phase.
+        }
+    }
+    /// End of Guardian functions
 
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
         require(idx < workingGroupIds.length, "group index out of range");
@@ -420,6 +474,7 @@ contract DOSProxy is Ownable {
     // TODO: restrict msg.sender from registered and staked node operator.
     function registerNewNode() public {
         require(!pendingNodeMap[msg.sender], "Duplicated pending node");
+        require(workingNodeMap[msg.sender].inGroupCount == 0, "Already in working groups");
 
         pendingNodes.push(msg.sender);
         pendingNodeMap[msg.sender] = true;
@@ -428,7 +483,9 @@ contract DOSProxy is Ownable {
         if (pendingNodes.length < groupSize * groupingThreshold / 100) {
             emit LogInsufficientPendingNode(pendingNodes.length);
         } else if (workingGroupIds.length < groupToPick) {
+            // There're enough pending nodes but with non-sufficient working groups.
             emit LogInsufficientWorkingGroup(workingGroupIds.length);
+            // TODO: Bootstrap phase.
         } else {
             requestRandom(address(this), 1, block.number);
             emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
@@ -448,17 +505,11 @@ contract DOSProxy is Ownable {
         uint num = 0;
         for (uint i = 1; i <= groupToPick; i++) {
             uint idx = uint(keccak256(abi.encodePacked(rndSeed, requestId, i))) % workingGroupIds.length;
-            Group storage grpToDisolve = workingGroups[workingGroupIds[idx]];
+            Group storage grpToDissolve = workingGroups[workingGroupIds[idx]];
             for (uint j = 0; j < groupSize; j++) {
-                candidates[num++] = grpToDisolve.members[j];
+                candidates[num++] = grpToDissolve.members[j];
             }
-            /// Deregister selected working group and remove metadata.
-            /// @notice Client may need to call registerNewNode() once dismissed
-            /// node doesn't belong to multiple groups.
-            emit LogGroupDismiss(grpToDisolve.groupId, getGroupPubKey(idx));
-            delete workingGroups[workingGroupIds[idx]];
-            workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
-            workingGroupIds.length--;
+            dissolveWorkingGroup(idx);
         }
 
         for (uint i = 0; i < pendingNodes.length; i++) {
@@ -523,6 +574,10 @@ contract DOSProxy is Ownable {
         pgrp.pubKeyCounts[hashedPubKey]++;
         emit LogPublicKeySuggested(groupId, suggestedPubKey, pgrp.pubKeyCounts[hashedPubKey], groupSize);
         if (pgrp.pubKeyCounts[hashedPubKey] > groupSize / 2) {
+            for (uint i = 0; i < pgrp.members.length; i++) {
+                workingNodeMap[pgrp.members[i]].inGroups[groupId] = true;
+                workingNodeMap[pgrp.members[i]].inGroupCount++;
+            }
             workingGroups[groupId] = Group(
                 groupId,
                 BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
