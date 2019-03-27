@@ -102,7 +102,7 @@ contract DOSProxy is Ownable {
     event LogNonContractCall(address from);
     event LogCallbackTriggeredFor(address callbackAddr);
     event LogRequestFromNonExistentUC();
-    event LogUpdateRandom(uint lastRandomness, uint[4] dispatchedGroup);
+    event LogUpdateRandom(uint lastRandomness, uint dispatchedGroupId,uint[4] dispatchedGroup);
     event LogValidationResult(
         uint8 trafficType,
         uint trafficId,
@@ -204,7 +204,7 @@ contract DOSProxy is Ownable {
         uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
-        emit LogUpdateRandom(lastRandomness, getGroupPubKey(idx));
+        emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId, getGroupPubKey(idx));
     }
 
     /// @notice Caller ensures no index overflow.
@@ -578,5 +578,26 @@ contract DOSProxy is Ownable {
             numPendingGroups--;
             emit LogPublicKeyAccepted(groupId, suggestedPubKey, workingGroupIds.length);
         }
+    }
+
+    function bootStrap(uint rndSeed) public onlyOwner {
+        require(pendingNodes.length >= groupSize * (groupToPick + 1));
+        if (pendingNodes.length < groupSize * (groupToPick + 1)){
+            emit LogInsufficientPendingNode(pendingNodes.length);
+            return;
+        }
+        uint arrSize = groupSize * (groupToPick + 1);
+        address[] memory candidates = new address[](arrSize);
+        for (uint i = 0; i < pendingNodes.length; i++) {
+            if (i < arrSize) {
+                candidates[i] = pendingNodes[i];
+                delete pendingNodeMap[pendingNodes[i]];
+            } else {
+                pendingNodes[i - arrSize] = pendingNodes[i];
+            }
+        }
+        pendingNodes.length -= arrSize;
+        shuffle(candidates, rndSeed);
+        regroup(candidates);
     }
 }
