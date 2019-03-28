@@ -1,6 +1,10 @@
 pragma solidity ^0.5.0;
 
-contract CommitReveal {
+contract DOSAddressBridgeInterface {
+    function getProxyAddress() public view returns (address);
+}
+
+contract DOSCommitReveal {
     
     constructor() public {
     }
@@ -10,7 +14,10 @@ contract CommitReveal {
         bytes32   commitment;
         bool      revealed;
     }
-
+    
+    DOSAddressBridgeInterface dosAddrBridge =
+        DOSAddressBridgeInterface(0x9Ba93D8956B9e2a20c103dfA40f20AA1a78d5A33);
+        
     uint    targetBlkNum;
     uint    commitDuration;
     uint    revealDuration;
@@ -52,7 +59,12 @@ contract CommitReveal {
     }
     
     modifier finishPhase(uint _targetBlkNum){if (block.number < targetBlkNum) revert(); _;}
-
+    
+    modifier onlyWhitelisted {
+        require(dosAddrBridge.getProxyAddress() == msg.sender, "Not whitelisted!");
+        _;
+    }
+    
     //|-commitDuration-|-revealDuration-|(targetBlkNum)
     event LogStartCommitReveal( uint targetBlkNum,
                             uint commitDuration,
@@ -113,3 +125,4 @@ contract CommitReveal {
         }
     }
 }
+
