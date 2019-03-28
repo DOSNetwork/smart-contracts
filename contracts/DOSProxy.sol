@@ -12,6 +12,21 @@ contract UserContractInterface {
     function __callback__(uint, uint) public;
 }
 
+// Use commit and reveal to get a safe random number for bootstraping
+contract DOSCommitRevealInterface {
+    function startCommitReveal(
+        uint _targetBlkNum,
+        uint _commitDuration,
+        uint _revealDuration
+    )public;
+    function getRandom() public returns (uint);
+}
+
+// Get CommitReveal contract address for bootstraping
+contract DOSAddressBridgeInterface {
+    function getCommitRevealAddress() public view returns (address);
+}
+
 contract DOSProxy is Ownable {
     using BN256 for *;
 
@@ -45,6 +60,15 @@ contract DOSProxy is Ownable {
         mapping(uint => bool) inGroups;
         // Number of working groups node is in
         uint inGroupCount;
+    }
+
+    DOSCommitRevealInterface dosCommitReveal;
+    DOSAddressBridgeInterface dosAddrBridge =
+        DOSAddressBridgeInterface(0x9Ba93D8956B9e2a20c103dfA40f20AA1a78d5A33);
+
+    modifier resolveAddress {
+        dosCommitReveal = DOSCommitRevealInterface(dosAddrBridge.getCommitRevealAddress());
+        _;
     }
 
     uint requestIdSeed;
@@ -435,7 +459,7 @@ contract DOSProxy is Ownable {
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
-    function signalGroupFormation() public {
+    function signalGroupFormation() public resolveAddress {
         require(pendingNodes.length >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
 
         if (workingGroupIds.length >= groupToPick) {
@@ -445,6 +469,9 @@ contract DOSProxy is Ownable {
             // There're enough pending nodes but with non-sufficient working groups.
             emit LogInsufficientWorkingGroup(workingGroupIds.length);
             // TODO: Bootstrap phase.
+            //dosCommitReveal.startCommitReveal(_targetBlkNum,_commitDuration,_revealDuration);
+            //rndSeed = dosCommitReveal.getRandom(_targetBlkNum,_commitDuration,_revealDuration);
+            //bootStrap(uint rndSeed)
         }
     }
     /// End of Guardian functions
