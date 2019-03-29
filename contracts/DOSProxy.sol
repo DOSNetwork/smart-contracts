@@ -21,7 +21,6 @@ contract DOSCommitRevealInterface {
     )public;
     function getRandom() public returns (uint);
 }
-
 // Get CommitReveal contract address for bootstraping
 contract DOSAddressBridgeInterface {
     function getCommitRevealAddress() public view returns (address);
@@ -61,10 +60,10 @@ contract DOSProxy is Ownable {
         // Number of working groups node is in
         uint inGroupCount;
     }
-
+ 
     DOSCommitRevealInterface dosCommitReveal;
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x9Ba93D8956B9e2a20c103dfA40f20AA1a78d5A33);
+        DOSAddressBridgeInterface(0xE6DEAae3d9A42cc602f3F81E669245386162b68A);
 
     modifier resolveAddress {
         dosCommitReveal = DOSCommitRevealInterface(dosAddrBridge.getCommitRevealAddress());
@@ -82,6 +81,11 @@ contract DOSProxy is Ownable {
     uint public groupSize = 21;
     // decimal 2.
     uint public groupingThreshold = 150;
+    //For bootstrpging
+    uint public bootStrapTargetBlkNum = 10;
+    uint public bootStrapCommitDuration = 3;
+    uint public bootStrapRevealDuration = 3;
+
     // Newly registered ungrouped nodes.
     address[] public pendingNodes;
     mapping(address => bool) pendingNodeMap;
@@ -98,10 +102,17 @@ contract DOSProxy is Ownable {
     uint public lastUpdatedBlock;
     uint public lastRandomness;
     Group lastHandledGroup;
+
+    CommitRevealState commitRevealState = CommitRevealState.Idle;
+
     enum TrafficType {
         SystemRandom,
         UserRandom,
         UserQuery
+    }
+    enum CommitRevealState {
+        Idle,
+        Progressing
     }
 
     event LogUrl(
@@ -193,6 +204,21 @@ contract DOSProxy is Ownable {
         require(newPeriod != groupMaturityPeriod && newPeriod != 0);
         emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
         groupMaturityPeriod = newPeriod;
+    }
+
+    function setBootStrapTargetBlkNum(uint newTargetBlkNum) public onlyOwner {
+        require(newTargetBlkNum != bootStrapTargetBlkNum && newTargetBlkNum != 0);
+        bootStrapTargetBlkNum = newTargetBlkNum;
+    }
+
+    function setBootStrapCommitDuration(uint newCommitDuration) public onlyOwner {
+        require(newCommitDuration != bootStrapCommitDuration && newCommitDuration != 0);
+        bootStrapCommitDuration = newCommitDuration;
+    }
+
+    function setBootStrapRevealDuration(uint newRevealDuration) public onlyOwner {
+        require(newRevealDuration != bootStrapRevealDuration && newRevealDuration != 0);
+        bootStrapRevealDuration = newRevealDuration;
     }
 
     function getCodeSize(address addr) internal view returns (uint size) {
@@ -466,12 +492,17 @@ contract DOSProxy is Ownable {
             requestRandom(address(this), 1, block.number);
             emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
         } else {
-            // There're enough pending nodes but with non-sufficient working groups.
-            emit LogInsufficientWorkingGroup(workingGroupIds.length);
-            // TODO: Bootstrap phase.
-            //dosCommitReveal.startCommitReveal(_targetBlkNum,_commitDuration,_revealDuration);
-            //rndSeed = dosCommitReveal.getRandom(_targetBlkNum,_commitDuration,_revealDuration);
-            //bootStrap(uint rndSeed)
+            if (commitRevealState == CommitRevealState.Idle) {
+                dosCommitReveal.startCommitReveal(block.number+bootStrapTargetBlkNum,bootStrapCommitDuration,bootStrapRevealDuration);
+                commitRevealState = CommitRevealState.Progressing;
+            } else{
+                uint rndSeed = 0;
+                rndSeed = dosCommitReveal.getRandom();
+                if (rndSeed != 0) {
+                    bootStrap(rndSeed);
+                }
+                commitRevealState = CommitRevealState.Idle;
+            }
         }
     }
     /// End of Guardian functions
@@ -607,7 +638,7 @@ contract DOSProxy is Ownable {
         }
     }
 
-    function bootStrap(uint rndSeed) public onlyOwner {
+    function bootStrap(uint rndSeed) internal  {
         require(pendingNodes.length >= groupSize * (groupToPick + 1));
         if (pendingNodes.length < groupSize * (groupToPick + 1)){
             emit LogInsufficientPendingNode(pendingNodes.length);

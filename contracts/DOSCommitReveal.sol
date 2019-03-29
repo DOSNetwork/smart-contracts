@@ -16,7 +16,7 @@ contract DOSCommitReveal {
     }
     
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x9Ba93D8956B9e2a20c103dfA40f20AA1a78d5A33);
+        DOSAddressBridgeInterface(0xE6DEAae3d9A42cc602f3F81E669245386162b68A);
         
     uint    targetBlkNum;
     uint    commitDuration;
@@ -78,7 +78,7 @@ contract DOSCommitReveal {
         uint _commitDuration,
         uint _revealDuration
     ) timeLineCheck(_targetBlkNum, _commitDuration, _revealDuration)
-    public {
+    public onlyWhitelisted{
         targetBlkNum = _targetBlkNum;
         commitDuration = _commitDuration;
         revealDuration = _revealDuration;
