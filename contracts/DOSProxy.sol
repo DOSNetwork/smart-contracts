@@ -85,6 +85,8 @@ contract DOSProxy is Ownable {
     uint public bootStrapTargetBlkNum = 10;
     uint public bootStrapCommitDuration = 3;
     uint public bootStrapRevealDuration = 3;
+    uint public bootStrapRandomlDuration = 10;
+
 
     // Newly registered ungrouped nodes.
     address[] public pendingNodes;
@@ -103,16 +105,12 @@ contract DOSProxy is Ownable {
     uint public lastRandomness;
     Group lastHandledGroup;
 
-    CommitRevealState commitRevealState = CommitRevealState.Idle;
+    uint public commitRevealTargetBlk = 0;
 
     enum TrafficType {
         SystemRandom,
         UserRandom,
         UserQuery
-    }
-    enum CommitRevealState {
-        Idle,
-        Progressing
     }
 
     event LogUrl(
@@ -492,16 +490,15 @@ contract DOSProxy is Ownable {
             requestRandom(address(this), 1, block.number);
             emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
         } else {
-            if (commitRevealState == CommitRevealState.Idle) {
-                dosCommitReveal.startCommitReveal(block.number+bootStrapTargetBlkNum,bootStrapCommitDuration,bootStrapRevealDuration);
-                commitRevealState = CommitRevealState.Progressing;
+            if (block.number > commitRevealTargetBlk+bootStrapRandomlDuration) {
+				commitRevealTargetBlk = block.number+bootStrapTargetBlkNum;
+                dosCommitReveal.startCommitReveal(commitRevealTargetBlk,bootStrapCommitDuration,bootStrapRevealDuration);
             } else{
                 uint rndSeed = 0;
                 rndSeed = dosCommitReveal.getRandom();
                 if (rndSeed != 0) {
                     bootStrap(rndSeed);
                 }
-                commitRevealState = CommitRevealState.Idle;
             }
         }
     }
@@ -516,6 +513,10 @@ contract DOSProxy is Ownable {
 
     function getWorkingGroupSize() public view returns (uint) {
         return workingGroupIds.length;
+    }
+
+    function getPengindNodeSize() public view returns (uint) {
+        return pendingNodes.length;
     }
 
     // TODO: restrict msg.sender from registered and staked node operator.
