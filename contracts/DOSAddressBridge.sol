@@ -15,7 +15,7 @@ contract DOSAddressBridge is Ownable {
     event ProxyAddressUpdated(address previousProxy, address newProxy);
     event PaymentAddressUpdated(address previousPayment, address newPayment);
     event RegistryAddressUpdated(address previousRegistry, address newRegistry);
-    event RegistryCommitRevealUpdated(address previousCommitReveal, address newCommitReveal);
+    event CommitRevealAddressUpdated(address previousCommitReveal, address newCommitReveal);
 
     function getProxyAddress() public view returns (address) {
         return _proxyAddress;
@@ -49,7 +49,7 @@ contract DOSAddressBridge is Ownable {
     }
 
     function setCommitRevealAddress(address newAddr) public onlyOwner {
-        emit ProxyAddressUpdated(_commitrevealAddress, newAddr);
+        emit CommitRevealAddressUpdated(_commitrevealAddress, newAddr);
         _commitrevealAddress = newAddr;
     }
 }
