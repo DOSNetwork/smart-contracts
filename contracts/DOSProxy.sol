@@ -541,7 +541,7 @@ contract DOSProxy is Ownable {
     }
 
     // callback to handle re-grouping using generated random number as random seed.
-    function __callback__(uint requestId, uint rndSeed) internal {
+    function __callback__(uint requestId, uint rndSeed) public {
         require(msg.sender == address(this), "Unauthenticated response");
         require(workingGroupIds.length >= groupToPick,
                 "No enough working group");
