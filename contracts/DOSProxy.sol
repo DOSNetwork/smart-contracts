@@ -17,7 +17,8 @@ contract DOSCommitRevealInterface {
     function startCommitReveal(
         uint _targetBlkNum,
         uint _commitDuration,
-        uint _revealDuration
+        uint _revealDuration,
+        uint _revealThreshold
     )public;
     function getRandom() public returns (uint);
 }
@@ -86,7 +87,7 @@ contract DOSProxy is Ownable {
     uint public bootStrapCommitDuration = 3;
     uint public bootStrapRevealDuration = 3;
     uint public bootStrapRandomlDuration = 10;
-
+    uint public bootStrapRevealThreshold = 3;
 
     // Newly registered ungrouped nodes.
     address[] public pendingNodes;
@@ -492,13 +493,11 @@ contract DOSProxy is Ownable {
         } else {
             if (block.number > commitRevealTargetBlk+bootStrapRandomlDuration) {
 				commitRevealTargetBlk = block.number+bootStrapTargetBlkNum;
-                dosCommitReveal.startCommitReveal(commitRevealTargetBlk,bootStrapCommitDuration,bootStrapRevealDuration);
+                dosCommitReveal.startCommitReveal(commitRevealTargetBlk,bootStrapCommitDuration,bootStrapRevealDuration,bootStrapRevealThreshold);
             } else{
                 uint rndSeed = 0;
                 rndSeed = dosCommitReveal.getRandom();
-                if (rndSeed != 0) {
-                    bootStrap(rndSeed);
-                }
+                bootStrap(rndSeed);
             }
         }
     }

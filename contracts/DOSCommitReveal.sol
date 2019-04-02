@@ -21,11 +21,12 @@ contract DOSCommitReveal {
     uint    targetBlkNum;
     uint    commitDuration;
     uint    revealDuration;
-    uint   random;
-    bool      settled;
+    uint    random;
+    bool    settled;
     uint    commitNum;
     uint    revealsNum;
-
+    uint    revealThreshold;
+    address[] public revealer;
     mapping (address => Participant) participants;
     
     mapping (bytes32 => bool) commitments;
@@ -46,7 +47,11 @@ contract DOSCommitReveal {
         if (block.number >= (_targetBlkNum - _revealDuration - _commitDuration)) revert();
         _;
     }
-    
+    modifier thresholdCheck(uint _revealThreshold) {
+        if (_revealThreshold <= 0) revert();
+        _;
+    }
+
     modifier checkCommitPhase(uint _targetBlkNum, uint _commitDuration, uint _revealDuration) {
         if (block.number < (_targetBlkNum - _revealDuration - _commitDuration)) revert();
         if (block.number > (_targetBlkNum - _revealDuration)) revert();
@@ -76,12 +81,15 @@ contract DOSCommitReveal {
     function startCommitReveal(
         uint _targetBlkNum,
         uint _commitDuration,
-        uint _revealDuration
+        uint _revealDuration,
+        uint _revealThreshold
     ) timeLineCheck(_targetBlkNum, _commitDuration, _revealDuration)
-    public onlyWhitelisted{
+      thresholdCheck(_revealThreshold) public onlyWhitelisted{
         targetBlkNum = _targetBlkNum;
         commitDuration = _commitDuration;
         revealDuration = _revealDuration;
+        revealThreshold = _revealThreshold;
+        random = 0;
         emit LogStartCommitReveal(targetBlkNum, commitDuration, revealDuration);
     }
 
@@ -90,14 +98,8 @@ contract DOSCommitReveal {
     ) notBeBlank(_secretHash) 
       checkCommitPhase(targetBlkNum, commitDuration, revealDuration) 
     public {
-       if (commitments[_secretHash]) {
-            revert();
-        } else {
-            participants[msg.sender] = Participant(0, _secretHash, false);
-            commitNum++;
-            commitments[_secretHash] = true;
-            emit LogCommit( msg.sender, _secretHash);
-        }
+        participants[msg.sender] = Participant(0, _secretHash, false);
+        emit LogCommit( msg.sender, _secretHash);
     }
 
     function reveal(
@@ -107,21 +109,27 @@ contract DOSCommitReveal {
         Participant storage p = participants[msg.sender];
         if (p.revealed) revert();
         if (keccak256(abi.encodePacked(_secret)) != p.commitment) revert();
+        revealer.push(msg.sender);
         p.secret = _secret;
         p.revealed = true;
-        revealsNum++;
-        random = uint(keccak256(abi.encodePacked(random, _secret)));
-        delete commitments[p.commitment];
-        delete participants[msg.sender];
-        emit LogReveal(msg.sender, _secret);
     }
 
     function getRandom() finishPhase(targetBlkNum) public returns (uint) {
-        if (revealsNum == commitNum) {
-            emit LogRandom(random);
-            return random;
+        if (random == 0) {
+            if (revealer.length < revealThreshold){
+                revert();
+            }else{
+                for (uint i = 0; i < revealer.length; i++) {
+                    Participant storage p = participants[revealer[i]];
+                    random = uint(keccak256(abi.encodePacked(random, p.secret)));
+	            delete participants[revealer[i]];
+                    emit LogReveal(msg.sender, p.secret);
+                }
+                revealer.length =0;
+                return random;
+            }
         }else{
-            revert();
+            return random;
         }
     }
 }
