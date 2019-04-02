@@ -1,4 +1,4 @@
-pragma solidity >= 0.4.24;
+pragma solidity ^0.5.0;
 
 library BN256 {
     struct G1Point {
@@ -61,6 +61,10 @@ library BN256 {
     function hashToG1(bytes memory data) internal returns (G1Point memory) {
         uint256 h = uint256(keccak256(data));
         return scalarMul(P1(), h);
+    }
+
+    function G2Equal(G2Point memory p1, G2Point memory p2) internal pure returns (bool) {
+        return p1.x[0] == p2.x[0] && p1.x[1] == p2.x[1] && p1.y[0] == p2.y[0] && p1.y[1] == p2.y[1];
     }
 
     // @return the result of computing the pairing check

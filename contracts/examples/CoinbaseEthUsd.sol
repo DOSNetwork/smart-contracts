@@ -1,4 +1,4 @@
-pragma solidity >= 0.4.24;
+pragma solidity ^0.5.0;
 
 //import "github.com/DOSNetwork/eth-contracts/contracts/DOSOnChainSDK.sol";
 import "../DOSOnChainSDK.sol";
