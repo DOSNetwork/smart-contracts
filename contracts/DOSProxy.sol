@@ -229,8 +229,15 @@ contract DOSProxy is Ownable {
     function dispatchJobCore(TrafficType trafficType, uint pseudoSeed) private returns(uint idx) {
         uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness)));
         do {
-            if (workingGroupIds.length == 0) revert("No active working group");
-
+            //TODO: Once it goes to this state,DOSProxy can't generate a new grooup.
+            //Because generate a new group need to request a random first that will be reverted.
+            //if (workingGroupIds.length == 0) revert("No active working group");
+            //It should save this request and trigger a bootstrap process
+            //Workaroud: Don't revert and don't dismiss remaining group
+            if (workingGroupIds.length == (groupToPick + 1)) {
+                idx = rnd % workingGroupIds.length;
+                return idx;
+            }
             idx = rnd % workingGroupIds.length;
             Group storage group = workingGroups[workingGroupIds[idx]];
             if (block.number - group.birthBlkN < groupMaturityPeriod) {
@@ -556,7 +563,12 @@ contract DOSProxy is Ownable {
             for (uint j = 0; j < groupSize; j++) {
                 candidates[num++] = grpToDissolve.members[j];
             }
-            dissolveWorkingGroup(idx);
+            //TODO: Because those nodes has been picked here.
+            //It should not be added to pendingnNode in dissolveWorkingGroup
+            //Other reason that don't dissolve here is that some groups are new groups
+            //But it could be chosen to disolve.
+            //Maybe it need to check some conditions to decide if this group should be dissolved.
+            //dissolveWorkingGroup(idx);
         }
 
         for (uint i = 0; i < pendingNodes.length; i++) {
