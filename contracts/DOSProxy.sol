@@ -153,7 +153,7 @@ contract DOSProxy is Ownable {
     event LogAddressNotFound(uint groupId, uint[4] pubKey);
     event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint workingGroupSize);
     event LogPublicKeySuggested(uint groupId, uint[4] pubKey, uint count, uint groupSize);
-    event LogGroupDismiss(uint groupId, uint[4] pubKey);
+    event LogGroupDissolve(uint groupId, uint[4] pubKey);
     event LogRegisteredNewPendingNode(address node);
     event LogGroupingInitiated(uint pendingNodePool, uint groupsize, uint groupingthreshold);
     event UpdateGroupToPick(uint oldNum, uint newNum);
@@ -233,7 +233,7 @@ contract DOSProxy is Ownable {
             //Because generate a new group need to request a random first that will be reverted.
             //if (workingGroupIds.length == 0) revert("No active working group");
             //It should save this request and trigger a bootstrap process
-            //Workaroud: Don't revert and don't dismiss remaining group
+            //Workaroud: Don't revert and don't dissolve remaining group
             if (workingGroupIds.length == (groupToPick + 1)) {
                 idx = rnd % workingGroupIds.length;
                 return idx;
@@ -277,7 +277,7 @@ contract DOSProxy is Ownable {
                 emit LogRegisteredNewPendingNode(grp.members[i]);
             }
         }
-        emit LogGroupDismiss(grp.groupId, getGroupPubKey(idx));
+        emit LogGroupDissolve(grp.groupId, getGroupPubKey(idx));
 
         delete workingGroups[workingGroupIds[idx]];
         workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
