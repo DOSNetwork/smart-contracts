@@ -12,19 +12,9 @@ contract UserContractInterface {
     function __callback__(uint, uint) public;
 }
 
-// Use commit and reveal to get a safe random number for bootstraping
-contract DOSCommitRevealInterface {
-    function startCommitReveal(
-        uint _targetBlkNum,
-        uint _commitDuration,
-        uint _revealDuration,
-        uint _revealThreshold
-    )public;
-    function getRandom() public returns (uint);
-}
-// Get CommitReveal contract address for bootstraping
-contract DOSAddressBridgeInterface {
-    function getCommitRevealAddress() public view returns (address);
+contract CommitRevealInterface {
+    function startCommitReveal(uint, uint, uint, uint) public returns(uint);
+    function getRandom(uint) public returns(uint);
 }
 
 contract DOSProxy is Ownable {
@@ -61,15 +51,6 @@ contract DOSProxy is Ownable {
         // Number of working groups node is in
         uint inGroupCount;
     }
- 
-    DOSCommitRevealInterface dosCommitReveal;
-    DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0xE6DEAae3d9A42cc602f3F81E669245386162b68A);
-
-    modifier resolveAddress {
-        dosCommitReveal = DOSCommitRevealInterface(dosAddrBridge.getCommitRevealAddress());
-        _;
-    }
 
     uint requestIdSeed;
     // calling requestId => PendingQuery metadata
@@ -82,12 +63,14 @@ contract DOSProxy is Ownable {
     uint public groupSize = 21;
     // decimal 2.
     uint public groupingThreshold = 150;
-    //For bootstrpging
-    uint public bootStrapTargetBlkNum = 10;
-    uint public bootStrapCommitDuration = 3;
-    uint public bootStrapRevealDuration = 3;
-    uint public bootStrapRandomlDuration = 10;
-    uint public bootStrapRevealThreshold = 3;
+    //For bootstrapping
+    uint public bootstrapCommitDuration = 3;
+    uint public bootstrapRevealDuration = 3;
+    uint public bootstrapRevealThreshold = 3;
+    uint public bootstrapRound = 0;
+
+    // Commit-Reveal library address
+    address public commitrevealLib = address(0x0);
 
     // Newly registered ungrouped nodes.
     address[] public pendingNodes;
@@ -105,8 +88,6 @@ contract DOSProxy is Ownable {
     uint public lastUpdatedBlock;
     uint public lastRandomness;
     Group lastHandledGroup;
-
-    uint public commitRevealTargetBlk = 0;
 
     enum TrafficType {
         SystemRandom,
@@ -180,6 +161,11 @@ contract DOSProxy is Ownable {
         );
     }
 
+    function setCommitrevealLib(address lib) public onlyOwner {
+        require(commitrevealLib == address(0x0), "Library address already set");
+        commitrevealLib = lib;
+    }
+
     function setGroupToPick(uint newNum) public onlyOwner {
         require(newNum != groupToPick && newNum != 0);
         emit UpdateGroupToPick(groupToPick, newNum);
@@ -205,19 +191,14 @@ contract DOSProxy is Ownable {
         groupMaturityPeriod = newPeriod;
     }
 
-    function setBootStrapTargetBlkNum(uint newTargetBlkNum) public onlyOwner {
-        require(newTargetBlkNum != bootStrapTargetBlkNum && newTargetBlkNum != 0);
-        bootStrapTargetBlkNum = newTargetBlkNum;
+    function setBootstrapCommitDuration(uint newCommitDuration) public onlyOwner {
+        require(newCommitDuration != bootstrapCommitDuration && newCommitDuration != 0);
+        bootstrapCommitDuration = newCommitDuration;
     }
 
-    function setBootStrapCommitDuration(uint newCommitDuration) public onlyOwner {
-        require(newCommitDuration != bootStrapCommitDuration && newCommitDuration != 0);
-        bootStrapCommitDuration = newCommitDuration;
-    }
-
-    function setBootStrapRevealDuration(uint newRevealDuration) public onlyOwner {
-        require(newRevealDuration != bootStrapRevealDuration && newRevealDuration != 0);
-        bootStrapRevealDuration = newRevealDuration;
+    function setBootstrapRevealDuration(uint newRevealDuration) public onlyOwner {
+        require(newRevealDuration != bootstrapRevealDuration && newRevealDuration != 0);
+        bootstrapRevealDuration = newRevealDuration;
     }
 
     function getCodeSize(address addr) internal view returns (uint size) {
@@ -491,22 +472,41 @@ contract DOSProxy is Ownable {
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
-    function signalGroupFormation() public resolveAddress {
+    function signalGroupFormation() public {
         require(pendingNodes.length >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
 
         if (workingGroupIds.length >= groupToPick) {
             requestRandom(address(this), 1, block.number);
             emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
         } else {
-            if (block.number > commitRevealTargetBlk+bootStrapRandomlDuration) {
-				commitRevealTargetBlk = block.number+bootStrapTargetBlkNum;
-                dosCommitReveal.startCommitReveal(commitRevealTargetBlk,bootStrapCommitDuration,bootStrapRevealDuration,bootStrapRevealThreshold);
-            } else{
-                uint rndSeed = 0;
-                rndSeed = dosCommitReveal.getRandom();
-                bootStrap(rndSeed);
+            require(bootstrapRound == 0, "Invalid bootstrap round");
+            bootstrapRound = CommitRevealInterface(commitrevealLib).startCommitReveal(now+1, bootstrapCommitDuration, bootstrapRevealDuration, bootstrapRevealThreshold);
+        }
+    }
+    // TODO: Reward guardian nodes.
+    function signalBootstrap(uint _cid) public {
+        require(bootstrapRound == _cid, "Not in bootstrap phase");
+        require(pendingNodes.length >= groupSize * (groupToPick + 1), "Not enough nodes to bootstrap");
+
+        // Reset
+        bootstrapRound = 0;
+
+        uint rndSeed = CommitRevealInterface(commitrevealLib).getRandom(_cid);
+        // TODO: Refine bootstrap algorithm.
+        uint arrSize = groupSize * (groupToPick + 1);
+        address[] memory candidates = new address[](arrSize);
+        for (uint i = 0; i < pendingNodes.length; i++) {
+            if (i < arrSize) {
+                candidates[i] = pendingNodes[i];
+                delete pendingNodeMap[pendingNodes[i]];
+            } else {
+                pendingNodes[i - arrSize] = pendingNodes[i];
             }
         }
+        pendingNodes.length -= arrSize;
+        shuffle(candidates, rndSeed);
+        regroup(candidates);
+        //
     }
     /// End of Guardian functions
 
@@ -552,7 +552,7 @@ contract DOSProxy is Ownable {
         require(workingGroupIds.length >= groupToPick,
                 "No enough working group");
         require(pendingNodes.length >= groupSize * groupingThreshold / 100,
-                "No enough newly registered nodes");
+                "Not enough newly registered nodes");
 
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);
@@ -648,26 +648,5 @@ contract DOSProxy is Ownable {
             numPendingGroups--;
             emit LogPublicKeyAccepted(groupId, suggestedPubKey, workingGroupIds.length);
         }
-    }
-
-    function bootStrap(uint rndSeed) internal  {
-        require(pendingNodes.length >= groupSize * (groupToPick + 1));
-        if (pendingNodes.length < groupSize * (groupToPick + 1)){
-            emit LogInsufficientPendingNode(pendingNodes.length);
-            return;
-        }
-        uint arrSize = groupSize * (groupToPick + 1);
-        address[] memory candidates = new address[](arrSize);
-        for (uint i = 0; i < pendingNodes.length; i++) {
-            if (i < arrSize) {
-                candidates[i] = pendingNodes[i];
-                delete pendingNodeMap[pendingNodes[i]];
-            } else {
-                pendingNodes[i - arrSize] = pendingNodes[i];
-            }
-        }
-        pendingNodes.length -= arrSize;
-        shuffle(candidates, rndSeed);
-        regroup(candidates);
     }
 }
