@@ -55,7 +55,7 @@ contract CommitReveal is Ownable {
         _;
     }
     
-    event LogStartCommitReveal(uint campaignId);
+    event LogStartCommitReveal(uint cid, uint startBlock, uint commitDuration, uint revealDuration, uint revealThreshold);
     event LogCommit(uint cid, address from, bytes32 commitment);
     event LogReveal(uint cid, address from, uint secret);
     event LogRandom(uint cid, uint random);
@@ -86,7 +86,7 @@ contract CommitReveal is Ownable {
         require(block.number >= _startBlock, "commit-reveal not started yet");
 
         campaigns.push(Campaign(_startBlock, _commitDuration, _revealDuration, _revealThreshold, 0, 0, 0));
-        emit LogStartCommitReveal(campaigns.length);
+        emit LogStartCommitReveal(campaigns.length, _startBlock, _commitDuration, _revealDuration, _revealThreshold);
         return campaigns.length;
     }
 

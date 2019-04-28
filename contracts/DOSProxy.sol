@@ -63,10 +63,11 @@ contract DOSProxy is Ownable {
     uint public groupSize = 21;
     // decimal 2.
     uint public groupingThreshold = 150;
-    //For bootstrapping
+    // Bootstrapping related arguments
     uint public bootstrapCommitDuration = 3;
     uint public bootstrapRevealDuration = 3;
     uint public bootstrapRevealThreshold = 3;
+    uint public bootstrapStartThreshold = groupSize * (groupToPick + 1);
     uint public bootstrapRound = 0;
 
     // Commit-Reveal library address
@@ -141,6 +142,10 @@ contract DOSProxy is Ownable {
     event UpdateGroupSize(uint oldSize, uint newSize);
     event UpdateGroupingThreshold(uint oldThreshold, uint newThreshold);
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
+    event UpdateBootstrapCommitDuration(uint oldDuration, uint newDuration);
+    event UpdateBootstrapRevealDuration(uint oldDuration, uint newDuration);
+    event UpdateBootstrapRevealThreshold(uint oldThreshold, uint newThreshold);
+    event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
     event Bite(uint blkNum, address indexed guardian);
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
@@ -193,12 +198,26 @@ contract DOSProxy is Ownable {
 
     function setBootstrapCommitDuration(uint newCommitDuration) public onlyOwner {
         require(newCommitDuration != bootstrapCommitDuration && newCommitDuration != 0);
+        emit UpdateBootstrapCommitDuration(bootstrapCommitDuration, newCommitDuration);
         bootstrapCommitDuration = newCommitDuration;
     }
 
     function setBootstrapRevealDuration(uint newRevealDuration) public onlyOwner {
         require(newRevealDuration != bootstrapRevealDuration && newRevealDuration != 0);
+        emit UpdateBootstrapRevealDuration(bootstrapRevealDuration, newRevealDuration);
         bootstrapRevealDuration = newRevealDuration;
+    }
+
+    function setBootstrapRevealThreshold(uint newRevealThreshold) public onlyOwner {
+        require(newRevealThreshold != bootstrapRevealThreshold && newRevealThreshold != 0);
+        emit UpdateBootstrapRevealThreshold(bootstrapRevealThreshold, newRevealThreshold);
+        bootstrapRevealThreshold = newRevealThreshold;
+    }
+
+    function setbootstrapStartThreshold(uint newNum) public onlyOwner {
+        require(newNum != bootstrapStartThreshold && newNum >= groupSize * (groupToPick + 1));
+        emit UpdatebootstrapStartThreshold(bootstrapStartThreshold, newNum);
+        bootstrapStartThreshold = newNum;
     }
 
     function getCodeSize(address addr) internal view returns (uint size) {
@@ -478,7 +497,7 @@ contract DOSProxy is Ownable {
         if (workingGroupIds.length >= groupToPick) {
             requestRandom(address(this), 1, block.number);
             emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
-        } else {
+        } else if (pendingNodes.length >= bootstrapStartThreshold) {
             require(bootstrapRound == 0, "Invalid bootstrap round");
             bootstrapRound = CommitRevealInterface(commitrevealLib).startCommitReveal(now+1, bootstrapCommitDuration, bootstrapRevealDuration, bootstrapRevealThreshold);
         }
@@ -486,16 +505,17 @@ contract DOSProxy is Ownable {
     // TODO: Reward guardian nodes.
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
-        require(pendingNodes.length >= groupSize * (groupToPick + 1), "Not enough nodes to bootstrap");
+        require(pendingNodes.length >= bootstrapStartThreshold, "Not enough nodes to bootstrap");
 
         // Reset
         bootstrapRound = 0;
 
         uint rndSeed = CommitRevealInterface(commitrevealLib).getRandom(_cid);
-        // TODO: Refine bootstrap algorithm.
-        uint arrSize = groupSize * (groupToPick + 1);
+
+        // TODO: Refine bootstrap algorithm to allow group overlapping.
+        uint arrSize = pendingNodes.length / groupSize * groupSize;
         address[] memory candidates = new address[](arrSize);
-        for (uint i = 0; i < pendingNodes.length; i++) {
+        for (uint i = 0; i < arrSize; i++) {
             if (i < arrSize) {
                 candidates[i] = pendingNodes[i];
                 delete pendingNodeMap[pendingNodes[i]];
@@ -505,10 +525,14 @@ contract DOSProxy is Ownable {
         }
         pendingNodes.length -= arrSize;
         shuffle(candidates, rndSeed);
-        regroup(candidates);
-        //
+        regroup(candidates, arrSize / groupSize);
     }
     /// End of Guardian functions
+
+    /// TODO
+    function unregisterNode() public {
+
+    }
 
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
         require(idx < workingGroupIds.length, "group index out of range");
@@ -583,7 +607,7 @@ contract DOSProxy is Ownable {
 
         shuffle(candidates, rndSeed);
 
-        regroup(candidates);
+        regroup(candidates, groupToPick + 1);
     }
 
     // Shuffle a memory array using a secure random seed.
@@ -597,10 +621,10 @@ contract DOSProxy is Ownable {
     }
 
     // Regroup a shuffled node array.
-    function regroup(address[] memory candidates) internal {
-        require(candidates.length == groupSize * (groupToPick + 1));
+    function regroup(address[] memory candidates, uint num) private {
+        require(candidates.length == groupSize * num);
 
-        for (uint i = 0; i < groupToPick + 1; i++) {
+        for (uint i = 0; i < num; i++) {
             uint groupId = 0;
             // Generated groupId = sha3(...(sha3(sha3(member 1), member 2), ...), member n)
             for (uint j = 0; j < groupSize; j++) {
