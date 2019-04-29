@@ -499,7 +499,7 @@ contract DOSProxy is Ownable {
             emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
         } else if (pendingNodes.length >= bootstrapStartThreshold) {
             require(bootstrapRound == 0, "Invalid bootstrap round");
-            bootstrapRound = CommitRevealInterface(commitrevealLib).startCommitReveal(now+1, bootstrapCommitDuration, bootstrapRevealDuration, bootstrapRevealThreshold);
+            bootstrapRound = CommitRevealInterface(commitrevealLib).startCommitReveal(block.number, bootstrapCommitDuration, bootstrapRevealDuration, bootstrapRevealThreshold);
         }
     }
     // TODO: Reward guardian nodes.

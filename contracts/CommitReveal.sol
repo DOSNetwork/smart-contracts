@@ -83,11 +83,10 @@ contract CommitReveal is Ownable {
         onlyWhitelisted
         returns(uint)
     {
-        require(block.number >= _startBlock, "commit-reveal not started yet");
-
+        uint newCid = campaigns.length;
         campaigns.push(Campaign(_startBlock, _commitDuration, _revealDuration, _revealThreshold, 0, 0, 0));
-        emit LogStartCommitReveal(campaigns.length, _startBlock, _commitDuration, _revealDuration, _revealThreshold);
-        return campaigns.length;
+        emit LogStartCommitReveal(newCid, _startBlock, _commitDuration, _revealDuration, _revealThreshold);
+        return newCid;
     }
 
     function commit(uint _cid, bytes32 _secretHash) public checkCommit(_cid, _secretHash) {
