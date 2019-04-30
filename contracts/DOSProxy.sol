@@ -131,7 +131,6 @@ contract DOSProxy is Ownable {
     event LogInsufficientPendingNode(uint numPendingNodes);
     event LogInsufficientWorkingGroup(uint numWorkingGroups);
     event LogGrouping(uint groupId, address[] nodeId);
-    event LogDuplicateWorkingGroup(uint groupId, address[] members);
     event LogAddressNotFound(uint groupId, uint[4] pubKey);
     event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint workingGroupSize);
     event LogPublicKeySuggested(uint groupId, uint[4] pubKey, uint count, uint groupSize);
@@ -243,7 +242,7 @@ contract DOSProxy is Ownable {
             if (block.number - group.birthBlkN < groupMaturityPeriod) {
                 return idx;
             } else {
-                dissolveWorkingGroup(idx);
+                dissolveWorkingGroup(idx, true);
             }
         } while(true);
     }
@@ -264,12 +263,12 @@ contract DOSProxy is Ownable {
     }
 
     /// @notice Caller ensures no index overflow.
-    function dissolveWorkingGroup(uint idx) internal {
+    function dissolveWorkingGroup(uint idx, bool backToPendingPool) internal {
         /// Deregister expired working group and remove metadata.
         Group storage grp = workingGroups[workingGroupIds[idx]];
         for (uint i = 0; i < grp.members.length; i++) {
             delete workingNodeMap[grp.members[i]].inGroups[grp.groupId];
-            if (--workingNodeMap[grp.members[i]].inGroupCount == 0) {
+            if (--workingNodeMap[grp.members[i]].inGroupCount == 0 && backToPendingPool) {
                 // Put member node into pendingNodes pool once it doesn't belong to any working group.
                 // Notice: Guardian may need to signal group formation.
                 pendingNodes.push(grp.members[i]);
@@ -485,7 +484,7 @@ contract DOSProxy is Ownable {
         require(block.number - workingGroups[workingGroupIds[idx]].birthBlkN > groupMaturityPeriod,
                 "Not right time to signal dissolve yet");
 
-        dissolveWorkingGroup(idx);
+        dissolveWorkingGroup(idx, true);
         emit Bite(block.number, msg.sender);
     }
     // TODO: Reward guardian nodes.
@@ -506,7 +505,6 @@ contract DOSProxy is Ownable {
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
         require(pendingNodes.length >= bootstrapStartThreshold, "Not enough nodes to bootstrap");
-
         // Reset
         bootstrapRound = 0;
 
@@ -515,7 +513,7 @@ contract DOSProxy is Ownable {
         // TODO: Refine bootstrap algorithm to allow group overlapping.
         uint arrSize = pendingNodes.length / groupSize * groupSize;
         address[] memory candidates = new address[](arrSize);
-        for (uint i = 0; i < arrSize; i++) {
+        for (uint i = 0; i < pendingNodes.length; i++) {
             if (i < arrSize) {
                 candidates[i] = pendingNodes[i];
                 delete pendingNodeMap[pendingNodes[i]];
@@ -587,12 +585,8 @@ contract DOSProxy is Ownable {
             for (uint j = 0; j < groupSize; j++) {
                 candidates[num++] = grpToDissolve.members[j];
             }
-            //TODO: Because those nodes has been picked here.
-            //It should not be added to pendingnNode in dissolveWorkingGroup
-            //Other reason that don't dissolve here is that some groups are new groups
-            //But it could be chosen to disolve.
-            //Maybe it need to check some conditions to decide if this group should be dissolved.
-            //dissolveWorkingGroup(idx);
+            // Do not put chosen to-be-dissolved working group back to pending pool.
+            dissolveWorkingGroup(idx, false);
         }
 
         for (uint i = 0; i < pendingNodes.length; i++) {
@@ -638,10 +632,6 @@ contract DOSProxy is Ownable {
                 pgrp.isMember[member] = true;
                 pgrp.members.push(member);
             }
-            // TODO: monitor this event
-            if (workingGroups[groupId].groupId != 0) {
-                emit LogDuplicateWorkingGroup(groupId, pgrp.members);
-            }
             emit LogGrouping(groupId, pgrp.members);
         }
     }
@@ -651,6 +641,7 @@ contract DOSProxy is Ownable {
         PendingGroup storage pgrp = pendingGroups[groupId];
         require(pgrp.groupId != 0, "No such pending group to be registered");
         require(pgrp.isMember[msg.sender], "Not from authorized group member");
+        require(workingGroups[groupId].groupId == 0, "Duplicated working group");
 
         bytes32 hashedPubKey = keccak256(abi.encodePacked(
             suggestedPubKey[0], suggestedPubKey[1], suggestedPubKey[2], suggestedPubKey[3]));
