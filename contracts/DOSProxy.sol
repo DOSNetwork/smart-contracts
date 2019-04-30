@@ -511,15 +511,11 @@ contract DOSProxy is Ownable {
         uint rndSeed = CommitRevealInterface(commitrevealLib).getRandom(_cid);
 
         // TODO: Refine bootstrap algorithm to allow group overlapping.
-        uint arrSize = pendingNodes.length / groupSize * groupSize;
+        uint arrSize = bootstrapStartThreshold / groupSize * groupSize;
         address[] memory candidates = new address[](arrSize);
-        for (uint i = 0; i < pendingNodes.length; i++) {
-            if (i < arrSize) {
-                candidates[i] = pendingNodes[i];
-                delete pendingNodeMap[pendingNodes[i]];
-            } else {
-                pendingNodes[i - arrSize] = pendingNodes[i];
-            }
+        for (uint i = 0; i < arrSize; i++) {
+            candidates[i] = pendingNodes[pendingNodes.length - 1 - i];
+            delete pendingNodeMap[pendingNodes[pendingNodes.length - 1 - i]];
         }
         pendingNodes.length -= arrSize;
         shuffle(candidates, rndSeed);
