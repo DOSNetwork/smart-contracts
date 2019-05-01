@@ -17,6 +17,15 @@ contract CommitRevealInterface {
     function getRandom(uint) public returns(uint);
 }
 
+contract DOSAddressBridgeInterface {
+    function getCommitRevealAddress() public view returns(address);
+    function getPaymentAddress() public view returns(address);
+}
+
+contract DOSPaymentInterface {
+    function fromValidStakingNode(address) public view returns(bool);
+}
+
 contract DOSProxy is Ownable {
     using BN256 for *;
 
@@ -70,8 +79,9 @@ contract DOSProxy is Ownable {
     uint public bootstrapStartThreshold = groupSize * (groupToPick + 1);
     uint public bootstrapRound = 0;
 
-    // Commit-Reveal library address
-    address public commitrevealLib = address(0x0);
+    // DOSAddressBridge on rinkeby testnet
+    DOSAddressBridgeInterface public addressBridge =
+        DOSAddressBridgeInterface(0xe987926A226932DFB1f71FA316461db272E05317);
 
     // Newly registered ungrouped nodes.
     address[] public pendingNodes;
@@ -147,6 +157,12 @@ contract DOSProxy is Ownable {
     event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
     event Bite(uint blkNum, address indexed guardian);
 
+    modifier fromValidStakingNode {
+        require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
+                "Invalid staking node");
+        _;
+    }
+
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
         return (
             lastHandledGroup.groupId,
@@ -163,11 +179,6 @@ contract DOSProxy is Ownable {
             workingGroups[groupId].birthBlkN,
             workingGroups[groupId].members
         );
-    }
-
-    function setCommitrevealLib(address lib) public onlyOwner {
-        require(commitrevealLib == address(0x0), "Library address already set");
-        commitrevealLib = lib;
     }
 
     function setGroupToPick(uint newNum) public onlyOwner {
@@ -374,8 +385,7 @@ contract DOSProxy is Ownable {
     {
         // Validation
         // TODO
-        // 1. Check msg.sender from registered and staked node operator.
-        // 2. Check msg.sender is a member in Group(grpPubKey).
+        // 1. Check msg.sender is a member in Group(grpPubKey).
         // Clients actually signs (data || addr(selected_submitter)).
         bytes memory message = abi.encodePacked(data, msg.sender);
 
@@ -407,6 +417,7 @@ contract DOSProxy is Ownable {
         uint8 version
     )
         public
+        fromValidStakingNode
     {
         address ucAddr = PendingRequests[requestId].callbackAddr;
         if (ucAddr == address(0x0)) {
@@ -446,7 +457,7 @@ contract DOSProxy is Ownable {
     }
 
     // System-level secure distributed random number generator.
-    function updateRandomness(uint[2] memory sig, uint8 version) public {
+    function updateRandomness(uint[2] memory sig, uint8 version) public fromValidStakingNode {
         if (!validateAndVerify(
                 uint8(TrafficType.SystemRandom),
                 lastRandomness,
@@ -498,7 +509,12 @@ contract DOSProxy is Ownable {
             emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
         } else if (pendingNodes.length >= bootstrapStartThreshold) {
             require(bootstrapRound == 0, "Invalid bootstrap round");
-            bootstrapRound = CommitRevealInterface(commitrevealLib).startCommitReveal(block.number, bootstrapCommitDuration, bootstrapRevealDuration, bootstrapRevealThreshold);
+            bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
+                block.number,
+                bootstrapCommitDuration,
+                bootstrapRevealDuration,
+                bootstrapRevealThreshold
+            );
         }
     }
     // TODO: Reward guardian nodes.
@@ -508,7 +524,7 @@ contract DOSProxy is Ownable {
         // Reset
         bootstrapRound = 0;
 
-        uint rndSeed = CommitRevealInterface(commitrevealLib).getRandom(_cid);
+        uint rndSeed = CommitRevealInterface(addressBridge.getCommitRevealAddress()).getRandom(_cid);
 
         // TODO: Refine bootstrap algorithm to allow group overlapping.
         uint arrSize = bootstrapStartThreshold / groupSize * groupSize;
@@ -543,8 +559,7 @@ contract DOSProxy is Ownable {
         return pendingNodes.length;
     }
 
-    // TODO: restrict msg.sender from registered and staked node operator.
-    function registerNewNode() public {
+    function registerNewNode() public fromValidStakingNode {
         require(!pendingNodeMap[msg.sender], "Duplicated pending node");
         require(workingNodeMap[msg.sender].inGroupCount == 0, "Already in working groups");
 
@@ -632,8 +647,10 @@ contract DOSProxy is Ownable {
         }
     }
 
-    // TODO: restrict msg.sender from registered and staked node operator.
-    function registerGroupPubKey(uint groupId, uint[4] memory suggestedPubKey) public {
+    function registerGroupPubKey(uint groupId, uint[4] memory suggestedPubKey)
+        public
+        fromValidStakingNode
+    {
         PendingGroup storage pgrp = pendingGroups[groupId];
         require(pgrp.groupId != 0, "No such pending group to be registered");
         require(pgrp.isMember[msg.sender], "Not from authorized group member");
