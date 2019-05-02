@@ -598,7 +598,7 @@ contract DOSProxy is Ownable {
             uint idx = uint(keccak256(abi.encodePacked(rndSeed, requestId, i))) % workingGroupIds.length;
             Group storage grpToDissolve = workingGroups[workingGroupIds[idx]];
             for (uint j = 0; j < groupSize; j++) {
-                candidates[i * groupToPick + j] = grpToDissolve.members[j];
+                candidates[i * groupSize + j] = grpToDissolve.members[j];
             }
             // Do not put chosen to-be-dissolved working group back to pending pool.
             dissolveWorkingGroup(idx, false);
