@@ -83,9 +83,11 @@ contract DOSProxy is Ownable {
     DOSAddressBridgeInterface public addressBridge =
         DOSAddressBridgeInterface(0xe987926A226932DFB1f71FA316461db272E05317);
 
-    // Newly registered ungrouped nodes.
-    address[] public pendingNodes;
-    mapping(address => bool) pendingNodeMap;
+    // Linkedlist of newly registered ungrouped nodes, with HEAD points to the earliest and listTail points to the latest.
+    mapping(address => address) public pendingNodeList;
+    address private constant HEAD = address(0x1);
+    address private listTail = HEAD;
+    uint public pendingNodeNum;
     // node => working groupIds node is in.
     mapping(address => Node) workingNodeMap;
     // groupId => Group
@@ -161,6 +163,10 @@ contract DOSProxy is Ownable {
         require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
                 "Invalid staking node");
         _;
+    }
+
+    constructor() public {
+        pendingNodeList[HEAD] = HEAD;
     }
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
@@ -278,13 +284,16 @@ contract DOSProxy is Ownable {
         /// Deregister expired working group and remove metadata.
         Group storage grp = workingGroups[workingGroupIds[idx]];
         for (uint i = 0; i < grp.members.length; i++) {
-            delete workingNodeMap[grp.members[i]].inGroups[grp.groupId];
-            if (--workingNodeMap[grp.members[i]].inGroupCount == 0 && backToPendingPool) {
-                // Put member node into pendingNodes pool once it doesn't belong to any working group.
+            address member = grp.members[i];
+            delete workingNodeMap[member].inGroups[grp.groupId];
+            if (--workingNodeMap[member].inGroupCount == 0 && backToPendingPool) {
+                // Put member node into pendingNodeList once it doesn't belong to any working group.
                 // Notice: Guardian may need to signal group formation.
-                pendingNodes.push(grp.members[i]);
-                pendingNodeMap[grp.members[i]] = true;
-                emit LogRegisteredNewPendingNode(grp.members[i]);
+                pendingNodeList[member] = pendingNodeList[listTail];
+                pendingNodeList[listTail] = member;
+                listTail = member;
+                pendingNodeNum++;
+                emit LogRegisteredNewPendingNode(member);
             }
         }
         emit LogGroupDissolve(grp.groupId, getGroupPubKey(idx));
@@ -502,12 +511,12 @@ contract DOSProxy is Ownable {
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
     function signalGroupFormation() public {
-        require(pendingNodes.length >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
+        require(pendingNodeNum >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
 
         if (workingGroupIds.length >= groupToPick) {
             requestRandom(address(this), 1, block.number);
-            emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
-        } else if (pendingNodes.length >= bootstrapStartThreshold) {
+            emit LogGroupingInitiated(pendingNodeNum, groupSize, groupingThreshold);
+        } else if (pendingNodeNum >= bootstrapStartThreshold) {
             require(bootstrapRound == 0, "Invalid bootstrap round");
             bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
                 block.number,
@@ -520,7 +529,7 @@ contract DOSProxy is Ownable {
     // TODO: Reward guardian nodes.
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
-        require(pendingNodes.length >= bootstrapStartThreshold, "Not enough nodes to bootstrap");
+        require(pendingNodeNum >= bootstrapStartThreshold, "Not enough nodes to bootstrap");
         // Reset
         bootstrapRound = 0;
 
@@ -529,11 +538,8 @@ contract DOSProxy is Ownable {
         // TODO: Refine bootstrap algorithm to allow group overlapping.
         uint arrSize = bootstrapStartThreshold / groupSize * groupSize;
         address[] memory candidates = new address[](arrSize);
-        for (uint i = 0; i < arrSize; i++) {
-            candidates[i] = pendingNodes[pendingNodes.length - 1 - i];
-            delete pendingNodeMap[pendingNodes[pendingNodes.length - 1 - i]];
-        }
-        pendingNodes.length -= arrSize;
+
+        pick(arrSize, 0, candidates);
         shuffle(candidates, rndSeed);
         regroup(candidates, arrSize / groupSize);
     }
@@ -555,27 +561,26 @@ contract DOSProxy is Ownable {
         return workingGroupIds.length;
     }
 
-    function getPengindNodeSize() public view returns (uint) {
-        return pendingNodes.length;
-    }
-
     function registerNewNode() public fromValidStakingNode {
-        require(!pendingNodeMap[msg.sender], "Duplicated pending node");
+        require(pendingNodeList[msg.sender] == address(0), "Duplicated pending node");
         require(workingNodeMap[msg.sender].inGroupCount == 0, "Already in working groups");
 
-        pendingNodes.push(msg.sender);
-        pendingNodeMap[msg.sender] = true;
+        pendingNodeList[msg.sender] = pendingNodeList[listTail];
+        pendingNodeList[listTail] = msg.sender;
+        listTail = msg.sender;
+        pendingNodeNum++;
         emit LogRegisteredNewPendingNode(msg.sender);
+
         // Generate new groups from newly registered nodes and nodes from existing working group.
-        if (pendingNodes.length < groupSize * groupingThreshold / 100) {
-            emit LogInsufficientPendingNode(pendingNodes.length);
+        if (pendingNodeNum < groupSize * groupingThreshold / 100) {
+            emit LogInsufficientPendingNode(pendingNodeNum);
         } else if (workingGroupIds.length < groupToPick) {
             // There're enough pending nodes but with non-sufficient working groups.
             emit LogInsufficientWorkingGroup(workingGroupIds.length);
             // TODO: Bootstrap phase.
         } else {
             requestRandom(address(this), 1, block.number);
-            emit LogGroupingInitiated(pendingNodes.length, groupSize, groupingThreshold);
+            emit LogGroupingInitiated(pendingNodeNum, groupSize, groupingThreshold);
         }
     }
 
@@ -584,35 +589,35 @@ contract DOSProxy is Ownable {
         require(msg.sender == address(this), "Unauthenticated response");
         require(workingGroupIds.length >= groupToPick,
                 "No enough working group");
-        require(pendingNodes.length >= groupSize * groupingThreshold / 100,
+        require(pendingNodeNum >= groupSize * groupingThreshold / 100,
                 "Not enough newly registered nodes");
 
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);
-        uint num = 0;
-        for (uint i = 1; i <= groupToPick; i++) {
+        for (uint i = 0; i < groupToPick; i++) {
             uint idx = uint(keccak256(abi.encodePacked(rndSeed, requestId, i))) % workingGroupIds.length;
             Group storage grpToDissolve = workingGroups[workingGroupIds[idx]];
             for (uint j = 0; j < groupSize; j++) {
-                candidates[num++] = grpToDissolve.members[j];
+                candidates[i * groupToPick + j] = grpToDissolve.members[j];
             }
             // Do not put chosen to-be-dissolved working group back to pending pool.
             dissolveWorkingGroup(idx, false);
         }
 
-        for (uint i = 0; i < pendingNodes.length; i++) {
-            if (i < groupSize) {
-                candidates[num++] = pendingNodes[i];
-                delete pendingNodeMap[pendingNodes[i]];
-            } else {
-                pendingNodes[i - groupSize] = pendingNodes[i];
-            }
-        }
-        pendingNodes.length -= groupSize;
-
+        pick(groupSize, groupSize * groupToPick, candidates);
         shuffle(candidates, rndSeed);
-
         regroup(candidates, groupToPick + 1);
+    }
+
+    // Pick first @num nodes from pendingNodeList and put into the @candidates array from @startIndex.
+    function pick(uint num, uint startIndex, address[] memory candidates) private {
+        for (uint i = 0; i < num; i++) {
+            address curr = pendingNodeList[HEAD];
+            pendingNodeList[HEAD] = pendingNodeList[curr];
+            delete pendingNodeList[curr];
+            candidates[startIndex + i] = curr;
+        }
+        pendingNodeNum -= num;
     }
 
     // Shuffle a memory array using a secure random seed.
