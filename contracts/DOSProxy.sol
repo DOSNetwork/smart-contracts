@@ -85,8 +85,9 @@ contract DOSProxy is Ownable {
 
     // Linkedlist of newly registered ungrouped nodes, with HEAD points to the earliest and listTail points to the latest.
     mapping(address => address) public pendingNodeList;
+    // Initial (empty) state: pendingNodeList[HEAD] == HEAD && listTail == HEAD.
     address private constant HEAD = address(0x1);
-    address private listTail = HEAD;
+    address private listTail;
     uint public pendingNodeNum;
     // node => working groupIds node is in.
     mapping(address => Node) workingNodeMap;
@@ -167,6 +168,7 @@ contract DOSProxy is Ownable {
 
     constructor() public {
         pendingNodeList[HEAD] = HEAD;
+        listTail = HEAD;
     }
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
@@ -618,6 +620,10 @@ contract DOSProxy is Ownable {
             candidates[startIndex + i] = curr;
         }
         pendingNodeNum -= num;
+        // Reset listTail if necessary.
+        if (pendingNodeNum == 0) {
+            listTail = HEAD;
+        }
     }
 
     // Shuffle a memory array using a secure random seed.
