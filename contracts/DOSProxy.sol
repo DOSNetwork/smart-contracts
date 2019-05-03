@@ -49,8 +49,8 @@ contract DOSProxy is Ownable {
     struct PendingGroup {
         uint groupId;
         mapping(bytes32 => uint) pubKeyCounts;
-        address[] members;
-        mapping(address => bool) isMember;
+        // 0x1 (HEAD) -> member1 -> member2 -> ... -> memberN -> 0x1 (HEAD)
+        mapping(address => address) memberList;
     }
 
     // Metadata of registered node.
@@ -88,7 +88,7 @@ contract DOSProxy is Ownable {
     // Initial (empty) state: pendingNodeList[HEAD] == HEAD && listTail == HEAD.
     address private constant HEAD = address(0x1);
     address private listTail;
-    uint public pendingNodeNum;
+    uint public numPendingNodes;
     // node => working groupIds node is in.
     mapping(address => Node) workingNodeMap;
     // groupId => Group
@@ -294,7 +294,7 @@ contract DOSProxy is Ownable {
                 pendingNodeList[member] = pendingNodeList[listTail];
                 pendingNodeList[listTail] = member;
                 listTail = member;
-                pendingNodeNum++;
+                numPendingNodes++;
                 emit LogRegisteredNewPendingNode(member);
             }
         }
@@ -513,12 +513,12 @@ contract DOSProxy is Ownable {
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
     function signalGroupFormation() public {
-        require(pendingNodeNum >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
+        require(numPendingNodes >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
 
         if (workingGroupIds.length >= groupToPick) {
             requestRandom(address(this), 1, block.number);
-            emit LogGroupingInitiated(pendingNodeNum, groupSize, groupingThreshold);
-        } else if (pendingNodeNum >= bootstrapStartThreshold) {
+            emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
+        } else if (numPendingNodes >= bootstrapStartThreshold) {
             require(bootstrapRound == 0, "Invalid bootstrap round");
             bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
                 block.number,
@@ -531,8 +531,8 @@ contract DOSProxy is Ownable {
     // TODO: Reward guardian nodes.
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
-        require(pendingNodeNum >= bootstrapStartThreshold, "Not enough nodes to bootstrap");
-        // Reset
+        require(numPendingNodes >= bootstrapStartThreshold, "Not enough nodes to bootstrap");
+        // Reset.
         bootstrapRound = 0;
 
         uint rndSeed = CommitRevealInterface(addressBridge.getCommitRevealAddress()).getRandom(_cid);
@@ -570,19 +570,19 @@ contract DOSProxy is Ownable {
         pendingNodeList[msg.sender] = pendingNodeList[listTail];
         pendingNodeList[listTail] = msg.sender;
         listTail = msg.sender;
-        pendingNodeNum++;
+        numPendingNodes++;
         emit LogRegisteredNewPendingNode(msg.sender);
 
         // Generate new groups from newly registered nodes and nodes from existing working group.
-        if (pendingNodeNum < groupSize * groupingThreshold / 100) {
-            emit LogInsufficientPendingNode(pendingNodeNum);
+        if (numPendingNodes < groupSize * groupingThreshold / 100) {
+            emit LogInsufficientPendingNode(numPendingNodes);
         } else if (workingGroupIds.length < groupToPick) {
             // There're enough pending nodes but with non-sufficient working groups.
             emit LogInsufficientWorkingGroup(workingGroupIds.length);
             // TODO: Bootstrap phase.
         } else {
             requestRandom(address(this), 1, block.number);
-            emit LogGroupingInitiated(pendingNodeNum, groupSize, groupingThreshold);
+            emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
         }
     }
 
@@ -591,7 +591,7 @@ contract DOSProxy is Ownable {
         require(msg.sender == address(this), "Unauthenticated response");
         require(workingGroupIds.length >= groupToPick,
                 "No enough working group");
-        require(pendingNodeNum >= groupSize * groupingThreshold / 100,
+        require(numPendingNodes >= groupSize * groupingThreshold / 100,
                 "Not enough newly registered nodes");
 
         uint arrSize = groupSize * (groupToPick + 1);
@@ -619,9 +619,9 @@ contract DOSProxy is Ownable {
             delete pendingNodeList[curr];
             candidates[startIndex + i] = curr;
         }
-        pendingNodeNum -= num;
+        numPendingNodes -= num;
         // Reset listTail if necessary.
-        if (pendingNodeNum == 0) {
+        if (numPendingNodes == 0) {
             listTail = HEAD;
         }
     }
@@ -641,20 +641,22 @@ contract DOSProxy is Ownable {
         require(candidates.length == groupSize * num);
 
         for (uint i = 0; i < num; i++) {
+            address[] memory members = new address[](groupSize);
             uint groupId = 0;
             // Generated groupId = sha3(...(sha3(sha3(member 1), member 2), ...), member n)
             for (uint j = 0; j < groupSize; j++) {
-                groupId = uint(keccak256(abi.encodePacked(groupId, candidates[i * groupSize + j])));
+                members[j] = candidates[i * groupSize + j];
+                groupId = uint(keccak256(abi.encodePacked(groupId, members[j])));
             }
             PendingGroup storage pgrp = pendingGroups[groupId];
             pgrp.groupId = groupId;
-            numPendingGroups++;
+            pgrp.memberList[HEAD] = HEAD;
             for (uint j = 0; j < groupSize; j++) {
-                address member = candidates[i * groupSize + j];
-                pgrp.isMember[member] = true;
-                pgrp.members.push(member);
+                pgrp.memberList[members[j]] = pgrp.memberList[HEAD];
+                pgrp.memberList[HEAD] = members[j];
             }
-            emit LogGrouping(groupId, pgrp.members);
+            numPendingGroups++;
+            emit LogGrouping(groupId, members);
         }
     }
 
@@ -664,7 +666,7 @@ contract DOSProxy is Ownable {
     {
         PendingGroup storage pgrp = pendingGroups[groupId];
         require(pgrp.groupId != 0, "No such pending group to be registered");
-        require(pgrp.isMember[msg.sender], "Not from authorized group member");
+        require(pgrp.memberList[msg.sender] != address(0), "Not from authorized group member");
         require(workingGroups[groupId].groupId == 0, "Duplicated working group");
 
         bytes32 hashedPubKey = keccak256(abi.encodePacked(
@@ -672,16 +674,18 @@ contract DOSProxy is Ownable {
         pgrp.pubKeyCounts[hashedPubKey]++;
         emit LogPublicKeySuggested(groupId, suggestedPubKey, pgrp.pubKeyCounts[hashedPubKey], groupSize);
         if (pgrp.pubKeyCounts[hashedPubKey] > groupSize / 2) {
-            for (uint i = 0; i < pgrp.members.length; i++) {
-                workingNodeMap[pgrp.members[i]].inGroups[groupId] = true;
-                workingNodeMap[pgrp.members[i]].inGroupCount++;
-            }
-            workingGroups[groupId] = Group(
-                groupId,
-                BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
-                block.number,
-                pgrp.members);
             workingGroupIds.push(groupId);
+            Group storage group = workingGroups[groupId];
+            group.groupId = groupId;
+            group.groupPubKey = BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]);
+            group.birthBlkN = block.number;
+            address member = pgrp.memberList[HEAD];
+            while (member != HEAD) {
+                group.members.push(member);
+                workingNodeMap[member].inGroups[groupId] = true;
+                workingNodeMap[member].inGroupCount++;
+                member = pgrp.memberList[member];
+            }
 
             delete pendingGroups[groupId];
             numPendingGroups--;
