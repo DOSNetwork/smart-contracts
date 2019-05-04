@@ -53,14 +53,6 @@ contract DOSProxy is Ownable {
         mapping(address => address) memberList;
     }
 
-    // Metadata of registered node.
-    struct Node {
-        // Key: working groupId node is in
-        mapping(uint => bool) inGroups;
-        // Number of working groups node is in
-        uint inGroupCount;
-    }
-
     uint requestIdSeed;
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
@@ -84,13 +76,17 @@ contract DOSProxy is Ownable {
         DOSAddressBridgeInterface(0xe987926A226932DFB1f71FA316461db272E05317);
 
     // Linkedlist of newly registered ungrouped nodes, with HEAD points to the earliest and listTail points to the latest.
-    mapping(address => address) public pendingNodeList;
     // Initial (empty) state: pendingNodeList[HEAD] == HEAD && listTail == HEAD.
-    address private constant HEAD = address(0x1);
+    mapping(address => address) public pendingNodeList;
+    // Dummy head and placeholder used in linkedlists.
+    uint private constant HEAD_I = 0x1;
+    address private constant HEAD_A = address(0x1);
     address private listTail;
     uint public numPendingNodes;
-    // node => working groupIds node is in.
-    mapping(address => Node) workingNodeMap;
+    // node => a linkedlist of working groupIds the node is in:
+    // node => (0x1 -> workingGroupId1 -> workingGroupId2 -> ... -> workingGroupIdm -> 0x1)
+    // Initial state: { nodeAddr : { HEAD_I : HEAD_I } }
+    mapping(address => mapping(uint => uint)) nodeToGroupIdList;
     // groupId => Group
     mapping(uint => Group) workingGroups;
     // Index:groupId
@@ -167,8 +163,8 @@ contract DOSProxy is Ownable {
     }
 
     constructor() public {
-        pendingNodeList[HEAD] = HEAD;
-        listTail = HEAD;
+        pendingNodeList[HEAD_A] = HEAD_A;
+        listTail = HEAD_A;
     }
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
@@ -281,14 +277,31 @@ contract DOSProxy is Ownable {
         emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId, getGroupPubKey(idx));
     }
 
+    /// Remove workingGroupId from node's group id linkedlist.
+    /// Return true when find and remove successfully.
+    function removeNodeGroupId(address node, uint groupId) private returns(bool) {
+        uint prev = HEAD_I;
+        uint curr = nodeToGroupIdList[node][prev];
+        while (curr != HEAD_I && curr != groupId) {
+            prev = curr;
+            curr = nodeToGroupIdList[node][prev];
+        }
+        if (curr == HEAD_I) {
+            return false;
+        } else {
+            nodeToGroupIdList[node][prev] = nodeToGroupIdList[node][curr];
+            delete nodeToGroupIdList[node][curr];
+            return true;
+        }
+    }
+
     /// @notice Caller ensures no index overflow.
     function dissolveWorkingGroup(uint idx, bool backToPendingPool) internal {
         /// Deregister expired working group and remove metadata.
         Group storage grp = workingGroups[workingGroupIds[idx]];
         for (uint i = 0; i < grp.members.length; i++) {
             address member = grp.members[i];
-            delete workingNodeMap[member].inGroups[grp.groupId];
-            if (--workingNodeMap[member].inGroupCount == 0 && backToPendingPool) {
+            if (removeNodeGroupId(member, grp.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I && backToPendingPool) {
                 // Put member node into pendingNodeList once it doesn't belong to any working group.
                 // Notice: Guardian may need to signal group formation.
                 pendingNodeList[member] = pendingNodeList[listTail];
@@ -565,8 +578,9 @@ contract DOSProxy is Ownable {
 
     function registerNewNode() public fromValidStakingNode {
         require(pendingNodeList[msg.sender] == address(0), "Duplicated pending node");
-        require(workingNodeMap[msg.sender].inGroupCount == 0, "Already in working groups");
+        require(nodeToGroupIdList[msg.sender][HEAD_I] == 0, "Already registered in pending or working groups");
 
+        nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
         pendingNodeList[msg.sender] = pendingNodeList[listTail];
         pendingNodeList[listTail] = msg.sender;
         listTail = msg.sender;
@@ -614,15 +628,15 @@ contract DOSProxy is Ownable {
     // Pick first @num nodes from pendingNodeList and put into the @candidates array from @startIndex.
     function pick(uint num, uint startIndex, address[] memory candidates) private {
         for (uint i = 0; i < num; i++) {
-            address curr = pendingNodeList[HEAD];
-            pendingNodeList[HEAD] = pendingNodeList[curr];
+            address curr = pendingNodeList[HEAD_A];
+            pendingNodeList[HEAD_A] = pendingNodeList[curr];
             delete pendingNodeList[curr];
             candidates[startIndex + i] = curr;
         }
         numPendingNodes -= num;
         // Reset listTail if necessary.
         if (numPendingNodes == 0) {
-            listTail = HEAD;
+            listTail = HEAD_A;
         }
     }
 
@@ -650,10 +664,10 @@ contract DOSProxy is Ownable {
             }
             PendingGroup storage pgrp = pendingGroups[groupId];
             pgrp.groupId = groupId;
-            pgrp.memberList[HEAD] = HEAD;
+            pgrp.memberList[HEAD_A] = HEAD_A;
             for (uint j = 0; j < groupSize; j++) {
-                pgrp.memberList[members[j]] = pgrp.memberList[HEAD];
-                pgrp.memberList[HEAD] = members[j];
+                pgrp.memberList[members[j]] = pgrp.memberList[HEAD_A];
+                pgrp.memberList[HEAD_A] = members[j];
             }
             numPendingGroups++;
             emit LogGrouping(groupId, members);
@@ -679,11 +693,11 @@ contract DOSProxy is Ownable {
             group.groupId = groupId;
             group.groupPubKey = BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]);
             group.birthBlkN = block.number;
-            address member = pgrp.memberList[HEAD];
-            while (member != HEAD) {
+            address member = pgrp.memberList[HEAD_A];
+            while (member != HEAD_A) {
                 group.members.push(member);
-                workingNodeMap[member].inGroups[groupId] = true;
-                workingNodeMap[member].inGroupCount++;
+                nodeToGroupIdList[member][groupId] = nodeToGroupIdList[member][HEAD_I];
+                nodeToGroupIdList[member][HEAD_I] = groupId;
                 member = pgrp.memberList[member];
             }
 
