@@ -746,6 +746,7 @@ contract DOSProxy is Ownable {
         fromValidStakingNode
     {
         PendingGroup storage pgrp = pendingGroups[groupId];
+        require(pgrp.groupId != 0, "Pending group doesn't exist");
         require(pgrp.memberList[msg.sender] != address(0), "Not from authorized group member");
 
         bytes32 hashedPubKey = keccak256(abi.encodePacked(
