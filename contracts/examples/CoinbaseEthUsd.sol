@@ -26,7 +26,7 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
         _;
     }
     
-    function __callback__(uint id, bytes memory result) public auth {
+    function __callback__(uint id, bytes calldata result) external auth {
         require(queryId == id, "Unmatched response");
         
         price_str = string(result);

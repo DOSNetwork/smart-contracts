@@ -7,9 +7,9 @@ import "./Ownable.sol";
 
 contract UserContractInterface {
     // Query callback.
-    function __callback__(uint, bytes memory) public;
+    function __callback__(uint, bytes calldata) external;
     // Random number callback.
-    function __callback__(uint, uint) public;
+    function __callback__(uint, uint) external;
 }
 
 contract CommitRevealInterface {
@@ -254,7 +254,7 @@ contract DOSProxy is Ownable {
         pendingGroupMaxLife = newLife;
     }
 
-    function getCodeSize(address addr) internal view returns (uint size) {
+    function getCodeSize(address addr) private view returns (uint size) {
         assembly {
             size := extcodesize(addr)
         }
@@ -282,14 +282,14 @@ contract DOSProxy is Ownable {
         } while(true);
     }
 
-    function dispatchJob(TrafficType trafficType, uint pseudoSeed) internal returns(uint) {
+    function dispatchJob(TrafficType trafficType, uint pseudoSeed) private returns(uint) {
         if (block.number - lastUpdatedBlock > refreshSystemRandomHardLimit) {
             kickoffRandom();
         }
         return dispatchJobCore(trafficType, pseudoSeed);
     }
 
-    function kickoffRandom() internal {
+    function kickoffRandom() private {
         lastUpdatedBlock = block.number;
         uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
@@ -340,7 +340,7 @@ contract DOSProxy is Ownable {
     }
 
     /// @notice Caller ensures no index overflow.
-    function dissolveWorkingGroup(uint idx, bool backToPendingPool) internal {
+    function dissolveWorkingGroup(uint idx, bool backToPendingPool) private {
         /// Deregister expired working group and remove metadata.
         Group storage grp = workingGroups[workingGroupIds[idx]];
         for (uint i = 0; i < grp.members.length; i++) {
@@ -364,10 +364,10 @@ contract DOSProxy is Ownable {
     function query(
         address from,
         uint timeout,
-        string memory dataSource,
-        string memory selector
+        string calldata dataSource,
+        string calldata selector
     )
-        public
+        external
         returns (uint)
     {
         if (getCodeSize(from) > 0) {
@@ -445,7 +445,7 @@ contract DOSProxy is Ownable {
         BN256.G2Point memory grpPubKey,
         uint8 version
     )
-        internal
+        private
         returns (bool)
     {
         // Validation
@@ -477,11 +477,11 @@ contract DOSProxy is Ownable {
     function triggerCallback(
         uint requestId,
         uint8 trafficType,
-        bytes memory result,
-        uint[2] memory sig,
+        bytes calldata result,
+        uint[2] calldata sig,
         uint8 version
     )
-        public
+        external
         fromValidStakingNode
     {
         address ucAddr = PendingRequests[requestId].callbackAddr;
@@ -516,13 +516,13 @@ contract DOSProxy is Ownable {
         }
     }
 
-    function toBytes(uint x) internal pure returns (bytes memory b) {
+    function toBytes(uint x) private pure returns (bytes memory b) {
         b = new bytes(32);
         assembly { mstore(add(b, 32), x) }
     }
 
     // System-level secure distributed random number generator.
-    function updateRandomness(uint[2] memory sig, uint8 version) public fromValidStakingNode {
+    function updateRandomness(uint[2] calldata sig, uint8 version) external fromValidStakingNode {
         if (!validateAndVerify(
                 uint8(TrafficType.SystemRandom),
                 lastRandomness,
@@ -546,16 +546,16 @@ contract DOSProxy is Ownable {
         }
     }
 
-    /// @notice Caller ensure gid is valid and the corresponding pending group has indeed expired.
+    /// @notice Caller ensures gid is valid and the corresponding pending group has indeed expired.
     function cleanUpExpiredPendingGroup(uint gid) private {
-        PendingGroup storage group = pendingGroups[gid];
-        address member = group.memberList[HEAD_A];
+        PendingGroup storage pgrp = pendingGroups[gid];
+        address member = pgrp.memberList[HEAD_A];
         while (member != HEAD_A) {
             // 1. Update nodeToGroupIdList[member] and 2. put members back to pendingNodeList's head if necessary.
-            if (removeIdFromList(nodeToGroupIdList[member], group.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I) {
+            if (removeIdFromList(nodeToGroupIdList[member], pgrp.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I) {
                 insertToListHead(pendingNodeList, member);
             }
-            member = group.memberList[member];
+            member = pgrp.memberList[member];
         }
         // 3. Update pendingGroupList
         require(removeIdFromList(pendingGroupList, gid), "Invalid gid in pendingGroupList");
@@ -667,7 +667,7 @@ contract DOSProxy is Ownable {
     }
 
     // callback to handle re-grouping using generated random number as random seed.
-    function __callback__(uint requestId, uint rndSeed) public {
+    function __callback__(uint requestId, uint rndSeed) external {
         require(msg.sender == address(this), "Unauthenticated response");
         require(workingGroupIds.length >= groupToPick,
                 "No enough working group");
@@ -720,53 +720,56 @@ contract DOSProxy is Ownable {
     function regroup(address[] memory candidates, uint num) private {
         require(candidates.length == groupSize * num);
 
+        address[] memory members = new address[](groupSize);
+        uint groupId;
         for (uint i = 0; i < num; i++) {
-            address[] memory members = new address[](groupSize);
-            uint groupId = 0;
+            groupId = 0;
             // Generated groupId = sha3(...(sha3(sha3(member 1), member 2), ...), member n)
             for (uint j = 0; j < groupSize; j++) {
                 members[j] = candidates[i * groupSize + j];
                 groupId = uint(keccak256(abi.encodePacked(groupId, members[j])));
             }
-            PendingGroup storage pgrp = pendingGroups[groupId];
-            pgrp.groupId = groupId;
-            pgrp.startBlkNum = block.number;
-            pgrp.memberList[HEAD_A] = HEAD_A;
+            pendingGroups[groupId] = PendingGroup(groupId, block.number);
+            mapping(address => address) storage memberList = pendingGroups[groupId].memberList;
+            memberList[HEAD_A] = HEAD_A;
             for (uint j = 0; j < groupSize; j++) {
-                pgrp.memberList[members[j]] = pgrp.memberList[HEAD_A];
-                pgrp.memberList[HEAD_A] = members[j];
+                memberList[members[j]] = memberList[HEAD_A];
+                memberList[HEAD_A] = members[j];
             }
             insertToPendingGroupListTail(groupId);
             emit LogGrouping(groupId, members);
         }
     }
 
-    function registerGroupPubKey(uint groupId, uint[4] memory suggestedPubKey)
-        public
+    function registerGroupPubKey(uint groupId, uint[4] calldata suggestedPubKey)
+        external
         fromValidStakingNode
     {
         PendingGroup storage pgrp = pendingGroups[groupId];
-        require(pgrp.groupId != 0, "No such pending group to be registered");
         require(pgrp.memberList[msg.sender] != address(0), "Not from authorized group member");
-        require(workingGroups[groupId].groupId == 0, "Duplicated working group");
 
         bytes32 hashedPubKey = keccak256(abi.encodePacked(
             suggestedPubKey[0], suggestedPubKey[1], suggestedPubKey[2], suggestedPubKey[3]));
         pgrp.pubKeyCounts[hashedPubKey]++;
         emit LogPublicKeySuggested(groupId, suggestedPubKey, pgrp.pubKeyCounts[hashedPubKey], groupSize);
         if (pgrp.pubKeyCounts[hashedPubKey] > groupSize / 2) {
-            workingGroupIds.push(groupId);
-            Group storage group = workingGroups[groupId];
-            group.groupId = groupId;
-            group.groupPubKey = BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]);
-            group.birthBlkN = block.number;
+            address[] memory memberArray = new address[](groupSize);
+            uint idx = 0;
             address member = pgrp.memberList[HEAD_A];
             while (member != HEAD_A) {
-                group.members.push(member);
+                memberArray[idx++] = member;
                 // Update nodeToGroupIdList[member] with new group id.
                 insertToListHead(nodeToGroupIdList[member], groupId);
                 member = pgrp.memberList[member];
             }
+
+            workingGroupIds.push(groupId);
+            workingGroups[groupId] = Group(
+                groupId,
+                BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
+                block.number,
+                memberArray
+            );
 
             // Update pendingGroupList
             require(removeIdFromList(pendingGroupList, groupId), "Invalid groupId in pendingGroupList");

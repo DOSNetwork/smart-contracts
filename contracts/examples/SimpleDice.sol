@@ -82,7 +82,7 @@ contract SimpleDice is DOSOnChainSDK {
         emit ReceivedBet(gameId, rollUnder, msg.value, msg.sender);
     }
 
-    function __callback__(uint requestId, uint generatedRandom) public auth {
+    function __callback__(uint requestId, uint generatedRandom) external auth {
         address payable player = games[requestId].player;
         require(player != address(0x0));
 
