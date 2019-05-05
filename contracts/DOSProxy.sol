@@ -48,6 +48,7 @@ contract DOSProxy is Ownable {
     // Metadata of a to-be-registered group whose members are determined already.
     struct PendingGroup {
         uint groupId;
+        uint startBlkNum;
         mapping(bytes32 => uint) pubKeyCounts;
         // 0x1 (HEAD) -> member1 -> member2 -> ... -> memberN -> 0x1 (HEAD)
         mapping(address => address) memberList;
@@ -57,14 +58,14 @@ contract DOSProxy is Ownable {
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
-    uint public refreshSystemRandomHardLimit = 60; // blocks, ~15min
-    uint public groupMaturityPeriod = 11520; // blocks, ~2days
+    uint public refreshSystemRandomHardLimit = 60; // in blocks, ~15min
+    uint public groupMaturityPeriod = 11520; // in blocks, ~2days
     // When regrouping, picking @gropToPick working groups, plus one group from pending nodes.
     uint public groupToPick = 2;
     uint public groupSize = 21;
     // decimal 2.
     uint public groupingThreshold = 150;
-    // Bootstrapping related arguments
+    // Bootstrapping related arguments, in blocks.
     uint public bootstrapCommitDuration = 3;
     uint public bootstrapRevealDuration = 3;
     uint public bootstrapRevealThreshold = 3;
@@ -75,24 +76,34 @@ contract DOSProxy is Ownable {
     DOSAddressBridgeInterface public addressBridge =
         DOSAddressBridgeInterface(0xe987926A226932DFB1f71FA316461db272E05317);
 
-    // Linkedlist of newly registered ungrouped nodes, with HEAD points to the earliest and listTail points to the latest.
-    // Initial (empty) state: pendingNodeList[HEAD] == HEAD && listTail == HEAD.
-    mapping(address => address) public pendingNodeList;
     // Dummy head and placeholder used in linkedlists.
     uint private constant HEAD_I = 0x1;
     address private constant HEAD_A = address(0x1);
-    address private listTail;
+
+    // Linkedlist of newly registered ungrouped nodes, with HEAD points to the earliest and pendingNodeTail points to the latest.
+    // Initial state: pendingNodeList[HEAD_A] == HEAD_A && pendingNodeTail == HEAD_A.
+    mapping(address => address) public pendingNodeList;
+    address private pendingNodeTail;
     uint public numPendingNodes;
+
     // node => a linkedlist of working groupIds the node is in:
     // node => (0x1 -> workingGroupId1 -> workingGroupId2 -> ... -> workingGroupIdm -> 0x1)
     // Initial state: { nodeAddr : { HEAD_I : HEAD_I } }
     mapping(address => mapping(uint => uint)) nodeToGroupIdList;
+
     // groupId => Group
     mapping(uint => Group) workingGroups;
     // Index:groupId
     uint[] public workingGroupIds;
+
     // groupId => PendingGroup
-    mapping(uint => PendingGroup) pendingGroups;
+    mapping(uint => PendingGroup) public pendingGroups;
+    uint public pendingGroupMaxLife = 150;  // in blocks
+
+    // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
+    mapping(uint => uint) public pendingGroupList;
+    uint private pendingGroupTail;
+    // TODO: Remove this duplicated state variable to save SSTORE gas.
     uint public numPendingGroups = 0;
 
     uint public lastUpdatedBlock;
@@ -154,6 +165,7 @@ contract DOSProxy is Ownable {
     event UpdateBootstrapRevealDuration(uint oldDuration, uint newDuration);
     event UpdateBootstrapRevealThreshold(uint oldThreshold, uint newThreshold);
     event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
+    event UpdatePendingGroupMaxLife(uint oldLifeBlocks, uint newLifeBlocks);
     event Bite(uint blkNum, address indexed guardian);
 
     modifier fromValidStakingNode {
@@ -164,7 +176,9 @@ contract DOSProxy is Ownable {
 
     constructor() public {
         pendingNodeList[HEAD_A] = HEAD_A;
-        listTail = HEAD_A;
+        pendingNodeTail = HEAD_A;
+        pendingGroupList[HEAD_I] = HEAD_I;
+        pendingGroupTail = HEAD_I;
     }
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
@@ -234,6 +248,12 @@ contract DOSProxy is Ownable {
         bootstrapStartThreshold = newNum;
     }
 
+    function setPendingGroupMaxLife(uint newLife) public onlyOwner {
+        require(newLife != pendingGroupMaxLife && newLife != 0);
+        emit UpdatePendingGroupMaxLife(pendingGroupMaxLife, newLife);
+        pendingGroupMaxLife = newLife;
+    }
+
     function getCodeSize(address addr) internal view returns (uint size) {
         assembly {
             size := extcodesize(addr)
@@ -254,7 +274,7 @@ contract DOSProxy is Ownable {
             }
             idx = rnd % workingGroupIds.length;
             Group storage group = workingGroups[workingGroupIds[idx]];
-            if (block.number - group.birthBlkN < groupMaturityPeriod) {
+            if (groupMaturityPeriod + group.birthBlkN > block.number) {
                 return idx;
             } else {
                 dissolveWorkingGroup(idx, true);
@@ -277,20 +297,44 @@ contract DOSProxy is Ownable {
         emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId, getGroupPubKey(idx));
     }
 
-    /// Remove workingGroupId from node's group id linkedlist.
+    function insertToPendingGroupListTail(uint groupId) private {
+        pendingGroupList[groupId] = pendingGroupList[pendingGroupTail];
+        pendingGroupList[pendingGroupTail] = groupId;
+        pendingGroupTail = groupId;
+        numPendingGroups++;
+    }
+
+    function insertToPendingNodeListTail(address node) private {
+        pendingNodeList[node] = pendingNodeList[pendingNodeTail];
+        pendingNodeList[pendingNodeTail] = node;
+        pendingNodeTail = node;
+        numPendingNodes++;
+    }
+
+    function insertToListHead(mapping(uint => uint) storage list, uint id) private {
+        list[id] = list[HEAD_I];
+        list[HEAD_I] = id;
+    }
+
+    function insertToListHead(mapping(address => address) storage list, address node) private {
+        list[node] = list[HEAD_A];
+        list[HEAD_A] = node;
+    }
+
+    /// Remove id from a storage linkedlist.
     /// Return true when find and remove successfully.
-    function removeNodeGroupId(address node, uint groupId) private returns(bool) {
+    function removeIdFromList(mapping(uint => uint) storage list, uint id) private returns(bool) {
         uint prev = HEAD_I;
-        uint curr = nodeToGroupIdList[node][prev];
-        while (curr != HEAD_I && curr != groupId) {
+        uint curr = list[prev];
+        while (curr != HEAD_I && curr != id) {
             prev = curr;
-            curr = nodeToGroupIdList[node][prev];
+            curr = list[prev];
         }
         if (curr == HEAD_I) {
             return false;
         } else {
-            nodeToGroupIdList[node][prev] = nodeToGroupIdList[node][curr];
-            delete nodeToGroupIdList[node][curr];
+            list[prev] = list[curr];
+            delete list[curr];
             return true;
         }
     }
@@ -301,13 +345,10 @@ contract DOSProxy is Ownable {
         Group storage grp = workingGroups[workingGroupIds[idx]];
         for (uint i = 0; i < grp.members.length; i++) {
             address member = grp.members[i];
-            if (removeNodeGroupId(member, grp.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I && backToPendingPool) {
-                // Put member node into pendingNodeList once it doesn't belong to any working group.
-                // Notice: Guardian may need to signal group formation.
-                pendingNodeList[member] = pendingNodeList[listTail];
-                pendingNodeList[listTail] = member;
-                listTail = member;
-                numPendingNodes++;
+            // Update nodeToGroupIdList[member] and put members back to pendingNodeList's tail if necessary.
+            // Notice: Guardian may need to signal group formation.
+            if (removeIdFromList(nodeToGroupIdList[member], grp.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I && backToPendingPool) {
+                insertToPendingNodeListTail(member);
                 emit LogRegisteredNewPendingNode(member);
             }
         }
@@ -496,10 +537,38 @@ contract DOSProxy is Ownable {
         // TODO: include and test with blockhash.
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
         lastUpdatedBlock = block.number;
+
+        // Some cleanups when updating SystemRandom:
+        // 1. Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
+        uint gid = pendingGroupList[HEAD_I];
+        if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
+            cleanUpExpiredPendingGroup(gid);
+        }
+    }
+
+    /// @notice Caller ensure gid is valid and the corresponding pending group has indeed expired.
+    function cleanUpExpiredPendingGroup(uint gid) private {
+        PendingGroup storage group = pendingGroups[gid];
+        address member = group.memberList[HEAD_A];
+        while (member != HEAD_A) {
+            // 1. Update nodeToGroupIdList[member] and 2. put members back to pendingNodeList's head if necessary.
+            if (removeIdFromList(nodeToGroupIdList[member], group.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I) {
+                insertToListHead(pendingNodeList, member);
+            }
+            member = group.memberList[member];
+        }
+        // 3. Update pendingGroupList
+        require(removeIdFromList(pendingGroupList, gid), "Invalid gid in pendingGroupList");
+        // Reset tail if pendingGroupList becomes empty.
+        if (pendingGroupList[HEAD_I] == HEAD_I) {
+            pendingGroupTail = HEAD_I;
+        }
+        // 4. Update pendingGroup
+        delete pendingGroups[gid];
+        numPendingGroups--;
     }
 
     /// Guardian node functions
-    // Formerly "handleTimeout()"
     // TODO: Tune guardian signal algorithm.
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
@@ -516,7 +585,7 @@ contract DOSProxy is Ownable {
     /// @param idx The index in workingGroupIds array.
     function signalDissolve(uint idx) public {
         require(idx < workingGroupIds.length, "Working groups index overflow");
-        require(block.number - workingGroups[workingGroupIds[idx]].birthBlkN > groupMaturityPeriod,
+        require(workingGroups[workingGroupIds[idx]].birthBlkN + groupMaturityPeriod <= block.number,
                 "Not right time to signal dissolve yet");
 
         dissolveWorkingGroup(idx, true);
@@ -581,10 +650,7 @@ contract DOSProxy is Ownable {
         require(nodeToGroupIdList[msg.sender][HEAD_I] == 0, "Already registered in pending or working groups");
 
         nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
-        pendingNodeList[msg.sender] = pendingNodeList[listTail];
-        pendingNodeList[listTail] = msg.sender;
-        listTail = msg.sender;
-        numPendingNodes++;
+        insertToPendingNodeListTail(msg.sender);
         emit LogRegisteredNewPendingNode(msg.sender);
 
         // Generate new groups from newly registered nodes and nodes from existing working group.
@@ -625,7 +691,7 @@ contract DOSProxy is Ownable {
         regroup(candidates, groupToPick + 1);
     }
 
-    // Pick first @num nodes from pendingNodeList and put into the @candidates array from @startIndex.
+    // Pick @num nodes from pendingNodeList's head and put into the @candidates array from @startIndex.
     function pick(uint num, uint startIndex, address[] memory candidates) private {
         for (uint i = 0; i < num; i++) {
             address curr = pendingNodeList[HEAD_A];
@@ -634,9 +700,9 @@ contract DOSProxy is Ownable {
             candidates[startIndex + i] = curr;
         }
         numPendingNodes -= num;
-        // Reset listTail if necessary.
+        // Reset pendingNodeTail if necessary.
         if (numPendingNodes == 0) {
-            listTail = HEAD_A;
+            pendingNodeTail = HEAD_A;
         }
     }
 
@@ -664,12 +730,13 @@ contract DOSProxy is Ownable {
             }
             PendingGroup storage pgrp = pendingGroups[groupId];
             pgrp.groupId = groupId;
+            pgrp.startBlkNum = block.number;
             pgrp.memberList[HEAD_A] = HEAD_A;
             for (uint j = 0; j < groupSize; j++) {
                 pgrp.memberList[members[j]] = pgrp.memberList[HEAD_A];
                 pgrp.memberList[HEAD_A] = members[j];
             }
-            numPendingGroups++;
+            insertToPendingGroupListTail(groupId);
             emit LogGrouping(groupId, members);
         }
     }
@@ -696,11 +763,18 @@ contract DOSProxy is Ownable {
             address member = pgrp.memberList[HEAD_A];
             while (member != HEAD_A) {
                 group.members.push(member);
-                nodeToGroupIdList[member][groupId] = nodeToGroupIdList[member][HEAD_I];
-                nodeToGroupIdList[member][HEAD_I] = groupId;
+                // Update nodeToGroupIdList[member] with new group id.
+                insertToListHead(nodeToGroupIdList[member], groupId);
                 member = pgrp.memberList[member];
             }
 
+            // Update pendingGroupList
+            require(removeIdFromList(pendingGroupList, groupId), "Invalid groupId in pendingGroupList");
+            // Reset tail if pendingGroupList becomes empty.
+            if (pendingGroupList[HEAD_I] == HEAD_I) {
+                pendingGroupTail = HEAD_I;
+            }
+            // Update pendingGroup
             delete pendingGroups[groupId];
             numPendingGroups--;
             emit LogPublicKeyAccepted(groupId, suggestedPubKey, workingGroupIds.length);
