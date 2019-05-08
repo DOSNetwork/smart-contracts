@@ -122,23 +122,19 @@ contract DOSProxy is Ownable {
         string dataSource,
         string selector,
         uint randomness,
-        uint dispatchedGroupId,
-        // TODO: Sync with client to remove this event argument.
-        uint[4] dispatchedGroup
+        uint dispatchedGroupId
     );
     event LogRequestUserRandom(
         uint requestId,
         uint lastSystemRandomness,
         uint userSeed,
-        uint dispatchedGroupId,
-        // TODO: Sync with client to remove this event argument.
-        uint[4] dispatchedGroup
+        uint dispatchedGroupId
     );
     event LogNonSupportedType(string invalidSelector);
     event LogNonContractCall(address from);
     event LogCallbackTriggeredFor(address callbackAddr);
     event LogRequestFromNonExistentUC();
-    event LogUpdateRandom(uint lastRandomness, uint dispatchedGroupId,uint[4] dispatchedGroup);
+    event LogUpdateRandom(uint lastRandomness, uint dispatchedGroupId);
     event LogValidationResult(
         uint8 trafficType,
         uint trafficId,
@@ -151,10 +147,9 @@ contract DOSProxy is Ownable {
     event LogInsufficientPendingNode(uint numPendingNodes);
     event LogInsufficientWorkingGroup(uint numWorkingGroups);
     event LogGrouping(uint groupId, address[] nodeId);
-    event LogAddressNotFound(uint groupId, uint[4] pubKey);
-    event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint workingGroupSize);
-    event LogPublicKeySuggested(uint groupId, uint[4] pubKey, uint count, uint groupSize);
-    event LogGroupDissolve(uint groupId, uint[4] pubKey);
+    event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint numWorkingGroups);
+    event LogPublicKeySuggested(uint count);
+    event LogGroupDissolve(uint groupId);
     event LogRegisteredNewPendingNode(address node);
     event LogGroupingInitiated(uint pendingNodePool, uint groupsize, uint groupingthreshold);
     event UpdateGroupToPick(uint oldNum, uint newNum);
@@ -166,7 +161,9 @@ contract DOSProxy is Ownable {
     event UpdateBootstrapRevealThreshold(uint oldThreshold, uint newThreshold);
     event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
     event UpdatePendingGroupMaxLife(uint oldLifeBlocks, uint newLifeBlocks);
-    event Bite(uint blkNum, address indexed guardian);
+    event PendingGroupNoExist(uint groupId);
+    event GuardianError(string err);
+    event GuardianReward(uint blkNum, address indexed guardian);
 
     modifier fromValidStakingNode {
         require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
@@ -294,7 +291,7 @@ contract DOSProxy is Ownable {
         uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
-        emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId, getGroupPubKey(idx));
+        emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId);
     }
 
     function insertToPendingGroupListTail(uint groupId) private {
@@ -352,7 +349,7 @@ contract DOSProxy is Ownable {
                 emit LogRegisteredNewPendingNode(member);
             }
         }
-        emit LogGroupDissolve(grp.groupId, getGroupPubKey(idx));
+        emit LogGroupDissolve(grp.groupId);
 
         delete workingGroups[workingGroupIds[idx]];
         workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
@@ -388,8 +385,7 @@ contract DOSProxy is Ownable {
                     dataSource,
                     selector,
                     lastRandomness,
-                    grp.groupId,
-                    getGroupPubKey(idx)
+                    grp.groupId
                 );
                 return queryId;
             } else {
@@ -427,8 +423,7 @@ contract DOSProxy is Ownable {
                 requestId,
                 lastRandomness,
                 userSeed,
-                grp.groupId,
-                getGroupPubKey(idx)
+                grp.groupId
             );
             return requestId;
         } else {
@@ -574,28 +569,35 @@ contract DOSProxy is Ownable {
     /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
     function signalRandom() public {
-        require(block.number - lastUpdatedBlock > refreshSystemRandomHardLimit,
-                "Not right time to trigger random yet");
+        if (lastUpdatedBlock + refreshSystemRandomHardLimit > block.number) {
+            emit GuardianError("SystemRandom not expired yet");
+            return;
+        }
 
         kickoffRandom();
-        emit Bite(block.number, msg.sender);
+        emit GuardianReward(block.number, msg.sender);
     }
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to dissolve expired working group and claim for guardian rewards.
     /// @param idx The index in workingGroupIds array.
     function signalDissolve(uint idx) public {
         require(idx < workingGroupIds.length, "Working groups index overflow");
-        require(workingGroups[workingGroupIds[idx]].birthBlkN + groupMaturityPeriod <= block.number,
-                "Not right time to signal dissolve yet");
+        if (workingGroups[workingGroupIds[idx]].birthBlkN + groupMaturityPeriod > block.number) {
+            emit GuardianError("WorkingGroup not expired to be dissolved yet");
+            return;
+        }
 
         dissolveWorkingGroup(idx, true);
-        emit Bite(block.number, msg.sender);
+        emit GuardianReward(block.number, msg.sender);
     }
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
     function signalGroupFormation() public {
-        require(numPendingNodes >= groupSize * groupingThreshold / 100, "Not enough pending nodes");
+        if (numPendingNodes < groupSize * groupingThreshold / 10) {
+            emit GuardianError("Not enough pending nodes");
+            return;
+        }
 
         if (workingGroupIds.length >= groupToPick) {
             requestRandom(address(this), 1, block.number);
@@ -608,12 +610,17 @@ contract DOSProxy is Ownable {
                 bootstrapRevealDuration,
                 bootstrapRevealThreshold
             );
+            emit GuardianReward(block.number, msg.sender);
         }
     }
     // TODO: Reward guardian nodes.
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
-        require(numPendingNodes >= bootstrapStartThreshold, "Not enough nodes to bootstrap");
+        if (numPendingNodes < bootstrapStartThreshold) {
+            emit GuardianError("Not enough nodes to bootstrap");
+            return;
+        }
+
         // Reset.
         bootstrapRound = 0;
 
@@ -626,6 +633,7 @@ contract DOSProxy is Ownable {
         pick(arrSize, 0, candidates);
         shuffle(candidates, rndSeed);
         regroup(candidates, arrSize / groupSize);
+        emit GuardianReward(block.number, msg.sender);
     }
     /// End of Guardian functions
 
@@ -634,9 +642,8 @@ contract DOSProxy is Ownable {
 
     }
 
+    // Caller ensures no index overflow.
     function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
-        require(idx < workingGroupIds.length, "group index out of range");
-
         BN256.G2Point storage pubKey = workingGroups[workingGroupIds[idx]].groupPubKey;
         return [pubKey.x[0], pubKey.x[1], pubKey.y[0], pubKey.y[1]];
     }
@@ -746,13 +753,17 @@ contract DOSProxy is Ownable {
         fromValidStakingNode
     {
         PendingGroup storage pgrp = pendingGroups[groupId];
-        require(pgrp.groupId != 0, "Pending group doesn't exist");
+        if (pgrp.groupId == 0) {
+            emit PendingGroupNoExist(groupId);
+            return;
+        }
+
         require(pgrp.memberList[msg.sender] != address(0), "Not from authorized group member");
 
         bytes32 hashedPubKey = keccak256(abi.encodePacked(
             suggestedPubKey[0], suggestedPubKey[1], suggestedPubKey[2], suggestedPubKey[3]));
         pgrp.pubKeyCounts[hashedPubKey]++;
-        emit LogPublicKeySuggested(groupId, suggestedPubKey, pgrp.pubKeyCounts[hashedPubKey], groupSize);
+        emit LogPublicKeySuggested(pgrp.pubKeyCounts[hashedPubKey]);
         if (pgrp.pubKeyCounts[hashedPubKey] > groupSize / 2) {
             address[] memory memberArray = new address[](groupSize);
             uint idx = 0;
