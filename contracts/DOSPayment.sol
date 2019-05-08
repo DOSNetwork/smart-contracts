@@ -14,7 +14,8 @@ contract ERC20I {
 contract DOSPayment is Ownable {
     // DOS Token on rinkeby testnet
     address public networkToken = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
-    address public dropburnToken;
+    // DropBurn Token on rinkeby testnet
+    address public dropburnToken = 0x9bfE8F5749d90eB4049Ad94CC4De9b6C4C31f822;
     uint public minStake = 50000;  // Minimum number of tokens required to be eligible into the protocol network.
     uint public dropburnMaxQuota = 3;  // Each DropBurn quota reduces 10% of minStake requirement to participate into protocol.
     
