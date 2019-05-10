@@ -83,13 +83,13 @@ contract DOSProxy is Ownable {
     // Linkedlist of newly registered ungrouped nodes, with HEAD points to the earliest and pendingNodeTail points to the latest.
     // Initial state: pendingNodeList[HEAD_A] == HEAD_A && pendingNodeTail == HEAD_A.
     mapping(address => address) public pendingNodeList;
-    address private pendingNodeTail;
+    address public pendingNodeTail;
     uint public numPendingNodes;
 
     // node => a linkedlist of working groupIds the node is in:
     // node => (0x1 -> workingGroupId1 -> workingGroupId2 -> ... -> workingGroupIdm -> 0x1)
     // Initial state: { nodeAddr : { HEAD_I : HEAD_I } }
-    mapping(address => mapping(uint => uint)) nodeToGroupIdList;
+    mapping(address => mapping(uint => uint)) public nodeToGroupIdList;
 
     // groupId => Group
     mapping(uint => Group) workingGroups;
@@ -102,7 +102,7 @@ contract DOSProxy is Ownable {
 
     // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
     mapping(uint => uint) public pendingGroupList;
-    uint private pendingGroupTail;
+    uint public pendingGroupTail;
     // TODO: Remove this duplicated state variable to save SSTORE gas.
     uint public numPendingGroups = 0;
 
@@ -164,6 +164,8 @@ contract DOSProxy is Ownable {
     event PendingGroupNoExist(uint groupId);
     event GuardianError(string err);
     event GuardianReward(uint blkNum, address indexed guardian);
+    // TODO: Remove this debug event.
+    event RemovedPendingGroup(uint groupId);
 
     modifier fromValidStakingNode {
         require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
@@ -535,14 +537,15 @@ contract DOSProxy is Ownable {
 
         // Some cleanups when updating SystemRandom:
         // 1. Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
-        uint gid = pendingGroupList[HEAD_I];
-        if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
-            cleanUpExpiredPendingGroup(gid);
+        if (pendingGroupList[HEAD_I] != HEAD_I &&
+            pendingGroups[pendingGroupList[HEAD_I]].startBlkNum + pendingGroupMaxLife < block.number) {
+            cleanUpOldestExpiredPendingGroup();
         }
     }
 
-    /// @notice Caller ensures gid is valid and the corresponding pending group has indeed expired.
-    function cleanUpExpiredPendingGroup(uint gid) private {
+    /// @notice Caller ensures pendingGroupList is not emoty and pending group header has indeed expired.
+    function cleanUpOldestExpiredPendingGroup() private {
+        uint gid = pendingGroupList[HEAD_I];
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
         while (member != HEAD_A) {
@@ -553,14 +556,17 @@ contract DOSProxy is Ownable {
             member = pgrp.memberList[member];
         }
         // 3. Update pendingGroupList
-        require(removeIdFromList(pendingGroupList, gid), "Invalid gid in pendingGroupList");
+        pendingGroupList[HEAD_I] = pendingGroupList[gid];
+        delete pendingGroupList[gid];
         // Reset tail if pendingGroupList becomes empty.
         if (pendingGroupList[HEAD_I] == HEAD_I) {
             pendingGroupTail = HEAD_I;
         }
+
         // 4. Update pendingGroup
         delete pendingGroups[gid];
         numPendingGroups--;
+        emit RemovedPendingGroup(gid);
     }
 
     /// Guardian node functions
@@ -792,6 +798,7 @@ contract DOSProxy is Ownable {
             // Update pendingGroup
             delete pendingGroups[groupId];
             numPendingGroups--;
+            emit RemovedPendingGroup(groupId);
             emit LogPublicKeyAccepted(groupId, suggestedPubKey, workingGroupIds.length);
         }
     }
