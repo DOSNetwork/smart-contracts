@@ -549,10 +549,10 @@ contract DOSProxy is Ownable {
     function cleanUpOldestExpiredPendingGroup(uint gid) private {
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
+        uint prev;
+        bool removed;
         while (member != HEAD_A) {
             // 1. Update nodeToGroupIdList[member] and 2. put members back to pendingNodeList's head if necessary.
-            uint prev;
-            bool removed;
             (prev, removed) = removeIdFromList(nodeToGroupIdList[member], pgrp.groupId);
             if (removed && prev == HEAD_I) {
                 insertToListHead(pendingNodeList, member);
@@ -560,8 +560,6 @@ contract DOSProxy is Ownable {
             member = pgrp.memberList[member];
         }
         // 3. Update pendingGroupList
-        uint prev;
-        bool removed;
         (prev, removed) = removeIdFromList(pendingGroupList, gid);
         require(removed, "Invalid gid in pendingGroupList");
         // Reset pendingGroupTail if necessary.
