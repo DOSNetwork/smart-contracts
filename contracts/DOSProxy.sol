@@ -321,8 +321,7 @@ contract DOSProxy is Ownable {
     }
 
     /// Remove id from a storage linkedlist.
-    /// Return true when find and remove successfully.
-    function removeIdFromList(mapping(uint => uint) storage list, uint id) private returns(bool) {
+    function removeIdFromList(mapping(uint => uint) storage list, uint id) private returns(uint, bool) {
         uint prev = HEAD_I;
         uint curr = list[prev];
         while (curr != HEAD_I && curr != id) {
@@ -330,11 +329,11 @@ contract DOSProxy is Ownable {
             curr = list[prev];
         }
         if (curr == HEAD_I) {
-            return false;
+            return (HEAD_I, false);
         } else {
             list[prev] = list[curr];
             delete list[curr];
-            return true;
+            return (prev, true);
         }
     }
 
@@ -346,7 +345,10 @@ contract DOSProxy is Ownable {
             address member = grp.members[i];
             // Update nodeToGroupIdList[member] and put members back to pendingNodeList's tail if necessary.
             // Notice: Guardian may need to signal group formation.
-            if (removeIdFromList(nodeToGroupIdList[member], grp.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I && backToPendingPool) {
+            uint prev;
+            bool removed;
+            (prev, removed) = removeIdFromList(nodeToGroupIdList[member], grp.groupId);
+            if (removed && prev == HEAD_I && backToPendingPool) {
                 insertToPendingNodeListTail(member);
                 emit LogRegisteredNewPendingNode(member);
             }
@@ -537,30 +539,34 @@ contract DOSProxy is Ownable {
 
         // Some cleanups when updating SystemRandom:
         // 1. Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
-        if (pendingGroupList[HEAD_I] != HEAD_I &&
-            pendingGroups[pendingGroupList[HEAD_I]].startBlkNum + pendingGroupMaxLife < block.number) {
-            cleanUpOldestExpiredPendingGroup();
+        uint gid = pendingGroupList[HEAD_I];
+        if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
+            cleanUpOldestExpiredPendingGroup(gid);
         }
     }
 
     /// @notice Caller ensures pendingGroupList is not emoty and pending group header has indeed expired.
-    function cleanUpOldestExpiredPendingGroup() private {
-        uint gid = pendingGroupList[HEAD_I];
+    function cleanUpOldestExpiredPendingGroup(uint gid) private {
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
         while (member != HEAD_A) {
             // 1. Update nodeToGroupIdList[member] and 2. put members back to pendingNodeList's head if necessary.
-            if (removeIdFromList(nodeToGroupIdList[member], pgrp.groupId) && nodeToGroupIdList[member][HEAD_I] == HEAD_I) {
+            uint prev;
+            bool removed;
+            (prev, removed) = removeIdFromList(nodeToGroupIdList[member], pgrp.groupId);
+            if (removed && prev == HEAD_I) {
                 insertToListHead(pendingNodeList, member);
             }
             member = pgrp.memberList[member];
         }
         // 3. Update pendingGroupList
-        pendingGroupList[HEAD_I] = pendingGroupList[gid];
-        delete pendingGroupList[gid];
-        // Reset tail if pendingGroupList becomes empty.
-        if (pendingGroupList[HEAD_I] == HEAD_I) {
-            pendingGroupTail = HEAD_I;
+        uint prev;
+        bool removed;
+        (prev, removed) = removeIdFromList(pendingGroupList, gid);
+        require(removed, "Invalid gid in pendingGroupList");
+        // Reset pendingGroupTail if necessary.
+        if (pendingGroupTail == gid) {
+            pendingGroupTail = prev;
         }
 
         // 4. Update pendingGroup
@@ -790,10 +796,13 @@ contract DOSProxy is Ownable {
             );
 
             // Update pendingGroupList
-            require(removeIdFromList(pendingGroupList, groupId), "Invalid groupId in pendingGroupList");
-            // Reset tail if pendingGroupList becomes empty.
-            if (pendingGroupList[HEAD_I] == HEAD_I) {
-                pendingGroupTail = HEAD_I;
+            uint prev;
+            bool removed;
+            (prev, removed) = removeIdFromList(pendingGroupList, groupId);
+            require(removed, "Invalid groupId in pendingGroupList");
+            // Reset pendingGroupTail if necessary.
+            if (pendingGroupTail == groupId) {
+                pendingGroupTail = prev;
             }
             // Update pendingGroup
             delete pendingGroups[groupId];
