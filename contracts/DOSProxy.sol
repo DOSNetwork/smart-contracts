@@ -348,9 +348,11 @@ contract DOSProxy is Ownable {
             uint prev;
             bool removed;
             (prev, removed) = removeIdFromList(nodeToGroupIdList[member], grp.groupId);
-            if (removed && prev == HEAD_I && backToPendingPool) {
-                insertToPendingNodeListTail(member);
-                emit LogRegisteredNewPendingNode(member);
+            if (removed && prev == HEAD_I) {
+                if (backToPendingPool && pendingNodeList[member] == address(0)) {
+                    insertToPendingNodeListTail(member);
+                    emit LogRegisteredNewPendingNode(member);
+                }
             }
         }
         emit LogGroupDissolve(grp.groupId);
@@ -552,14 +554,13 @@ contract DOSProxy is Ownable {
         uint prev;
         bool removed;
         while (member != HEAD_A) {
-            // 1. Update nodeToGroupIdList[member] and 2. put members back to pendingNodeList's head if necessary.
-            (prev, removed) = removeIdFromList(nodeToGroupIdList[member], pgrp.groupId);
-            if (removed && prev == HEAD_I) {
+            // 1. Put member back to pendingNodeList's head if it's not in any workingGroup.
+            if (nodeToGroupIdList[member][HEAD_I] == HEAD_I && pendingNodeList[member] == address(0)) {
                 insertToListHead(pendingNodeList, member);
             }
             member = pgrp.memberList[member];
         }
-        // 3. Update pendingGroupList
+        // 2. Update pendingGroupList
         (prev, removed) = removeIdFromList(pendingGroupList, gid);
         require(removed, "Invalid gid in pendingGroupList");
         // Reset pendingGroupTail if necessary.
@@ -567,7 +568,7 @@ contract DOSProxy is Ownable {
             pendingGroupTail = prev;
         }
 
-        // 4. Update pendingGroup
+        // 3. Update pendingGroup
         delete pendingGroups[gid];
         numPendingGroups--;
         emit RemovedPendingGroup(gid);
