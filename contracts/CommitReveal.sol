@@ -27,7 +27,7 @@ contract CommitReveal is Ownable {
 
     modifier checkCommit(uint _cid, bytes32 _commitment) {
         Campaign storage c = campaigns[_cid];
-        require(_cid != 0 &
+        require(_cid != 0 &&
                 block.number >= c.startBlock &&
                 block.number < c.startBlock + c.commitDuration,
                 "Not in commit phase");
