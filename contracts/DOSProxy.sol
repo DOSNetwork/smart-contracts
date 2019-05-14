@@ -66,9 +66,9 @@ contract DOSProxy is Ownable {
     // decimal 2.
     uint public groupingThreshold = 150;
     // Bootstrapping related arguments, in blocks.
-    uint public bootstrapCommitDuration = 3;
-    uint public bootstrapRevealDuration = 3;
-    uint public bootstrapRevealThreshold = 3;
+    uint public bootstrapCommitDuration = 20;
+    uint public bootstrapRevealDuration = 20;
+    uint public bootstrapRevealThreshold = 101;
     uint public bootstrapStartThreshold = groupSize * (groupToPick + 1);
     uint public bootstrapRound = 0;
 
@@ -98,7 +98,7 @@ contract DOSProxy is Ownable {
 
     // groupId => PendingGroup
     mapping(uint => PendingGroup) public pendingGroups;
-    uint public pendingGroupMaxLife = 150;  // in blocks
+    uint public pendingGroupMaxLife = 40;  // in blocks
 
     // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
     mapping(uint => uint) public pendingGroupList;
@@ -605,7 +605,7 @@ contract DOSProxy is Ownable {
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
     function signalGroupFormation() public {
-        if (numPendingNodes < groupSize * groupingThreshold / 10) {
+        if (numPendingNodes < groupSize * groupingThreshold / 100) {
             emit GuardianError("Not enough pending nodes");
             return;
         }
