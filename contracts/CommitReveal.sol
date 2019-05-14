@@ -22,12 +22,12 @@ contract CommitReveal is Ownable {
     }
 
     Campaign[] public campaigns;
-    // Only whitelised contracts are permitted to kick off commit-reveal process.
+    // Only whitelised contracts are permitted to kick off commit-reveal process
     mapping(address => bool) public whitelisted;
 
     modifier checkCommit(uint _cid, bytes32 _commitment) {
         Campaign storage c = campaigns[_cid];
-        require(_cid != 0 &&
+        require(_cid != 0 &
                 block.number >= c.startBlock &&
                 block.number < c.startBlock + c.commitDuration,
                 "Not in commit phase");
@@ -109,12 +109,13 @@ contract CommitReveal is Ownable {
         emit LogReveal(_cid, msg.sender, _secret);
     }
 
+    // Return value of 0 representing invalid random output.
     function getRandom(uint _cid) public view checkFinish(_cid) returns (uint) {
         Campaign storage c = campaigns[_cid];
         if (c.revealNum >= c.revealThreshold) {
             return c.generatedRandom;
         } else{
-            revert("Commit Reveal Random Number Generation Failed");
+            return 0;
         }
     }
 }
