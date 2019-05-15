@@ -68,7 +68,6 @@ contract DOSProxy is Ownable {
     // Bootstrapping related arguments, in blocks.
     uint public bootstrapCommitDuration = 20;
     uint public bootstrapRevealDuration = 20;
-    uint public bootstrapRevealThreshold = 101;
     uint public bootstrapStartThreshold = groupSize * (groupToPick + 1);
     uint public bootstrapRound = 0;
 
@@ -162,7 +161,6 @@ contract DOSProxy is Ownable {
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
     event UpdateBootstrapCommitDuration(uint oldDuration, uint newDuration);
     event UpdateBootstrapRevealDuration(uint oldDuration, uint newDuration);
-    event UpdateBootstrapRevealThreshold(uint oldThreshold, uint newThreshold);
     event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
     event UpdatePendingGroupMaxLife(uint oldLifeBlocks, uint newLifeBlocks);
     event GuardianReward(uint blkNum, address indexed guardian);
@@ -234,12 +232,6 @@ contract DOSProxy is Ownable {
         require(newRevealDuration != bootstrapRevealDuration && newRevealDuration != 0);
         emit UpdateBootstrapRevealDuration(bootstrapRevealDuration, newRevealDuration);
         bootstrapRevealDuration = newRevealDuration;
-    }
-
-    function setBootstrapRevealThreshold(uint newRevealThreshold) public onlyOwner {
-        require(newRevealThreshold != bootstrapRevealThreshold && newRevealThreshold != 0);
-        emit UpdateBootstrapRevealThreshold(bootstrapRevealThreshold, newRevealThreshold);
-        bootstrapRevealThreshold = newRevealThreshold;
     }
 
     function setbootstrapStartThreshold(uint newNum) public onlyOwner {
@@ -642,7 +634,7 @@ contract DOSProxy is Ownable {
     /// End of Guardian functions
 
     /// TODO
-    function unregisterNode() public {
+    function unregisterNode() public pure {
 
     }
 
@@ -692,7 +684,7 @@ contract DOSProxy is Ownable {
                     block.number,
                     bootstrapCommitDuration,
                     bootstrapRevealDuration,
-                    bootstrapRevealThreshold
+                    bootstrapStartThreshold
                 );
                 return true;
             } else {
