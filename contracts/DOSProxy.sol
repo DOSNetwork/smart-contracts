@@ -311,14 +311,15 @@ contract DOSProxy is Ownable {
         numPendingNodes++;
     }
 
+    function insertToPendingNodeListHead(address node) private {
+        pendingNodeList[node] = pendingNodeList[HEAD_A];
+        pendingNodeList[HEAD_A] = node;
+        numPendingNodes++;
+    }
+
     function insertToListHead(mapping(uint => uint) storage list, uint id) private {
         list[id] = list[HEAD_I];
         list[HEAD_I] = id;
-    }
-
-    function insertToListHead(mapping(address => address) storage list, address node) private {
-        list[node] = list[HEAD_A];
-        list[HEAD_A] = node;
     }
 
     /// Remove id from a storage linkedlist.
@@ -564,7 +565,7 @@ contract DOSProxy is Ownable {
         while (member != HEAD_A) {
             // 1. Put member back to pendingNodeList's head if it's not in any workingGroup.
             if (nodeToGroupIdList[member][HEAD_I] == HEAD_I && pendingNodeList[member] == address(0)) {
-                insertToListHead(pendingNodeList, member);
+                insertToPendingNodeListHead(member);
             }
             member = pgrp.memberList[member];
         }
