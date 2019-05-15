@@ -149,7 +149,7 @@ contract DOSProxy is Ownable {
     event LogInsufficientWorkingGroup(uint numWorkingGroups, uint numPendingGroups);
     event LogGrouping(uint groupId, address[] nodeId);
     event LogPublicKeyAccepted(uint groupId, uint[4] pubKey, uint numWorkingGroups);
-    event LogPublicKeySuggested(uint count);
+    event LogPublicKeySuggested(uint groupId, uint pubKeyCount);
     event LogGroupDissolve(uint groupId);
     event LogRegisteredNewPendingNode(address node);
     event LogGroupingInitiated(uint pendingNodePool, uint groupsize, uint groupingthreshold);
@@ -570,9 +570,8 @@ contract DOSProxy is Ownable {
         }
         // 2. Update pendingGroupList
         (prev, removed) = removeIdFromList(pendingGroupList, gid);
-        require(removed, "Invalid gid in pendingGroupList");
         // Reset pendingGroupTail if necessary.
-        if (pendingGroupTail == gid) {
+        if (removed && pendingGroupTail == gid) {
             pendingGroupTail = prev;
         }
 
@@ -686,14 +685,19 @@ contract DOSProxy is Ownable {
             emit LogError("Skipped signal, no enough nodes or groups in the network");
             return false;
         } else {
-            require(bootstrapRound == 0, "Invalid bootstrap round");
-            bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
-                block.number,
-                bootstrapCommitDuration,
-                bootstrapRevealDuration,
-                bootstrapRevealThreshold
-            );
-            return true;
+            // System needs re-bootstrap
+            if (bootstrapRound == 0) {
+                bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
+                    block.number,
+                    bootstrapCommitDuration,
+                    bootstrapRevealDuration,
+                    bootstrapRevealThreshold
+                );
+                return true;
+            } else {
+                emit LogError("Skipped group formation, already in bootstrap phase");
+                return false;
+            }
         }
     }
 
@@ -789,7 +793,7 @@ contract DOSProxy is Ownable {
         bytes32 hashedPubKey = keccak256(abi.encodePacked(
             suggestedPubKey[0], suggestedPubKey[1], suggestedPubKey[2], suggestedPubKey[3]));
         pgrp.pubKeyCounts[hashedPubKey]++;
-        emit LogPublicKeySuggested(pgrp.pubKeyCounts[hashedPubKey]);
+        emit LogPublicKeySuggested(groupId, pgrp.pubKeyCounts[hashedPubKey]);
         if (pgrp.pubKeyCounts[hashedPubKey] > groupSize / 2) {
             address[] memory memberArray = new address[](groupSize);
             uint idx = 0;
@@ -813,9 +817,8 @@ contract DOSProxy is Ownable {
             uint prev;
             bool removed;
             (prev, removed) = removeIdFromList(pendingGroupList, groupId);
-            require(removed, "Invalid groupId in pendingGroupList");
             // Reset pendingGroupTail if necessary.
-            if (pendingGroupTail == groupId) {
+            if (removed && pendingGroupTail == groupId) {
                 pendingGroupTail = prev;
             }
             // Update pendingGroup
