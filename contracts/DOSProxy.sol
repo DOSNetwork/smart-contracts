@@ -648,6 +648,10 @@ contract DOSProxy is Ownable {
         return workingGroupIds.length;
     }
 
+    function getExpiredWorkingGroupSize() public view returns (uint) {
+        return expiredWorkingGroupIds.length;
+    }
+
     function registerNewNode() public fromValidStakingNode {
         require(pendingNodeList[msg.sender] == address(0), "Duplicated pending node");
         require(nodeToGroupIdList[msg.sender][HEAD_I] == 0, "Already registered in pending or working groups");
