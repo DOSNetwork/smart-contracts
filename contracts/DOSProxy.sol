@@ -66,8 +66,8 @@ contract DOSProxy is Ownable {
     // decimal 2.
     uint public groupingThreshold = 150;
     // Bootstrapping related arguments, in blocks.
-    uint public bootstrapCommitDuration = 20;
-    uint public bootstrapRevealDuration = 20;
+    uint public bootstrapCommitDuration = 40;
+    uint public bootstrapRevealDuration = 40;
     uint public bootstrapStartThreshold = groupSize * (groupToPick + 1);
     uint public bootstrapRound = 0;
 
@@ -539,16 +539,9 @@ contract DOSProxy is Ownable {
         // TODO: include and test with blockhash.
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
         lastUpdatedBlock = block.number;
-
-        // Some cleanups when updating SystemRandom:
-        // 1. Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
-        uint gid = pendingGroupList[HEAD_I];
-        if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
-            cleanUpOldestExpiredPendingGroup(gid);
-        }
     }
 
-    /// @notice Caller ensures pendingGroupList is not emoty and pending group header has indeed expired.
+    /// @notice Caller ensures pendingGroupList is not empty and pending group header has indeed expired.
     function cleanUpOldestExpiredPendingGroup(uint gid) private {
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
@@ -586,16 +579,23 @@ contract DOSProxy is Ownable {
         }
 
         kickoffRandom();
+
         emit GuardianReward(block.number, msg.sender);
     }
     // TODO: Reward guardian nodes.
-    /// @dev Guardian signals to dissolve expired working group and claim for guardian rewards.
+    /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
     function signalDissolve() public {
         require(expiredWorkingGroupIds.length > 0, "No expired working group");
 
         dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
         expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
         expiredWorkingGroupIds.length--;
+
+        // Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
+        uint gid = pendingGroupList[HEAD_I];
+        if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
+            cleanUpOldestExpiredPendingGroup(gid);
+        }
         emit GuardianReward(block.number, msg.sender);
     }
     // TODO: Reward guardian nodes.
@@ -621,6 +621,8 @@ contract DOSProxy is Ownable {
             emit LogError("CommitReveal failure, bootstrapRound reset");
             return;
         }
+        lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, rndSeed)));
+        lastUpdatedBlock = block.number;
 
         // TODO: Refine bootstrap algorithm to allow group overlapping.
         uint arrSize = bootstrapStartThreshold / groupSize * groupSize;

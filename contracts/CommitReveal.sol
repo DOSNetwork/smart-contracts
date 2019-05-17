@@ -59,6 +59,7 @@ contract CommitReveal is Ownable {
     event LogCommit(uint cid, address from, bytes32 commitment);
     event LogReveal(uint cid, address from, uint secret);
     event LogRandom(uint cid, uint random);
+    event LogRandomFailure(uint cid, uint commitNum, uint revealNum, uint revealThreshold);
 
     constructor() public {
         // campaigns[0] is not used.
@@ -110,11 +111,13 @@ contract CommitReveal is Ownable {
     }
 
     // Return value of 0 representing invalid random output.
-    function getRandom(uint _cid) public view checkFinish(_cid) returns (uint) {
+    function getRandom(uint _cid) public checkFinish(_cid) returns (uint) {
         Campaign storage c = campaigns[_cid];
         if (c.revealNum >= c.revealThreshold) {
+            emit LogRandom(_cid, c.generatedRandom);
             return c.generatedRandom;
         } else{
+            emit LogRandomFailure(_cid, c.commitNum, c.revealNum, c.revealThreshold);
             return 0;
         }
     }
