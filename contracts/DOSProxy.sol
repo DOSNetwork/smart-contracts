@@ -73,7 +73,7 @@ contract DOSProxy is Ownable {
 
     // DOSAddressBridge on rinkeby testnet
     DOSAddressBridgeInterface public addressBridge =
-        DOSAddressBridgeInterface(0xe987926A226932DFB1f71FA316461db272E05317);
+        DOSAddressBridgeInterface(0x6DDf7C941106E875a96747e785c19dFd408d5117);
 
     uint private constant UINTMAX = uint(-1);
     // Dummy head and placeholder used in linkedlists.
