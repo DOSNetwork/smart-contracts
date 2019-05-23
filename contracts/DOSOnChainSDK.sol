@@ -1,5 +1,6 @@
 pragma solidity ^0.5.0;
 
+// Comment out utils library if you don't need it to save gas. (L4 and L17)
 import "./lib/utils.sol";
 
 contract DOSProxyInterface {
@@ -12,6 +13,7 @@ contract DOSAddressBridgeInterface {
 }
 
 contract DOSOnChainSDK {
+    // Comment out utils library if you don't need it to save gas. (L4 and L17)
     using utils for *;
 
     DOSProxyInterface dosProxy;
