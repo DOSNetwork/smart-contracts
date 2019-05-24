@@ -655,9 +655,14 @@ contract DOSProxy is Ownable {
     }
 
     function registerNewNode() public fromValidStakingNode {
-        require(pendingNodeList[msg.sender] == address(0), "Duplicated pending node");
-        require(nodeToGroupIdList[msg.sender][HEAD_I] == 0, "Already registered in pending or working groups");
-
+        //Duplicated pending node
+        if (pendingNodeList[msg.sender] == address(0)) {
+            return
+        }
+        //Already registered in pending or working groups
+        if (nodeToGroupIdList[msg.sender][HEAD_I] == 0) {
+            return
+        }
         nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
         insertToPendingNodeListTail(msg.sender);
         emit LogRegisteredNewPendingNode(msg.sender);
