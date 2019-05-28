@@ -584,19 +584,29 @@ contract DOSProxy is Ownable {
     }
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
-    function signalDissolve() public {
-        require(expiredWorkingGroupIds.length > 0, "No expired working group");
-
-        dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
-        expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
-        expiredWorkingGroupIds.length--;
-
+    function signalGroupDissolve() public {
+        bool claimed = false;
+        // Clean up oldest expired working group and related metadata.
+        if (expiredWorkingGroupIds.length > 0) {
+            dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
+            expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
+            expiredWorkingGroupIds.length--;
+            claimed = true;
+        } else {
+            emit LogError("No expired working group to clean up");
+        }
         // Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
         uint gid = pendingGroupList[HEAD_I];
         if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
             cleanUpOldestExpiredPendingGroup(gid);
+            claimed = true;
+        } else {
+            emit LogError("No expired pending group to clean up");
         }
-        emit GuardianReward(block.number, msg.sender);
+        // Claim guardian rewards if work is done.
+        if (claimed) {
+            emit GuardianReward(block.number, msg.sender);
+        }
     }
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
@@ -657,11 +667,11 @@ contract DOSProxy is Ownable {
     function registerNewNode() public fromValidStakingNode {
         //Duplicated pending node
         if (pendingNodeList[msg.sender] == address(0)) {
-            return
+            return;
         }
         //Already registered in pending or working groups
         if (nodeToGroupIdList[msg.sender][HEAD_I] == 0) {
-            return
+            return;
         }
         nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
         insertToPendingNodeListTail(msg.sender);
