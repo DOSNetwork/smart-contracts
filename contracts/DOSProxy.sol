@@ -339,9 +339,7 @@ contract DOSProxy is Ownable {
             address member = grp.members[i];
             // Update nodeToGroupIdList[member] and put members back to pendingNodeList's tail if necessary.
             // Notice: Guardian may need to signal group formation.
-            uint prev;
-            bool removed;
-            (prev, removed) = removeIdFromList(nodeToGroupIdList[member], grp.groupId);
+            (uint prev, bool removed) = removeIdFromList(nodeToGroupIdList[member], grp.groupId);
             if (removed && prev == HEAD_I) {
                 if (backToPendingPool && pendingNodeList[member] == address(0)) {
                     insertToPendingNodeListTail(member);
@@ -545,8 +543,6 @@ contract DOSProxy is Ownable {
     function cleanUpOldestExpiredPendingGroup(uint gid) private {
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
-        uint prev;
-        bool removed;
         while (member != HEAD_A) {
             // 1. Put member back to pendingNodeList's head if it's not in any workingGroup.
             if (nodeToGroupIdList[member][HEAD_I] == HEAD_I && pendingNodeList[member] == address(0)) {
@@ -555,7 +551,7 @@ contract DOSProxy is Ownable {
             member = pgrp.memberList[member];
         }
         // 2. Update pendingGroupList
-        (prev, removed) = removeIdFromList(pendingGroupList, gid);
+        (uint prev, bool removed) = removeIdFromList(pendingGroupList, gid);
         // Reset pendingGroupTail if necessary.
         if (removed && pendingGroupTail == gid) {
             pendingGroupTail = prev;
@@ -828,9 +824,7 @@ contract DOSProxy is Ownable {
             );
 
             // Update pendingGroupList
-            uint prev;
-            bool removed;
-            (prev, removed) = removeIdFromList(pendingGroupList, groupId);
+            (uint prev, bool removed) = removeIdFromList(pendingGroupList, groupId);
             // Reset pendingGroupTail if necessary.
             if (removed && pendingGroupTail == groupId) {
                 pendingGroupTail = prev;
