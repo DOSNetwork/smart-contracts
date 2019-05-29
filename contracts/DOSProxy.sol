@@ -662,11 +662,11 @@ contract DOSProxy is Ownable {
 
     function registerNewNode() public fromValidStakingNode {
         //Duplicated pending node
-        if (pendingNodeList[msg.sender] == address(0)) {
+        if (pendingNodeList[msg.sender] != address(0)) {
             return;
         }
         //Already registered in pending or working groups
-        if (nodeToGroupIdList[msg.sender][HEAD_I] == 0) {
+        if (nodeToGroupIdList[msg.sender][HEAD_I] != 0) {
             return;
         }
         nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
