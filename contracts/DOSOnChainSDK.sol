@@ -18,7 +18,7 @@ contract DOSOnChainSDK {
 
     DOSProxyInterface dosProxy;
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x6DDf7C941106E875a96747e785c19dFd408d5117);
+        DOSAddressBridgeInterface(0xf0CEFfc4209e38EA3Cd1926DDc2bC641cbFFd1cF);
 
     modifier resolveAddress {
         dosProxy = DOSProxyInterface(dosAddrBridge.getProxyAddress());
