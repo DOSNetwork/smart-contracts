@@ -1,10 +1,7 @@
 pragma solidity ^0.5.0;
-// Do not use in production
-// pragma experimental ABIEncoderV2;
-
-import "./lib/BN256.sol";
-import "./Ownable.sol";
-
+pragma experimental ABIEncoderV2;
+import "../lib/BN256.sol";
+import "../Ownable.sol";
 contract UserContractInterface {
     // Query callback.
     function __callback__(uint, bytes calldata) external;
@@ -12,21 +9,7 @@ contract UserContractInterface {
     function __callback__(uint, uint) external;
 }
 
-contract CommitRevealInterface {
-    function startCommitReveal(uint, uint, uint, uint) public returns(uint);
-    function getRandom(uint) public returns(uint);
-}
-
-contract DOSAddressBridgeInterface {
-    function getCommitRevealAddress() public view returns(address);
-    function getPaymentAddress() public view returns(address);
-}
-
-contract DOSPaymentInterface {
-    function fromValidStakingNode(address) public view returns(bool);
-}
-
-contract DOSProxy is Ownable {
+contract DOSProxyMock is Ownable {
     using BN256 for *;
 
     // Metadata of pending request.
@@ -59,21 +42,17 @@ contract DOSProxy is Ownable {
     mapping(uint => PendingRequest) PendingRequests;
 
     uint public refreshSystemRandomHardLimit = 60; // in blocks, ~15min
-    uint public groupMaturityPeriod = 11520; // in blocks, ~2days
+    uint public groupMaturityPeriod = 80; // in blocks, ~2days
     // When regrouping, picking @gropToPick working groups, plus one group from pending nodes.
     uint public groupToPick = 2;
-    uint public groupSize = 21;
+    uint public groupSize = 3;
     // decimal 2.
-    uint public groupingThreshold = 150;
+    uint public groupingThreshold = 110;
     // Bootstrapping related arguments, in blocks.
-    uint public bootstrapCommitDuration = 40;
-    uint public bootstrapRevealDuration = 40;
+    uint public bootstrapCommitDuration = 10;
+    uint public bootstrapRevealDuration = 10;
     uint public bootstrapStartThreshold = groupSize * (groupToPick + 1);
     uint public bootstrapRound = 0;
-
-    // DOSAddressBridge on rinkeby testnet
-    DOSAddressBridgeInterface public addressBridge =
-        DOSAddressBridgeInterface(0xf0CEFfc4209e38EA3Cd1926DDc2bC641cbFFd1cF);
 
     uint private constant UINTMAX = uint(-1);
     // Dummy head and placeholder used in linkedlists.
@@ -92,7 +71,7 @@ contract DOSProxy is Ownable {
     mapping(address => mapping(uint => uint)) public nodeToGroupIdList;
 
     // groupId => Group
-    mapping(uint => Group) workingGroups;
+    mapping(uint => Group) public workingGroups;
     // Index:groupId
     uint[] public workingGroupIds;
     uint[] public expiredWorkingGroupIds;
@@ -168,8 +147,6 @@ contract DOSProxy is Ownable {
 
 
     modifier fromValidStakingNode {
-        require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
-                "Invalid staking node");
         _;
     }
 
@@ -498,13 +475,7 @@ contract DOSProxy is Ownable {
         bytes memory message = abi.encodePacked(data, msg.sender);
 
         // Verification
-        BN256.G1Point[] memory p1 = new BN256.G1Point[](2);
-        BN256.G2Point[] memory p2 = new BN256.G2Point[](2);
-        p1[0] = BN256.negate(signature);
-        p1[1] = BN256.hashToG1(message);
-        p2[0] = BN256.P2();
-        p2[1] = grpPubKey;
-        bool passVerify = BN256.pairingCheck(p1, p2);
+        bool passVerify = true;
         emit LogValidationResult(
             trafficType,
             trafficId,
@@ -665,11 +636,7 @@ contract DOSProxy is Ownable {
 
         // Reset.
         bootstrapRound = 0;
-        uint rndSeed = CommitRevealInterface(addressBridge.getCommitRevealAddress()).getRandom(_cid);
-        if (rndSeed == 0) {
-            emit LogError("CommitReveal failure, bootstrapRound reset");
-            return;
-        }
+        uint rndSeed = 1;
         lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, rndSeed)));
         lastUpdatedBlock = block.number;
 
@@ -796,12 +763,7 @@ contract DOSProxy is Ownable {
         } else {
             // System needs re-bootstrap
             if (bootstrapRound == 0) {
-                bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
-                    block.number,
-                    bootstrapCommitDuration,
-                    bootstrapRevealDuration,
-                    bootstrapStartThreshold
-                );
+                bootstrapRound = 1;
                 return true;
             } else {
                 emit LogError("Skipped group formation, already in bootstrap phase");
