@@ -61,10 +61,11 @@ contract DOSProxy is Ownable {
     uint public refreshSystemRandomHardLimit = 60; // in blocks, ~15min
     uint public groupMaturityPeriod = 11520; // in blocks, ~2days
     // When regrouping, picking @gropToPick working groups, plus one group from pending nodes.
+    uint public expiredWorkingGroupDissolveLimit = 2;
     uint public groupToPick = 2;
     uint public groupSize = 21;
     // decimal 2.
-    uint public groupingThreshold = 150;
+    uint public groupingThreshold = 110;
     // Bootstrapping related arguments, in blocks.
     uint public bootstrapCommitDuration = 40;
     uint public bootstrapRevealDuration = 40;
@@ -263,15 +264,19 @@ contract DOSProxy is Ownable {
 
     function dispatchJobCore(TrafficType trafficType, uint pseudoSeed) private returns(uint idx) {
         uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness)));
+        uint dissolveNum = 0;
         do {
             if (workingGroupIds.length == 0) return UINTMAX;
             idx = rnd % workingGroupIds.length;
             Group storage group = workingGroups[workingGroupIds[idx]];
-            if (groupMaturityPeriod + group.birthBlkN <= block.number) {
+            // Use idx %10 to avoid dissolving all of working group at the same time
+            if (groupMaturityPeriod + group.birthBlkN + idx%10 <= block.number &&
+                    dissolveNum < expiredWorkingGroupDissolveLimit) {
                 // Dissolving expired working groups happens in another phase for gas reasons.
                 expiredWorkingGroupIds.push(workingGroupIds[idx]);
                 workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                 workingGroupIds.length--;
+                dissolveNum++;
             } else {
                 return idx;
             }
@@ -587,7 +592,7 @@ contract DOSProxy is Ownable {
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
         while (member != HEAD_A) {
-            // 1. Put member back to pendingNodeList's head if it's not in any workingGroup.
+            // 1. Put member back to pendingNodeList's tail if it's not in any workingGroup.
             if (nodeToGroupIdList[member][HEAD_I] == HEAD_I && pendingNodeList[member] == address(0)) {
                 insertToPendingNodeListTail(member);
             }
@@ -625,15 +630,6 @@ contract DOSProxy is Ownable {
     /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
     function signalGroupDissolve() public {
         bool claimed = false;
-        // Clean up oldest expired working group and related metadata.
-        if (expiredWorkingGroupIds.length > 0) {
-            dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
-            expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
-            expiredWorkingGroupIds.length--;
-            claimed = true;
-        } else {
-            emit LogError("No expired working group to clean up");
-        }
         // Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
         uint gid = pendingGroupList[HEAD_I];
         if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
@@ -780,32 +776,53 @@ contract DOSProxy is Ownable {
     function formGroup() private returns(bool) {
         if (numPendingNodes < groupSize * groupingThreshold / 100) {
             emit LogInsufficientPendingNode(numPendingNodes);
+            // Clean up oldest expired working group and related metadata.
+            if (expiredWorkingGroupIds.length > 0) {
+                dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
+                expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
+                expiredWorkingGroupIds.length--;
+                emit GuardianReward(block.number, msg.sender);
+            } else {
+                emit LogError("No expired working group to clean up");
+            }
             return false;
         }
 
-        if (workingGroupIds.length >= groupToPick) {
+        if (expiredWorkingGroupIds.length >= groupToPick) {
             requestRandom(address(this), 1, block.number);
             emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
             return true;
-        } else if (workingGroupIds.length + numPendingGroups >= groupToPick) {
-            emit LogInsufficientWorkingGroup(workingGroupIds.length, numPendingGroups);
-            return false;
-        } else if (numPendingNodes < bootstrapStartThreshold) {
-            emit LogError("Skipped signal, no enough nodes or groups in the network");
-            return false;
         } else {
-            // System needs re-bootstrap
-            if (bootstrapRound == 0) {
-                bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
-                    block.number,
-                    bootstrapCommitDuration,
-                    bootstrapRevealDuration,
-                    bootstrapStartThreshold
-                );
-                return true;
-            } else {
-                emit LogError("Skipped group formation, already in bootstrap phase");
+            if (workingGroupIds.length != 0) {
+                emit LogError("Skipped signal, no enough pending nodes or expired groups in the network");
                 return false;
+            } else {
+                if (numPendingNodes < bootstrapStartThreshold) {
+					// Clean up oldest expired working group and related metadata.
+                    if (expiredWorkingGroupIds.length > 0) {
+                        dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
+                        expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
+                        expiredWorkingGroupIds.length--;
+                        emit GuardianReward(block.number, msg.sender);
+                    } else {
+                        emit LogError("Skipped signal, no enough nodes or groups in the network");
+                    }
+                    return false;
+                } else {
+                    // System needs re-bootstrap
+                    if (bootstrapRound == 0) {
+                        bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
+                            block.number,
+                            bootstrapCommitDuration,
+                            bootstrapRevealDuration,
+                            bootstrapStartThreshold
+                        );
+                        return true;
+                    } else {
+                        emit LogError("Skipped group formation, already in bootstrap phase");
+                        return false;
+                    }
+                }
             }
         }
     }
@@ -813,23 +830,22 @@ contract DOSProxy is Ownable {
     // callback to handle re-grouping using generated random number as random seed.
     function __callback__(uint requestId, uint rndSeed) external {
         require(msg.sender == address(this), "Unauthenticated response");
-        require(workingGroupIds.length >= groupToPick,
-                "No enough working group");
+        require(expiredWorkingGroupIds.length >= groupToPick,
+                "No enough expired working group");
         require(numPendingNodes >= groupSize * groupingThreshold / 100,
                 "Not enough newly registered nodes");
 
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);
         for (uint i = 0; i < groupToPick; i++) {
-            uint idx = uint(keccak256(abi.encodePacked(rndSeed, requestId, i))) % workingGroupIds.length;
-            Group storage grpToDissolve = workingGroups[workingGroupIds[idx]];
+            uint idx = uint(keccak256(abi.encodePacked(rndSeed, requestId, i))) % expiredWorkingGroupIds.length;
+            Group storage grpToDissolve = workingGroups[expiredWorkingGroupIds[idx]];
             for (uint j = 0; j < groupSize; j++) {
                 candidates[i * groupSize + j] = grpToDissolve.members[j];
             }
-            // Do not put chosen to-be-dissolved working group back to pending pool.
             dissolveWorkingGroup(grpToDissolve.groupId, false);
-            workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
-            workingGroupIds.length--;
+            expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
+            expiredWorkingGroupIds.length--;
         }
 
         pick(groupSize, groupSize * groupToPick, candidates);
