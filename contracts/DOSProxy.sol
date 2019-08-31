@@ -682,29 +682,37 @@ contract DOSProxy is Ownable {
         regroup(candidates, arrSize / groupSize);
         emit GuardianReward(block.number, msg.sender);
     }
+    // Todo:Add a whitelist for signalUnregister
+    function signalUnregister(address member) public {
+        unregister(member);
+    }
     /// End of Guardian functions
 
     function unregisterNode() public fromValidStakingNode {
+        unregister(msg.sender);
+    }
+
+    function unregister(address node) private {
         //1) Check if node is in pendingNodeList
-        if (pendingNodeList[msg.sender] != address(0)) {
+        if (pendingNodeList[node] != address(0)) {
             // Update pendingNodeList
-            bool removed = removeNodeFromList(pendingNodeList, msg.sender);
+            bool removed = removeNodeFromList(pendingNodeList, node);
             // Reset pendingNodeTail if necessary.
             if (removed) {
                 numPendingNodes--;
-                emit LogUnRegisteredNewPendingNode(msg.sender,1);
+                emit LogUnRegisteredNewPendingNode(node,1);
             }
             return;
         }
 
         //2) Check if node is in workingGroups
-        uint groupId = nodeToGroupIdList[msg.sender][HEAD_I];
+        uint groupId = nodeToGroupIdList[node][HEAD_I];
         if (groupId != 0 && groupId != HEAD_I) {
             Group storage grp = workingGroups[groupId];
             for (uint i = 0; i < grp.members.length; i++) {
                 address member = grp.members[i];
-                if (member == msg.sender) {
-                    nodeToGroupIdList[msg.sender][HEAD_I] =0;
+                if (member == node) {
+                    nodeToGroupIdList[node][HEAD_I] =0;
                     if (i != (grp.members.length - 1)){
                         grp.members[i] = grp.members[grp.members.length - 1];
                     }
@@ -717,7 +725,7 @@ contract DOSProxy is Ownable {
                                      workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                                  }
                                  workingGroupIds.length--;
-                                 emit LogUnRegisteredNewPendingNode(msg.sender,2);
+                                 emit LogUnRegisteredNewPendingNode(node,2);
                                  return;
                              }
                          }
@@ -727,21 +735,21 @@ contract DOSProxy is Ownable {
                                      expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                                  }
                                  expiredWorkingGroupIds.length--;
-                                 emit LogUnRegisteredNewPendingNode(msg.sender,2);
+                                 emit LogUnRegisteredNewPendingNode(node,2);
                                  return;
                              }
                          }
                     }
-                    emit LogUnRegisteredNewPendingNode(msg.sender,2);
+                    emit LogUnRegisteredNewPendingNode(node,2);
                     return;
                 }
             }
             return;
         }
         //3) Check if node is in pendingGroups
-        bool removed = removeNodeFromPendingGroup(pendingGroupList,msg.sender);
+        bool removed = removeNodeFromPendingGroup(pendingGroupList,node);
         if (removed) {
-            emit LogUnRegisteredNewPendingNode(msg.sender,3);
+            emit LogUnRegisteredNewPendingNode(node,3);
         }
     }
 
