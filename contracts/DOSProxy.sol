@@ -41,6 +41,7 @@ contract DOSProxy is Ownable {
     struct Group {
         uint groupId;
         BN256.G2Point groupPubKey;
+        uint life;
         uint birthBlkN;
         address[] members;
     }
@@ -64,6 +65,7 @@ contract DOSProxy is Ownable {
     uint public expiredWorkingGroupDissolveLimit = 2;
     uint public groupToPick = 2;
     uint public groupSize = 21;
+    uint public lifeMagnify = 10;
     // decimal 2.
     uint public groupingThreshold = 110;
     // Bootstrapping related arguments, in blocks.
@@ -181,19 +183,21 @@ contract DOSProxy is Ownable {
         pendingGroupTail = HEAD_I;
     }
 
-    function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, address[] memory) {
+    function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
         return (
             lastHandledGroup.groupId,
             getGroupPubKey(lastHandledGroup.groupId),
+            lastHandledGroup.life,
             lastHandledGroup.birthBlkN,
             lastHandledGroup.members
         );
     }
 
-    function getWorkingGroupById(uint groupId) public view returns(uint, uint[4] memory, uint, address[] memory) {
+    function getWorkingGroupById(uint groupId) public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
         return (
             workingGroups[groupId].groupId,
             getGroupPubKey(groupId),
+            workingGroups[groupId].life,
             workingGroups[groupId].birthBlkN,
             workingGroups[groupId].members
         );
@@ -270,7 +274,7 @@ contract DOSProxy is Ownable {
             idx = rnd % workingGroupIds.length;
             Group storage group = workingGroups[workingGroupIds[idx]];
             // Use idx %10 to avoid dissolving all of working group at the same time
-            if (groupMaturityPeriod + group.birthBlkN + idx%10 <= block.number &&
+            if (groupMaturityPeriod + group.birthBlkN + group.life <= block.number &&
                     dissolveNum < expiredWorkingGroupDissolveLimit) {
                 // Dissolving expired working groups happens in another phase for gas reasons.
                 expiredWorkingGroupIds.push(workingGroupIds[idx]);
@@ -934,6 +938,7 @@ contract DOSProxy is Ownable {
             workingGroups[groupId] = Group(
                 groupId,
                 BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
+                numPendingGroups*lifeMagnify,
                 block.number,
                 memberArray
             );
