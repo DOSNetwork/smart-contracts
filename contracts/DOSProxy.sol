@@ -800,41 +800,42 @@ contract DOSProxy is Ownable {
             return false;
         }
 
-        if (expiredWorkingGroupIds.length >= groupToPick) {
-            requestRandom(address(this), 1, block.number);
-            emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
-            return true;
-        } else {
-            if (workingGroupIds.length != 0) {
-                emit LogError("Skipped signal, no enough pending nodes or expired groups in the network");
-                return false;
+        if (workingGroupIds.length != 0) {
+            if (expiredWorkingGroupIds.length >= groupToPick) {
+                requestRandom(address(this), 1, block.number);
+                emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
+                return true;
             } else {
-                if (numPendingNodes < bootstrapStartThreshold) {
-					// Clean up oldest expired working group and related metadata.
-                    if (expiredWorkingGroupIds.length > 0) {
-                        dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
-                        expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
-                        expiredWorkingGroupIds.length--;
-                        emit GuardianReward(block.number, msg.sender);
-                    } else {
-                        emit LogError("Skipped signal, no enough nodes or groups in the network");
-                    }
-                    return false;
-                } else {
-                    // System needs re-bootstrap
-                    if (bootstrapRound == 0) {
-                        bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
-                            block.number,
-                            bootstrapCommitDuration,
-                            bootstrapRevealDuration,
-                            bootstrapStartThreshold
-                        );
-                        return true;
-                    } else {
-                        emit LogError("Skipped group formation, already in bootstrap phase");
-                        return false;
-                    }
-                }
+                // TODO :Do small bootstrap in this condition?
+                emit LogError("Skipped signal, no expired groups in the network");
+                return false;
+			}
+        }
+
+        if (numPendingNodes < bootstrapStartThreshold) {
+            // Clean up oldest expired working group and related metadata.
+            if (expiredWorkingGroupIds.length > 0) {
+                dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
+                expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
+                expiredWorkingGroupIds.length--;
+                emit GuardianReward(block.number, msg.sender);
+            } else {
+                emit LogError("Skipped signal, no enough nodes or groups in the network");
+            }
+            return false;
+        } else {
+            // System needs re-bootstrap
+            if (bootstrapRound == 0) {
+                bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
+                     block.number,
+                     bootstrapCommitDuration,
+                     bootstrapRevealDuration,
+                     bootstrapStartThreshold
+                 );
+                 return true;
+            } else {
+                emit LogError("Skipped group formation, already in bootstrap phase");
+                return false;
             }
         }
     }
