@@ -702,7 +702,6 @@ contract DOSProxy is Ownable {
                 numPendingNodes--;
                 emit LogUnRegisteredNewPendingNode(node,1);
             }
-            return;
         }
 
         //2) Check if node is in workingGroups
@@ -712,39 +711,35 @@ contract DOSProxy is Ownable {
             for (uint i = 0; i < grp.members.length; i++) {
                 address member = grp.members[i];
                 if (member == node) {
-                    nodeToGroupIdList[node][HEAD_I] =0;
+                    nodeToGroupIdList[node][HEAD_I] = 0;
                     if (i != (grp.members.length - 1)){
                         grp.members[i] = grp.members[grp.members.length - 1];
                     }
                     grp.members.length--;
-                    if (grp.members.length < (groupSize / 2 + 1 )){
-                        dissolveWorkingGroup(groupId, true);
-                        for (uint idx = 0; idx < workingGroupIds.length; idx++) {
-                             if (workingGroupIds[idx] == groupId) {
-                                 if (idx != (workingGroupIds.length - 1)){
-                                     workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
-                                 }
-                                 workingGroupIds.length--;
-                                 emit LogUnRegisteredNewPendingNode(node,2);
-                                 return;
+                    dissolveWorkingGroup(groupId, true);
+                    for (uint idx = 0; idx < workingGroupIds.length; idx++) {
+                         if (workingGroupIds[idx] == groupId) {
+                             if (idx != (workingGroupIds.length - 1)){
+                                 workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                              }
+                             workingGroupIds.length--;
+                             emit LogUnRegisteredNewPendingNode(node,2);
+                             return;
                          }
-                         for (uint idx = 0; idx < expiredWorkingGroupIds.length; idx++) {
-                             if (expiredWorkingGroupIds[idx] == groupId) {
-                                 if (idx != (workingGroupIds.length - 1)){
-                                     expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
-                                 }
-                                 expiredWorkingGroupIds.length--;
-                                 emit LogUnRegisteredNewPendingNode(node,2);
-                                 return;
+                     }
+                     for (uint idx = 0; idx < expiredWorkingGroupIds.length; idx++) {
+                         if (expiredWorkingGroupIds[idx] == groupId) {
+                             if (idx != (workingGroupIds.length - 1)){
+                                 expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                              }
+                             expiredWorkingGroupIds.length--;
+                             emit LogUnRegisteredNewPendingNode(node,2);
+                             return;
                          }
-                    }
-                    emit LogUnRegisteredNewPendingNode(node,2);
-                    return;
+                     }
+                     break;
                 }
             }
-            return;
         }
         //3) Check if node is in pendingGroups
         bool removed = removeNodeFromPendingGroup(pendingGroupList,node);
