@@ -65,7 +65,8 @@ contract DOSProxy is Ownable {
     uint public expiredWorkingGroupDissolveLimit = 2;
     uint public groupToPick = 2;
     uint public groupSize = 21;
-    uint public lifeMagnify = 10;
+    // It should bigger than refreshSystemRandomHardLimit to avoid dissolving all groups at the same time
+    uint public lifeMagnify = 70;
     // decimal 2.
     uint public groupingThreshold = 110;
     // Bootstrapping related arguments, in blocks.
@@ -102,7 +103,7 @@ contract DOSProxy is Ownable {
 
     // groupId => PendingGroup
     mapping(uint => PendingGroup) public pendingGroups;
-    uint public pendingGroupMaxLife = 40;  // in blocks
+    uint public pendingGroupMaxLife = 10;  // in blocks
 
     // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
     mapping(uint => uint) public pendingGroupList;
@@ -270,7 +271,10 @@ contract DOSProxy is Ownable {
         uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness)));
         uint dissolveNum = 0;
         do {
-            if (workingGroupIds.length == 0) return UINTMAX;
+            if (workingGroupIds.length == 0) {
+                formGroup();
+                return UINTMAX;
+            }
             idx = rnd % workingGroupIds.length;
             Group storage group = workingGroups[workingGroupIds[idx]];
             // Use idx %10 to avoid dissolving all of working group at the same time
@@ -281,6 +285,9 @@ contract DOSProxy is Ownable {
                 workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                 workingGroupIds.length--;
                 dissolveNum++;
+                if (expiredWorkingGroupIds.length >= groupToPick) {
+                    formGroup();
+                }
             } else {
                 return idx;
             }
@@ -395,7 +402,6 @@ contract DOSProxy is Ownable {
             if (removed && prev == HEAD_I) {
                 if (backToPendingPool && pendingNodeList[member] == address(0)) {
                     insertToPendingNodeListTail(member);
-                    emit LogRegisteredNewPendingNode(member);
                 }
             }
         }
@@ -700,6 +706,7 @@ contract DOSProxy is Ownable {
             // Reset pendingNodeTail if necessary.
             if (removed) {
                 numPendingNodes--;
+                nodeToGroupIdList[node][HEAD_I] = 0;
                 emit LogUnRegisteredNewPendingNode(node,1);
             }
         }
