@@ -72,7 +72,7 @@ contract DOSProxy is Ownable {
     // Bootstrapping related arguments, in blocks.
     uint public bootstrapCommitDuration = 40;
     uint public bootstrapRevealDuration = 40;
-    uint public bootstrapStartThreshold = groupSize * (groupToPick + 7);
+    uint public bootstrapStartThreshold = groupSize * (groupToPick * 3);
     uint public bootstrapRound = 0;
 
     // DOSAddressBridge on rinkeby testnet
