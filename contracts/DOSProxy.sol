@@ -72,7 +72,7 @@ contract DOSProxy is Ownable {
     // Bootstrapping related arguments, in blocks.
     uint public bootstrapCommitDuration = 40;
     uint public bootstrapRevealDuration = 40;
-    uint public bootstrapStartThreshold = groupSize * (groupToPick + 1);
+    uint public bootstrapStartThreshold = groupSize * (groupToPick + 7);
     uint public bootstrapRound = 0;
 
     // DOSAddressBridge on rinkeby testnet
@@ -340,7 +340,17 @@ contract DOSProxy is Ownable {
     }
 
     /// Remove Node from a storage linkedlist. Need to check tail after this done
-    function removeNodeFromList(mapping(address => address) storage list, address node) private returns(bool) {
+    function removeNodeFromList(mapping(address => address) storage list, address node) private returns(address, bool) {
+        (address prev, bool found) = findNodeFromList(list,node);
+        if (found) {
+            list[prev] = list[node];
+            delete list[node];
+        }
+        return (prev, true);
+    }
+
+    /// Find Node from a storage linkedlist.
+    function findNodeFromList(mapping(address => address) storage list, address node) private returns(address, bool) {
         address prev = HEAD_A;
         address curr = list[prev];
         while (curr != HEAD_A && curr != node) {
@@ -348,11 +358,9 @@ contract DOSProxy is Ownable {
             curr = list[prev];
         }
         if (curr == HEAD_A) {
-            return false;
+            return (HEAD_A, false);
         } else {
-            list[prev] = list[curr];
-            delete list[curr];
-            return true;
+            return (prev, true);
         }
     }
 
@@ -379,8 +387,8 @@ contract DOSProxy is Ownable {
         uint curr = list[prev];
         while (curr != HEAD_I) {
             PendingGroup storage pgrp = pendingGroups[curr];
-            bool removed = removeNodeFromList(pgrp.memberList, node);
-            if (removed) {
+            (address prevNode, bool found) = findNodeFromList(pgrp.memberList,node);
+            if (found) {
                 cleanUpOldestExpiredPendingGroup(curr);
                 return true;
             }
@@ -699,59 +707,55 @@ contract DOSProxy is Ownable {
     }
 
     function unregister(address node) private {
-        //1) Check if node is in pendingNodeList
+        //1) Check if node is in workingGroups or expiredWorkingGroup
+        uint groupId = nodeToGroupIdList[node][HEAD_I];
+        if (groupId != 0 && groupId != HEAD_I) {
+            dissolveWorkingGroup(groupId, true);
+            bool removed = false;
+            for (uint idx = 0; idx < workingGroupIds.length; idx++) {
+                if (workingGroupIds[idx] == groupId) {
+                    if (idx != (workingGroupIds.length - 1)){
+                        workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
+                    }
+                    workingGroupIds.length--;
+                    emit LogUnRegisteredNewPendingNode(node,1);
+                    removed = true;
+                    break;
+                }
+            }
+            if (!removed) {
+                for (uint idx = 0; idx < expiredWorkingGroupIds.length; idx++) {
+                    if (expiredWorkingGroupIds[idx] == groupId) {
+                        if (idx != (workingGroupIds.length - 1)){
+                            expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
+                        }
+                        expiredWorkingGroupIds.length--;
+                        emit LogUnRegisteredNewPendingNode(node,2);
+                        break;
+                    }
+                }
+            }
+        }else{
+            //2) Check if node is in pendingGroups
+            bool removed = removeNodeFromPendingGroup(pendingGroupList,node);
+            if (removed) {
+                emit LogUnRegisteredNewPendingNode(node,3);
+            }
+		}
+		//3) Check if node is in pendingNodeList
         if (pendingNodeList[node] != address(0)) {
             // Update pendingNodeList
-            bool removed = removeNodeFromList(pendingNodeList, node);
+            (address prev, bool removed) = removeNodeFromList(pendingNodeList, node);
             // Reset pendingNodeTail if necessary.
             if (removed) {
                 numPendingNodes--;
                 nodeToGroupIdList[node][HEAD_I] = 0;
-                emit LogUnRegisteredNewPendingNode(node,1);
-            }
-        }
-
-        //2) Check if node is in workingGroups
-        uint groupId = nodeToGroupIdList[node][HEAD_I];
-        if (groupId != 0 && groupId != HEAD_I) {
-            Group storage grp = workingGroups[groupId];
-            for (uint i = 0; i < grp.members.length; i++) {
-                address member = grp.members[i];
-                if (member == node) {
-                    nodeToGroupIdList[node][HEAD_I] = 0;
-                    if (i != (grp.members.length - 1)){
-                        grp.members[i] = grp.members[grp.members.length - 1];
-                    }
-                    grp.members.length--;
-                    dissolveWorkingGroup(groupId, true);
-                    for (uint idx = 0; idx < workingGroupIds.length; idx++) {
-                         if (workingGroupIds[idx] == groupId) {
-                             if (idx != (workingGroupIds.length - 1)){
-                                 workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
-                             }
-                             workingGroupIds.length--;
-                             emit LogUnRegisteredNewPendingNode(node,2);
-                             return;
-                         }
-                     }
-                     for (uint idx = 0; idx < expiredWorkingGroupIds.length; idx++) {
-                         if (expiredWorkingGroupIds[idx] == groupId) {
-                             if (idx != (workingGroupIds.length - 1)){
-                                 expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
-                             }
-                             expiredWorkingGroupIds.length--;
-                             emit LogUnRegisteredNewPendingNode(node,2);
-                             return;
-                         }
-                     }
-                     break;
+                emit LogUnRegisteredNewPendingNode(node,0);
+                // Reset pendingGroupTail if necessary.
+                if (pendingNodeTail == node) {
+                    pendingNodeTail = prev;
                 }
             }
-        }
-        //3) Check if node is in pendingGroups
-        bool removed = removeNodeFromPendingGroup(pendingGroupList,node);
-        if (removed) {
-            emit LogUnRegisteredNewPendingNode(node,3);
         }
     }
 
