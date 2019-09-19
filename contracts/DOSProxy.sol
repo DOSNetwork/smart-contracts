@@ -24,6 +24,9 @@ contract DOSAddressBridgeInterface {
 
 contract DOSPaymentInterface {
     function fromValidStakingNode(address) public view returns(bool);
+    function chargeServiceFee(address ,uint ,address ) public;
+    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public;
+    function claimGuardianReward(address guardian,address tokenAddr) public;
 }
 
 contract DOSProxy is Ownable {
@@ -420,6 +423,7 @@ contract DOSProxy is Ownable {
     // Returns query id.
     // TODO: restrict query from subscribed/paid calling contracts.
     function query(
+        address tokenAddr,
         address from,
         uint timeout,
         string calldata dataSource,
@@ -436,6 +440,7 @@ contract DOSProxy is Ownable {
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
+                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(tokenAddr,queryId,from);
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 // TODO: keep id receipt and handle later in v2.0.
                 if (idx == UINTMAX) {
@@ -466,7 +471,7 @@ contract DOSProxy is Ownable {
     }
 
     // Request a new user-level random number.
-    function requestRandom(address from, uint8 mode, uint userSeed)
+    function requestRandom(address tokenAddr,address from, uint8 mode, uint userSeed)
         public
         returns (uint)
     {
@@ -479,6 +484,7 @@ contract DOSProxy is Ownable {
             // TODO: restrict request from paid calling contract address.
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(tokenAddr,requestId,from);
             uint idx = dispatchJob(TrafficType.UserRandom, requestId);
             // TODO: keep id receipt and handle later in v2.0.
             if (idx == UINTMAX) {
@@ -634,19 +640,19 @@ contract DOSProxy is Ownable {
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
-    function signalRandom() public {
+    function signalRandom(address tokenAddr) public {
         if (lastUpdatedBlock + refreshSystemRandomHardLimit > block.number) {
             emit LogError("SystemRandom not expired yet");
             return;
         }
 
         kickoffRandom();
-
         emit GuardianReward(block.number, msg.sender);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender,tokenAddr);
     }
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
-    function signalGroupDissolve() public {
+    function signalGroupDissolve(address tokenAddr) public {
         bool claimed = false;
         // Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
         uint gid = pendingGroupList[HEAD_I];
@@ -659,18 +665,20 @@ contract DOSProxy is Ownable {
         // Claim guardian rewards if work is done.
         if (claimed) {
             emit GuardianReward(block.number, msg.sender);
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender,tokenAddr);
         }
     }
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
-    function signalGroupFormation() public {
+    function signalGroupFormation(address tokenAddr) public {
         if (formGroup()) {
             emit GuardianReward(block.number, msg.sender);
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender,tokenAddr);
         }
     }
     // TODO: Reward guardian nodes.
-    function signalBootstrap(uint _cid) public {
+    function signalBootstrap(address tokenAddr,uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
         if (numPendingNodes < bootstrapStartThreshold) {
             emit LogError("Not enough nodes to bootstrap");
@@ -695,10 +703,12 @@ contract DOSProxy is Ownable {
         shuffle(candidates, rndSeed);
         regroup(candidates, arrSize / groupSize);
         emit GuardianReward(block.number, msg.sender);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender,tokenAddr);
     }
     // Todo:Add a whitelist for signalUnregister
-    function signalUnregister(address member) public {
+    function signalUnregister(address tokenAddr,address member) public {
         unregister(member);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender,tokenAddr);
     }
     /// End of Guardian functions
 

@@ -2,31 +2,62 @@ pragma solidity ^0.5.0;
 
 // Comment out utils library if you don't need it to save gas. (L4 and L17)
 import "./lib/utils.sol";
+import "./Ownable.sol";
 
 contract DOSProxyInterface {
-    function query(address, uint, string memory, string memory) public returns (uint);
-    function requestRandom(address, uint8, uint) public returns (uint);
+    function query(address,address, uint, string memory, string memory) public returns (uint);
+    function requestRandom(address,address, uint8, uint) public returns (uint);
+}
+
+contract DOSPaymentInterface {
+    function isSupportedToken(address) public view returns(bool);
 }
 
 contract DOSAddressBridgeInterface {
     function getProxyAddress() public view returns (address);
+    function getPaymentAddress() public view returns (address);
 }
 
-contract DOSOnChainSDK {
+contract ERC20I {
+    function balanceOf(address who) public view returns (uint);
+    function transfer(address to, uint value) public returns (bool);
+    function approve(address spender, uint value) public returns (bool);
+}
+
+contract DOSOnChainSDK is Ownable{
     // Comment out utils library if you don't need it to save gas. (L4 and L17)
     using utils for *;
 
     DOSProxyInterface dosProxy;
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0xf0CEFfc4209e38EA3Cd1926DDc2bC641cbFFd1cF);
+        DOSAddressBridgeInterface(0x629369c8615f70B789d929198dAD33665139564B);
+    address _tokenAddr;
 
     modifier resolveAddress {
         dosProxy = DOSProxyInterface(dosAddrBridge.getProxyAddress());
         _;
     }
 
+    modifier onlySupportedToken(address tokenAddr) {
+        DOSPaymentInterface payment = DOSPaymentInterface(dosAddrBridge.getPaymentAddress());
+        require(payment.isSupportedToken(tokenAddr), "Not supported token address!");
+        _;
+    }
+
+    constructor(address tokenAddr) onlySupportedToken(tokenAddr) public {
+        _tokenAddr = tokenAddr;
+        address paymentAddr = dosAddrBridge.getPaymentAddress();
+        ERC20I(tokenAddr).approve(paymentAddr, uint(-1));
+    }
+
     function fromDOSProxyContract() internal view returns (address) {
         return dosAddrBridge.getProxyAddress();
+    }
+
+    function DOSWithdraw() onlyOwner public{
+        require(_tokenAddr != address(0x0), "Not a valid token address!");
+        uint amount = ERC20I(_tokenAddr).balanceOf(address(this));
+        ERC20I(_tokenAddr).transfer(msg.sender, amount);
     }
 
     // @dev: Call this function to get a unique queryId to differentiate
@@ -51,11 +82,11 @@ contract DOSOnChainSDK {
     //            Check below documentation for details.
     //            (https://dosnetwork.github.io/docs/#/contents/blockchains/ethereum?id=selector).
     function DOSQuery(uint timeout, string memory dataSource, string memory selector)
-        resolveAddress
         internal
+        resolveAddress
         returns (uint)
     {
-        return dosProxy.query(address(this), timeout, dataSource, selector);
+        return dosProxy.query(_tokenAddr,address(this), timeout, dataSource, selector);
     }
 
     // @dev: Must override __callback__ to process a corresponding response. A
@@ -85,11 +116,11 @@ contract DOSOnChainSDK {
     //                       is for testing purpose only. It's free of charge.
     // @seed: Optional random seed provided by caller.
     function DOSRandom(uint8 mode, uint seed)
-        resolveAddress
         internal
+        resolveAddress
         returns (uint)
     {
-        return dosProxy.requestRandom(address(this), mode, seed);
+        return dosProxy.requestRandom(_tokenAddr,address(this), mode, seed);
     }
 
     // @dev: Must override __callback__ to process a corresponding random

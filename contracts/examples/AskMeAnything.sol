@@ -28,7 +28,7 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
         require(_valid[id], "Response with invalid request id!");
         _;
     }
-
+    constructor(address tokenAddr) public DOSOnChainSDK(tokenAddr) {}
     function setQueryMode(bool newMode) public onlyOwner {
         repeatedCall = newMode;
     }
