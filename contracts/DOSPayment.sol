@@ -49,8 +49,10 @@ contract DOSPayment is Ownable {
     uint public _defaultDenominator = 5;
     uint public _defaultSubmitterRate = 3;
     uint public _defaultWorkerRate = 2;
-    uint public _defaultGuardianFee = 1000000000000000000; // 1 Tokens
     uint public _defaultServiceFee = 5000000000000000000; // 1 Tokens
+
+    address public _guardianFundsTokenAddr = 0xe90EF85fff4f38e742769Ad45DB7eCd3FC935973; // 1 Tokens
+    uint public _defaultGuardianFee = 1000000000000000000; // 1 Tokens
 
     // DOS Address Bridge on rinkeby testnet
     DOSAddressBridgeInterface dosAddrBridge =
@@ -104,6 +106,10 @@ contract DOSPayment is Ownable {
         feeList.workerRate = workerRate;
         feeList.denominator = denominator;
         feeList.guardianFee = guardianRate;
+    }
+
+    function setGuardianFundsAddr(address tokenAddr) public onlyOwner onlySupportedToken(tokenAddr) {
+        _guardianFundsTokenAddr = tokenAddr;
     }
 
     function depositGuardianRewards(address tokenAddr,uint amount) public onlyOwner onlySupportedToken(tokenAddr) {
@@ -160,12 +166,16 @@ contract DOSPayment is Ownable {
         }
     }
 
-    function claimGuardianReward(address guardianAddr,address tokenAddr) public onlyProxy {
-        require(_nodeRewards[address(this)].tokenAddres.length!=0, "No rewards!");
-        require(_nodeRewards[address(this)].amount[tokenAddr]>=_feeList[tokenAddr].guardianFee, "No enough funds for guardian!");
+    function claimGuardianReward(address guardianAddr) public onlyProxy {
+        require(_nodeRewards[address(this)].tokenAddres.length!=0, "No any token to rewards!");
+        require(_feeList[_guardianFundsTokenAddr].guardianFee!=0, "Unknow guardian rewards|");
+        uint fee = _feeList[_guardianFundsTokenAddr].guardianFee;
         Tokens storage funds = _nodeRewards[address(this)];
         Tokens storage guardian = _nodeRewards[guardianAddr];
-        transferTokenFrom(funds,guardian,tokenAddr,_feeList[tokenAddr].guardianFee);
+        if (funds.amount[_guardianFundsTokenAddr] < fee) {
+            revert("No enough funds for guardian!");
+        }
+        transferTokenFrom(funds,guardian,_guardianFundsTokenAddr,_feeList[_guardianFundsTokenAddr].guardianFee);
     }
 
     function transferTokenTo(Tokens storage tokens,address tokenAddr,uint amount) internal{
