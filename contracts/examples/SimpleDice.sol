@@ -38,7 +38,7 @@ contract SimpleDice is DOSOnChainSDK {
         require(msg.sender == devAddress);
         _;
     }
-
+    constructor(address tokenAddr) public DOSOnChainSDK(tokenAddr) {}
     function min(uint a, uint b) internal pure returns(uint) {
         return a < b ? a : b;
     }

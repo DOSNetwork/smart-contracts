@@ -24,6 +24,9 @@ contract DOSAddressBridgeInterface {
 
 contract DOSPaymentInterface {
     function fromValidStakingNode(address) public view returns(bool);
+    function chargeServiceFee(address ,uint ,address ) public;
+    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public;
+    function claimGuardianReward(address guardian) public;
 }
 
 contract DOSProxy is Ownable {
@@ -420,6 +423,7 @@ contract DOSProxy is Ownable {
     // Returns query id.
     // TODO: restrict query from subscribed/paid calling contracts.
     function query(
+        address tokenAddr,
         address from,
         uint timeout,
         string calldata dataSource,
@@ -436,6 +440,7 @@ contract DOSProxy is Ownable {
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
+                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(tokenAddr,queryId,from);
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 // TODO: keep id receipt and handle later in v2.0.
                 if (idx == UINTMAX) {
@@ -466,7 +471,7 @@ contract DOSProxy is Ownable {
     }
 
     // Request a new user-level random number.
-    function requestRandom(address from, uint8 mode, uint userSeed)
+    function requestRandom(address tokenAddr,address from, uint8 mode, uint userSeed)
         public
         returns (uint)
     {
@@ -479,6 +484,7 @@ contract DOSProxy is Ownable {
             // TODO: restrict request from paid calling contract address.
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(tokenAddr,requestId,from);
             uint idx = dispatchJob(TrafficType.UserRandom, requestId);
             // TODO: keep id receipt and handle later in v2.0.
             if (idx == UINTMAX) {
@@ -641,8 +647,8 @@ contract DOSProxy is Ownable {
         }
 
         kickoffRandom();
-
         emit GuardianReward(block.number, msg.sender);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
@@ -659,6 +665,7 @@ contract DOSProxy is Ownable {
         // Claim guardian rewards if work is done.
         if (claimed) {
             emit GuardianReward(block.number, msg.sender);
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         }
     }
     // TODO: Reward guardian nodes.
@@ -667,6 +674,7 @@ contract DOSProxy is Ownable {
     function signalGroupFormation() public {
         if (formGroup()) {
             emit GuardianReward(block.number, msg.sender);
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         }
     }
     // TODO: Reward guardian nodes.
@@ -695,10 +703,12 @@ contract DOSProxy is Ownable {
         shuffle(candidates, rndSeed);
         regroup(candidates, arrSize / groupSize);
         emit GuardianReward(block.number, msg.sender);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
     // Todo:Add a whitelist for signalUnregister
     function signalUnregister(address member) public {
         unregister(member);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
     /// End of Guardian functions
 
