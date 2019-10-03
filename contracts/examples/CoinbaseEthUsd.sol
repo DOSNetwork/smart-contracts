@@ -16,7 +16,7 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
 
     event GetPrice(uint integral, uint fractional);
 
-    constructor(address tokenAddr) public DOSOnChainSDK(tokenAddr) {}
+    constructor() public DOSOnChainSDK() {}
 
     function check() public {
         queryId = DOSQuery(30, "https://api.coinbase.com/v2/prices/ETH-USD/spot", "$.data.amount");
