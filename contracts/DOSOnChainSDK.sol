@@ -5,12 +5,13 @@ import "./lib/utils.sol";
 import "./Ownable.sol";
 
 contract DOSProxyInterface {
-    function query(address,address, uint, string memory, string memory) public returns (uint);
-    function requestRandom(address,address, uint8, uint) public returns (uint);
+    function query(address, uint, string memory, string memory) public returns (uint);
+    function requestRandom(address, uint8, uint) public returns (uint);
 }
 
 contract DOSPaymentInterface {
     function isSupportedToken(address) public view returns(bool);
+    function setPaymentMethod(address consumer,address tokenAddr) public;
 }
 
 contract DOSAddressBridgeInterface {
@@ -30,8 +31,8 @@ contract DOSOnChainSDK is Ownable{
 
     DOSProxyInterface dosProxy;
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x629369c8615f70B789d929198dAD33665139564B);
-    address _tokenAddr;
+        DOSAddressBridgeInterface(0x8597DeAeC7a42444EE704F317e9Eb8c82DfB3CeE);
+    address _tokenAddr = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
 
     modifier resolveAddress {
         dosProxy = DOSProxyInterface(dosAddrBridge.getProxyAddress());
@@ -44,18 +45,18 @@ contract DOSOnChainSDK is Ownable{
         _;
     }
 
-    constructor(address tokenAddr) onlySupportedToken(tokenAddr) public {
-        _tokenAddr = tokenAddr;
+    constructor() public {
         address paymentAddr = dosAddrBridge.getPaymentAddress();
-        ERC20I(tokenAddr).approve(paymentAddr, uint(-1));
+        ERC20I(_tokenAddr).approve(paymentAddr, uint(-1));
+        DOSPaymentInterface payment = DOSPaymentInterface(dosAddrBridge.getPaymentAddress());
+        payment.setPaymentMethod(address(this),_tokenAddr);
     }
 
     function fromDOSProxyContract() internal view returns (address) {
         return dosAddrBridge.getProxyAddress();
     }
 
-    function DOSWithdraw() onlyOwner public{
-        require(_tokenAddr != address(0x0), "Not a valid token address!");
+    function DOSWithdraw() public onlyOwner{
         uint amount = ERC20I(_tokenAddr).balanceOf(address(this));
         ERC20I(_tokenAddr).transfer(msg.sender, amount);
     }
@@ -86,7 +87,7 @@ contract DOSOnChainSDK is Ownable{
         resolveAddress
         returns (uint)
     {
-        return dosProxy.query(_tokenAddr,address(this), timeout, dataSource, selector);
+        return dosProxy.query(address(this), timeout, dataSource, selector);
     }
 
     // @dev: Must override __callback__ to process a corresponding response. A
@@ -120,7 +121,7 @@ contract DOSOnChainSDK is Ownable{
         resolveAddress
         returns (uint)
     {
-        return dosProxy.requestRandom(_tokenAddr,address(this), mode, seed);
+        return dosProxy.requestRandom(address(this), mode, seed);
     }
 
     // @dev: Must override __callback__ to process a corresponding random

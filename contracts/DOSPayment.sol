@@ -5,10 +5,8 @@ import "./Ownable.sol";
 contract ERC20I {
     function balanceOf(address who) public view returns (uint);
     function decimals() public view returns (uint);
-    // function allowance(address owner, address spender) public view returns (uint);
     function transfer(address to, uint value) public returns (bool);
     function transferFrom(address from, address to, uint value) public returns (bool);
-    // function approve(address spender, uint value) public returns (bool);
 }
 
 contract DOSAddressBridgeInterface {
@@ -16,47 +14,57 @@ contract DOSAddressBridgeInterface {
 }
 
 contract DOSPayment is Ownable {
+    enum ServiceType {
+        SystemRandom,
+        UserRandom,
+        UserQuery
+    }
 
     struct FeeList {
-        uint serviceFee;
+        // ServiceType =>serviceFee
+        mapping(uint => uint) serviceFee;
         uint submitterRate;
         uint workerRate;
         uint denominator;
         uint guardianFee;
     }
 
-    struct ServiceFee {
-        address requester;
+    struct Payment {
+        address consumer;
         address tokenAddr;
-        uint fee;
+        uint serviceType;
+        uint amount;
     }
 
-    struct Tokens {
+    struct Rewards {
         //tokenAddr to amount
         mapping(address => uint) amount;
         address[] tokenAddres;
     }
-
+    // consumer addr => payment token addr
+    mapping(address => address) public _paymentMethods;
     //TokenAddr => feeList
-    mapping(address => FeeList) _feeList;
-    // requestID => Fee metadata
-    mapping(uint => ServiceFee) _serviceFees;
-    // node address => Reward
-    mapping(address => Tokens) _nodeRewards;
+    mapping(address => FeeList) public _feeList;
+    // requestID => Payment
+    mapping(uint => Payment) public _payments;
+    // producer address => Rewards
+    mapping(address => Rewards) _nodeRewards;
 
     // DOS Token on rinkeby testnet
-    address public _defaultTokenAddr = 0xe90EF85fff4f38e742769Ad45DB7eCd3FC935973;
+    address public _defaultTokenAddr = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
     uint public _defaultDenominator = 5;
     uint public _defaultSubmitterRate = 3;
     uint public _defaultWorkerRate = 2;
-    uint public _defaultServiceFee = 5000000000000000000; // 1 Tokens
-
-    address public _guardianFundsTokenAddr = 0xe90EF85fff4f38e742769Ad45DB7eCd3FC935973; // 1 Tokens
+    uint public _defaultSystemRandomFee = 5000000000000000000; // 1 Tokens
+    uint public _defaultUserRandomFee = 5000000000000000000; // 1 Tokens
+    uint public _defaultUserQueryFee = 5000000000000000000; // 1 Tokens
     uint public _defaultGuardianFee = 1000000000000000000; // 1 Tokens
+    address public _guardianFundsAddr = 0x2a3B59AC638F90d82BdAF5E2dA5D37C1a31B29f3;
+    address public _guardianFundsTokenAddr = _defaultTokenAddr;
 
     // DOS Address Bridge on rinkeby testnet
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x629369c8615f70B789d929198dAD33665139564B);
+        DOSAddressBridgeInterface(0x8597DeAeC7a42444EE704F317e9Eb8c82DfB3CeE);
 
     // DOS Token on rinkeby testnet
     address public networkToken = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
@@ -68,9 +76,10 @@ contract DOSPayment is Ownable {
     event UpdateNetworkTokenAddress(address oldAddress, address newAddress);
     event UpdateDropBurnTokenAddress(address oldAddress, address newAddress);
     event UpdateDropBurnMaxQuota(uint oldQuota, uint newQuota);
-    event LogChargeServiceFee(address,uint,address,uint);
-    event LogRefundServiceFee(address,uint,address,uint);
-    event LogClaimServiceFee(uint ,address ,address,uint);
+    event LogChargeServiceFee(address consumer ,address tokenAddr,uint requestID,uint serviceType,uint fee);
+    event LogRefundServiceFee(address consumer ,address tokenAddr,uint requestID,uint serviceType,uint fee);
+    event LogClaimServiceFee(address nodeAddr,address tokenAddr,uint requestID,uint serviceType ,uint feeForSubmitter);
+    event LogClaimGuardianFee(address nodeAddr,address tokenAddr,uint feeForSubmitter,address sender);
 
     modifier onlyProxy {
         require(msg.sender == dosAddrBridge.getProxyAddress(), "Not from DOS proxy!");
@@ -82,9 +91,18 @@ contract DOSPayment is Ownable {
         _;
     }
 
+    modifier hasPayment(uint requestID) {
+        require(_payments[requestID].amount!=0, "No fee infomation!");
+        require(_payments[requestID].consumer!=address(0x0), "No consumer infomation!");
+        require(_payments[requestID].tokenAddr!=address(0x0), "No tokenAddr infomation!");
+        _;
+    }
+
     constructor() public {
         FeeList storage feeList = _feeList[_defaultTokenAddr];
-        feeList.serviceFee = _defaultServiceFee;
+        feeList.serviceFee[uint(ServiceType.SystemRandom)] = _defaultSystemRandomFee;
+        feeList.serviceFee[uint(ServiceType.UserRandom)] = _defaultUserRandomFee;
+        feeList.serviceFee[uint(ServiceType.UserQuery)] = _defaultUserQueryFee;
         feeList.submitterRate = _defaultSubmitterRate;
         feeList.workerRate = _defaultWorkerRate;
         feeList.denominator = _defaultDenominator;
@@ -92,63 +110,78 @@ contract DOSPayment is Ownable {
     }
 
     function isSupportedToken(address tokenAddr) public view returns(bool){
-       if (tokenAddr == address(0x0) || _feeList[tokenAddr].serviceFee == 0) {
+       if (tokenAddr == address(0x0) || _feeList[tokenAddr].serviceFee[uint(ServiceType.SystemRandom)] == 0
+       || _feeList[tokenAddr].serviceFee[uint(ServiceType.UserRandom)] == 0
+       || _feeList[tokenAddr].serviceFee[uint(ServiceType.UserQuery)] == 0) {
            return false;
        }
        return true;
     }
 
-    function setFees(address tokenAddr,uint serviceFee,uint submitterRate,uint workerRate,uint guardianRate,uint denominator) public onlyOwner{
+    function setPaymentMethod(address consumer,address tokenAddr) public onlySupportedToken(tokenAddr){
+        _paymentMethods[consumer] = tokenAddr;
+    }
+
+    function setServiceFee(address tokenAddr,uint serviceType ,uint fee) public onlyOwner{
         require(tokenAddr!=address(0x0), "Not a valid address!");
         FeeList storage feeList = _feeList[tokenAddr];
-        feeList.serviceFee = serviceFee;
+        feeList.serviceFee[serviceType] = fee;
+    }
+
+    function setGuardianFee(address tokenAddr,uint fee) public onlyOwner{
+        require(tokenAddr!=address(0x0), "Not a valid address!");
+        FeeList storage feeList = _feeList[tokenAddr];
+        feeList.guardianFee = fee;
+    }
+
+    function setFeeDividend(address tokenAddr,uint submitterRate,uint workerRate,uint denominator) public onlyOwner{
+        require(tokenAddr!=address(0x0), "Not a valid address!");
+        FeeList storage feeList = _feeList[tokenAddr];
         feeList.submitterRate = submitterRate;
         feeList.workerRate = workerRate;
         feeList.denominator = denominator;
-        feeList.guardianFee = guardianRate;
     }
 
-    function setGuardianFundsAddr(address tokenAddr) public onlyOwner onlySupportedToken(tokenAddr) {
+    function setGuardianFunds(address fundsAddr,address tokenAddr) public onlyOwner onlySupportedToken(tokenAddr) {
+        _guardianFundsAddr = fundsAddr;
         _guardianFundsTokenAddr = tokenAddr;
     }
 
-    function depositGuardianRewards(address tokenAddr,uint amount) public onlyOwner onlySupportedToken(tokenAddr) {
-        transferTokenTo(_nodeRewards[address(this)],tokenAddr,amount);
-        ERC20I(tokenAddr).transferFrom(msg.sender, address(this),amount);
-    }
-
-    function chargeServiceFee(address tokenAddr,uint requestID,address requester) public onlyProxy onlySupportedToken(tokenAddr) {
-        uint fee = _feeList[tokenAddr].serviceFee;
-        uint balance = ERC20I(tokenAddr).balanceOf(requester);
-        if (balance < fee) {
-            revert("No enough balance.");
+    function chargeServiceFee(address consumer,uint requestID,uint serviceType) public onlyProxy {
+        // Get tokenAddr
+        address tokenAddr = _paymentMethods[consumer];
+        if  (!isSupportedToken(tokenAddr)) {
+            revert("Not a valid token address");
         }
 
-        ServiceFee storage serviceFee = _serviceFees[requestID];
-        serviceFee.requester = requester;
-        serviceFee.tokenAddr = tokenAddr;
-        serviceFee.fee = fee;
+        // Get fee by tokenAddr and serviceType
+        uint fee = _feeList[tokenAddr].serviceFee[serviceType];
 
-        emit LogChargeServiceFee(requester,requestID,tokenAddr,fee);
-        ERC20I(tokenAddr).transferFrom(requester, address(this),fee);
+        Payment storage payment = _payments[requestID];
+        payment.consumer = consumer;
+        payment.serviceType = serviceType;
+        payment.tokenAddr = tokenAddr;
+        payment.amount = fee;
+
+        emit LogChargeServiceFee(consumer,tokenAddr,requestID,serviceType,fee);
+        ERC20I(tokenAddr).transferFrom(consumer, address(this),fee);
     }
 
-    function refundServiceFee(uint requestID) public onlyOwner {
-        require(_serviceFees[requestID].fee!=0, "No fee infomation!");
-        uint fee = _serviceFees[requestID].fee;
-        address tokenAddr = _serviceFees[requestID].tokenAddr;
-        address requester = _serviceFees[requestID].requester;
-        delete _serviceFees[requestID];
-        emit LogRefundServiceFee(requester,requestID,tokenAddr,fee);
-        ERC20I(tokenAddr).transfer(requester,fee);
+    function refundServiceFee(uint requestID) public onlyOwner hasPayment(requestID) {
+        uint fee = _payments[requestID].amount;
+        uint serviceType = _payments[requestID].serviceType;
+        address tokenAddr = _payments[requestID].tokenAddr;
+        address consumer = _payments[requestID].consumer;
+        delete _payments[requestID];
+        emit LogRefundServiceFee(consumer,tokenAddr,requestID,serviceType,fee);
+        ERC20I(tokenAddr).transfer(consumer,fee);
     }
 
-    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public onlyProxy {
-        require(_serviceFees[requestID].fee != 0, "No fee infomation!");
-        require(workers.length >= 3, "Not a valid workers length!");
-        address tokenAddr = _serviceFees[requestID].tokenAddr;
-        uint fee = _serviceFees[requestID].fee;
-        delete _serviceFees[requestID];
+    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public onlyProxy hasPayment(requestID) {
+        address tokenAddr = _payments[requestID].tokenAddr;
+        uint fee = _payments[requestID].amount;
+        uint serviceType = _payments[requestID].serviceType;
+        delete _payments[requestID];
 
         // TODO : Adjust dividends strategy
         FeeList memory feeList = _feeList[tokenAddr];
@@ -156,51 +189,35 @@ contract DOSPayment is Ownable {
         uint feeForSubmitter = fee * feeList.workerRate;
         uint feeForWorker = (fee * feeList.workerRate)/(workers.length-1);
 
-        transferTokenTo(_nodeRewards[submitter],tokenAddr,feeForSubmitter);
-        emit LogClaimServiceFee(requestID,submitter,tokenAddr,feeForSubmitter);
+        payFeeTo(_nodeRewards[submitter],tokenAddr,feeForSubmitter);
+        emit LogClaimServiceFee(submitter,tokenAddr,requestID,serviceType,feeForSubmitter);
         for (uint i = 0; i < workers.length; i++) {
             if (workers[i] != submitter){
-                transferTokenTo(_nodeRewards[workers[i]],tokenAddr,feeForWorker);
-                emit LogClaimServiceFee(requestID,workers[i],tokenAddr,feeForWorker);
+                payFeeTo(_nodeRewards[workers[i]],tokenAddr,feeForWorker);
+                emit LogClaimServiceFee(workers[i],tokenAddr,requestID,serviceType,feeForSubmitter);
             }
         }
     }
 
-    function claimGuardianReward(address guardianAddr) public onlyProxy {
-        require(_nodeRewards[address(this)].tokenAddres.length!=0, "No any token to rewards!");
-        require(_feeList[_guardianFundsTokenAddr].guardianFee!=0, "Unknow guardian rewards|");
-        uint fee = _feeList[_guardianFundsTokenAddr].guardianFee;
-        Tokens storage funds = _nodeRewards[address(this)];
-        Tokens storage guardian = _nodeRewards[guardianAddr];
-        if (funds.amount[_guardianFundsTokenAddr] < fee) {
-            revert("No enough funds for guardian!");
-        }
-        transferTokenFrom(funds,guardian,_guardianFundsTokenAddr,_feeList[_guardianFundsTokenAddr].guardianFee);
-    }
-
-    function transferTokenTo(Tokens storage tokens,address tokenAddr,uint amount) internal{
-        uint tokenAmount = tokens.amount[tokenAddr];
+    function payFeeTo(Rewards storage rewards,address tokenAddr,uint amount) internal{
+        uint tokenAmount = rewards.amount[tokenAddr];
         if (tokenAmount == 0) {
-            tokens.tokenAddres.push(tokenAddr);
+            rewards.tokenAddres.push(tokenAddr);
         }
-        tokens.amount[tokenAddr] = tokenAmount + amount;
+        rewards.amount[tokenAddr] = tokenAmount + amount;
     }
 
-    function transferTokenFrom(Tokens storage src,Tokens storage dist,address tokenAddr,uint amount) internal{
-        require(src.amount[tokenAddr] >= amount, "No enough amount!");
-        src.amount[tokenAddr] = src.amount[tokenAddr] - amount;
-        if (src.amount[tokenAddr] == 0) {
-            src.tokenAddres.pop();
-        }
-        if (dist.amount[tokenAddr] == 0) {
-            dist.tokenAddres.push(tokenAddr);
-        }
-        dist.amount[tokenAddr] = dist.amount[tokenAddr] + amount;
+    function claimGuardianReward(address guardianAddr) public onlyProxy {
+        require(_guardianFundsAddr!=address(0x0), "Not a valid guardian funds address!");
+        require(_guardianFundsTokenAddr!=address(0x0), "Not a valid token address!");
+        uint fee = _feeList[_guardianFundsTokenAddr].guardianFee;
+        emit  LogClaimGuardianFee(guardianAddr,_guardianFundsTokenAddr,fee,msg.sender);
+        ERC20I(_guardianFundsTokenAddr).transferFrom(_guardianFundsAddr,guardianAddr,fee);
     }
 
     function withdraw() public {
         require(_nodeRewards[msg.sender].tokenAddres.length!=0, "No rewards!");
-        Tokens storage rewards = _nodeRewards[msg.sender];
+        Rewards storage rewards = _nodeRewards[msg.sender];
         address tokenAddr = rewards.tokenAddres[rewards.tokenAddres.length-1];
         rewards.tokenAddres.pop();
         uint amount = rewards.amount[tokenAddr];
@@ -225,9 +242,9 @@ contract DOSPayment is Ownable {
         return (_nodeRewards[nodeAddr].amount[tokenAddr]);
     }
 
-    function feenInfo(uint requestID) public view returns (address,uint){
-       ServiceFee storage fee = _serviceFees[requestID];
-       return (fee.tokenAddr,fee.fee);
+    function paymentInfo(uint requestID) public view returns (address,uint){
+    Payment storage payment = _payments[requestID];
+       return (payment.tokenAddr,payment.amount);
     }
 
     // For test

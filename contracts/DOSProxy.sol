@@ -5,6 +5,10 @@ pragma solidity ^0.5.0;
 import "./lib/BN256.sol";
 import "./Ownable.sol";
 
+contract ERC20I {
+    function approve(address spender, uint value) public returns (bool);
+}
+
 contract UserContractInterface {
     // Query callback.
     function __callback__(uint, bytes calldata) external;
@@ -24,9 +28,10 @@ contract DOSAddressBridgeInterface {
 
 contract DOSPaymentInterface {
     function fromValidStakingNode(address) public view returns(bool);
-    function chargeServiceFee(address ,uint ,address ) public;
+    function chargeServiceFee(address ,uint ,uint ) public;
     function claimServiceFee(uint requestID,address submitter,address[] memory workers) public;
     function claimGuardianReward(address guardian) public;
+    function setPaymentMethod(address consumer,address tokenAddr) public;
 }
 
 contract DOSProxy is Ownable {
@@ -35,6 +40,7 @@ contract DOSProxy is Ownable {
     // Metadata of pending request.
     struct PendingRequest {
         uint requestId;
+        uint groupId;
         BN256.G2Point handledGroupPubKey;
         // Calling contract who issues the request.
         address callbackAddr;
@@ -62,25 +68,31 @@ contract DOSProxy is Ownable {
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
-    uint public refreshSystemRandomHardLimit = 60; // in blocks, ~15min
-    uint public groupMaturityPeriod = 11520; // in blocks, ~2days
+    uint public refreshSystemRandomHardLimit = 240; // in blocks, ~1 hour
+    uint public groupMaturityPeriod = refreshSystemRandomHardLimit*24; // in blocks, ~1days
+    uint public lifeDiversity = refreshSystemRandomHardLimit*24; // in blocks, ~1days
+    // avoid looping in a big loop that causing over gas.
+    uint public checkExpireLimit = 50;
+
     // When regrouping, picking @gropToPick working groups, plus one group from pending nodes.
-    uint public expiredWorkingGroupDissolveLimit = 2;
+    uint public bootstrapGroups = 4;
     uint public groupToPick = 2;
     uint public groupSize = 21;
-    // It should bigger than refreshSystemRandomHardLimit to avoid dissolving all groups at the same time
-    uint public lifeMagnify = 70;
+
     // decimal 2.
-    uint public groupingThreshold = 110;
+    uint public groupingThreshold = 130;
     // Bootstrapping related arguments, in blocks.
     uint public bootstrapCommitDuration = 40;
     uint public bootstrapRevealDuration = 40;
-    uint public bootstrapStartThreshold = groupSize * (groupToPick * 3);
+    uint public bootstrapStartThreshold = groupSize * bootstrapGroups;
     uint public bootstrapRound = 0;
+    uint public bootstrapEndBlk = 0;
 
     // DOSAddressBridge on rinkeby testnet
     DOSAddressBridgeInterface public addressBridge =
-        DOSAddressBridgeInterface(0xf0CEFfc4209e38EA3Cd1926DDc2bC641cbFFd1cF);
+        DOSAddressBridgeInterface(0x8597DeAeC7a42444EE704F317e9Eb8c82DfB3CeE);
+    address public proxyFundsAddr = 0x2a3B59AC638F90d82BdAF5E2dA5D37C1a31B29f3;
+    address public proxyFundsTokenAddr = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
 
     uint private constant UINTMAX = uint(-1);
     // Dummy head and placeholder used in linkedlists.
@@ -148,7 +160,6 @@ contract DOSProxy is Ownable {
         bytes message,
         uint[2] signature,
         uint[4] pubKey,
-        uint8 version,
         bool pass
     );
     event LogInsufficientPendingNode(uint numPendingNodes);
@@ -171,8 +182,14 @@ contract DOSProxy is Ownable {
     event UpdateBootstrapRevealDuration(uint oldDuration, uint newDuration);
     event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
     event UpdatePendingGroupMaxLife(uint oldLifeBlocks, uint newLifeBlocks);
+    event UpdateBootstrapGroups(uint oldSize, uint newSize);
+    event UpdateSystemRandomHardLimit(uint oldLimit, uint newLimit);
+    event UpdateCheckExpireLimit(uint oldLimit, uint newLimit);
+    event UpdateLifeDiversity(uint oldDiversity, uint newDiversity);
+    event UpdateProxyFund(address oldFundAddr, address newFundAddr,address oldTokenAddr, address newTokenAddr);
     event GuardianReward(uint blkNum, address indexed guardian);
-
+    event LogGroupBuild(uint groupId, uint life, uint blkNum);
+    event Dispatch(uint idx, uint workingLength, uint expiredLength);
 
     modifier fromValidStakingNode {
         require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
@@ -185,6 +202,7 @@ contract DOSProxy is Ownable {
         pendingNodeTail = HEAD_A;
         pendingGroupList[HEAD_I] = HEAD_I;
         pendingGroupTail = HEAD_I;
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
     }
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
@@ -215,53 +233,86 @@ contract DOSProxy is Ownable {
         return expiredWorkingGroupIds.length;
     }
 
+    function setProxyFund(address newFund,address  newFundToken) public onlyOwner {
+        require(newFund != proxyFundsAddr && newFund != address(0x0),"Not a valid parameter");
+        require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0),"Not a valid parameter");
+        emit UpdateProxyFund(proxyFundsAddr,newFund,proxyFundsTokenAddr,newFundToken);
+        proxyFundsAddr = newFund;
+        proxyFundsTokenAddr = newFundToken;
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
+    }
+
     function setGroupToPick(uint newNum) public onlyOwner {
-        require(newNum != groupToPick && newNum != 0);
+        require(newNum != groupToPick && newNum != 0,"Not a valid parameter");
         emit UpdateGroupToPick(groupToPick, newNum);
         groupToPick = newNum;
     }
 
     // groupSize must be an odd number.
     function setGroupSize(uint newSize) public onlyOwner {
-        require(newSize != groupSize && newSize % 2 != 0);
+        require(newSize != groupSize && newSize % 2 != 0,"Not a valid parameter");
         emit UpdateGroupSize(groupSize, newSize);
         groupSize = newSize;
     }
 
     function setGroupingThreshold(uint newThreshold) public onlyOwner {
-        require(newThreshold != groupingThreshold && newThreshold >= 100);
+        require(newThreshold != groupingThreshold && newThreshold >= 100,"Not a valid parameter");
         emit UpdateGroupMaturityPeriod(groupingThreshold, newThreshold);
         groupingThreshold = newThreshold;
     }
 
     function setGroupMaturityPeriod(uint newPeriod) public onlyOwner {
-        require(newPeriod != groupMaturityPeriod && newPeriod != 0);
+        require(newPeriod != groupMaturityPeriod && newPeriod != 0,"Not a valid parameter");
         emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
         groupMaturityPeriod = newPeriod;
     }
 
     function setBootstrapCommitDuration(uint newCommitDuration) public onlyOwner {
-        require(newCommitDuration != bootstrapCommitDuration && newCommitDuration != 0);
+        require(newCommitDuration != bootstrapCommitDuration && newCommitDuration != 0,"Not a valid parameter");
         emit UpdateBootstrapCommitDuration(bootstrapCommitDuration, newCommitDuration);
         bootstrapCommitDuration = newCommitDuration;
     }
 
     function setBootstrapRevealDuration(uint newRevealDuration) public onlyOwner {
-        require(newRevealDuration != bootstrapRevealDuration && newRevealDuration != 0);
+        require(newRevealDuration != bootstrapRevealDuration && newRevealDuration != 0,"Not a valid parameter");
         emit UpdateBootstrapRevealDuration(bootstrapRevealDuration, newRevealDuration);
         bootstrapRevealDuration = newRevealDuration;
     }
 
     function setbootstrapStartThreshold(uint newNum) public onlyOwner {
-        require(newNum != bootstrapStartThreshold && newNum >= groupSize * (groupToPick + 1));
+        require(newNum != bootstrapStartThreshold && newNum >= groupSize * (groupToPick + 1),"Not a valid parameter");
         emit UpdatebootstrapStartThreshold(bootstrapStartThreshold, newNum);
         bootstrapStartThreshold = newNum;
     }
 
     function setPendingGroupMaxLife(uint newLife) public onlyOwner {
-        require(newLife != pendingGroupMaxLife && newLife != 0);
+        require(newLife != pendingGroupMaxLife && newLife != 0,"Not a valid parameter");
         emit UpdatePendingGroupMaxLife(pendingGroupMaxLife, newLife);
         pendingGroupMaxLife = newLife;
+    }
+
+    function setBootstrapGroups(uint newGroups) public onlyOwner {
+        require(newGroups != bootstrapGroups && newGroups != 0,"Not a valid parameter");
+        emit UpdateBootstrapGroups(bootstrapGroups, newGroups);
+        bootstrapGroups = newGroups;
+    }
+
+    function setSystemRandomHardLimit(uint newLimit) public onlyOwner {
+        require(newLimit != refreshSystemRandomHardLimit && newLimit != 0,"Not a valid parameter");
+        emit UpdateSystemRandomHardLimit(refreshSystemRandomHardLimit, newLimit);
+        refreshSystemRandomHardLimit = newLimit;
+    }
+
+    function setCheckExpireLimit(uint newLimit) public onlyOwner {
+        require(newLimit != checkExpireLimit && newLimit != 0,"Not a valid parameter");
+        emit UpdateCheckExpireLimit(checkExpireLimit, newLimit);
+        checkExpireLimit = newLimit;
+    }
+
+    function setLifeDiversity(uint newDiversity) public onlyOwner {
+        require(newDiversity != lifeDiversity && newDiversity != 0,"Not a valid parameter");
+        emit UpdateLifeDiversity(lifeDiversity, newDiversity);
+        lifeDiversity = newDiversity;
     }
 
     function getCodeSize(address addr) private view returns (uint size) {
@@ -271,29 +322,26 @@ contract DOSProxy is Ownable {
     }
 
     function dispatchJobCore(TrafficType trafficType, uint pseudoSeed) private returns(uint idx) {
-        uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness)));
-        uint dissolveNum = 0;
+        uint dissolveIdx = 0;
         do {
             if (workingGroupIds.length == 0) {
-                formGroup();
+                emit Dispatch(dissolveIdx,workingGroupIds.length,expiredWorkingGroupIds.length);
                 return UINTMAX;
             }
-            idx = rnd % workingGroupIds.length;
-            Group storage group = workingGroups[workingGroupIds[idx]];
-            // Use idx %10 to avoid dissolving all of working group at the same time
-            if (groupMaturityPeriod + group.birthBlkN + group.life <= block.number &&
-                    dissolveNum < expiredWorkingGroupDissolveLimit) {
-                // Dissolving expired working groups happens in another phase for gas reasons.
-                expiredWorkingGroupIds.push(workingGroupIds[idx]);
-                workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
-                workingGroupIds.length--;
-                dissolveNum++;
-                if (expiredWorkingGroupIds.length >= groupToPick) {
-                    formGroup();
-                }
-            } else {
-                return idx;
+            if (dissolveIdx >= workingGroupIds.length ||
+                dissolveIdx >= checkExpireLimit) {
+                emit Dispatch(dissolveIdx,workingGroupIds.length,expiredWorkingGroupIds.length);
+                uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness,block.number)));
+                return rnd % workingGroupIds.length;
             }
+            Group storage group = workingGroups[workingGroupIds[dissolveIdx]];
+            if (groupMaturityPeriod + group.birthBlkN + group.life <= block.number) {
+                // Dissolving expired working groups happens in another phase for gas reasons.
+                expiredWorkingGroupIds.push(workingGroupIds[dissolveIdx]);
+                workingGroupIds[dissolveIdx] = workingGroupIds[workingGroupIds.length - 1];
+                workingGroupIds.length--;
+            }
+            dissolveIdx++;
         } while (true);
     }
 
@@ -308,13 +356,15 @@ contract DOSProxy is Ownable {
         uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
-            emit LogError("No live working group, skipped random request");
+            emit LogError("No live working group, trigger bootstrap");
             return;
         }
+
         lastUpdatedBlock = block.number;
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr,lastRandomness,uint(TrafficType.SystemRandom));
     }
 
     function insertToPendingGroupListTail(uint groupId) private {
@@ -353,7 +403,7 @@ contract DOSProxy is Ownable {
     }
 
     /// Find Node from a storage linkedlist.
-    function findNodeFromList(mapping(address => address) storage list, address node) private returns(address, bool) {
+    function findNodeFromList(mapping(address => address) storage list, address node) private view returns(address, bool) {
         address prev = HEAD_A;
         address curr = list[prev];
         while (curr != HEAD_A && curr != node) {
@@ -423,7 +473,6 @@ contract DOSProxy is Ownable {
     // Returns query id.
     // TODO: restrict query from subscribed/paid calling contracts.
     function query(
-        address tokenAddr,
         address from,
         uint timeout,
         string calldata dataSource,
@@ -440,7 +489,6 @@ contract DOSProxy is Ownable {
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
                 uint queryId = uint(keccak256(abi.encodePacked(
                     ++requestIdSeed, from, timeout, dataSource, selector)));
-                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(tokenAddr,queryId,from);
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 // TODO: keep id receipt and handle later in v2.0.
                 if (idx == UINTMAX) {
@@ -448,8 +496,7 @@ contract DOSProxy is Ownable {
                     return 0;
                 }
                 Group storage grp = workingGroups[workingGroupIds[idx]];
-                PendingRequests[queryId] =
-                    PendingRequest(queryId, grp.groupPubKey, from);
+                PendingRequests[queryId] = PendingRequest(queryId, grp.groupId,grp.groupPubKey, from);
                 emit LogUrl(
                     queryId,
                     timeout,
@@ -458,6 +505,7 @@ contract DOSProxy is Ownable {
                     lastRandomness,
                     grp.groupId
                 );
+                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from,queryId,uint(TrafficType.UserQuery));
                 return queryId;
             } else {
                 emit LogNonSupportedType(selector);
@@ -471,7 +519,7 @@ contract DOSProxy is Ownable {
     }
 
     // Request a new user-level random number.
-    function requestRandom(address tokenAddr,address from, uint8 mode, uint userSeed)
+    function requestRandom(address from, uint8 mode, uint userSeed)
         public
         returns (uint)
     {
@@ -484,7 +532,6 @@ contract DOSProxy is Ownable {
             // TODO: restrict request from paid calling contract address.
             uint requestId = uint(keccak256(abi.encodePacked(
                 ++requestIdSeed, from, userSeed)));
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(tokenAddr,requestId,from);
             uint idx = dispatchJob(TrafficType.UserRandom, requestId);
             // TODO: keep id receipt and handle later in v2.0.
             if (idx == UINTMAX) {
@@ -492,8 +539,7 @@ contract DOSProxy is Ownable {
                 return 0;
             }
             Group storage grp = workingGroups[workingGroupIds[idx]];
-            PendingRequests[requestId] =
-                PendingRequest(requestId, grp.groupPubKey, from);
+            PendingRequests[requestId] = PendingRequest(requestId, grp.groupId,grp.groupPubKey, from);
             // sign(requestId ||lastSystemRandomness || userSeed ||
             // selected sender in group)
             emit LogRequestUserRandom(
@@ -502,6 +548,11 @@ contract DOSProxy is Ownable {
                 userSeed,
                 grp.groupId
             );
+            if (from == address(this)) {
+                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr,requestId,uint(TrafficType.UserRandom));
+            } else {
+                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from,requestId,uint(TrafficType.UserRandom));
+            }
             return requestId;
         } else {
             revert("Non-supported random request");
@@ -514,8 +565,7 @@ contract DOSProxy is Ownable {
         uint trafficId,
         bytes memory data,
         BN256.G1Point memory signature,
-        BN256.G2Point memory grpPubKey,
-        uint8 version
+        BN256.G2Point memory grpPubKey
     )
         private
         returns (bool)
@@ -540,7 +590,6 @@ contract DOSProxy is Ownable {
             message,
             [signature.x, signature.y],
             [grpPubKey.x[0], grpPubKey.x[1], grpPubKey.y[0], grpPubKey.y[1]],
-            version,
             passVerify
         );
         return passVerify;
@@ -550,8 +599,7 @@ contract DOSProxy is Ownable {
         uint requestId,
         uint8 trafficType,
         bytes calldata result,
-        uint[2] calldata sig,
-        uint8 version
+        uint[2] calldata sig
     )
         external
         fromValidStakingNode
@@ -567,8 +615,7 @@ contract DOSProxy is Ownable {
                 requestId,
                 result,
                 BN256.G1Point(sig[0], sig[1]),
-                PendingRequests[requestId].handledGroupPubKey,
-                version))
+                PendingRequests[requestId].handledGroupPubKey))
         {
             return;
         }
@@ -581,11 +628,14 @@ contract DOSProxy is Ownable {
             // Safe random number is the collectively signed threshold signature
             // of the message (requestId || lastRandomness || userSeed ||
             // selected sender in group).
+            emit LogError("UserRandom");
             UserContractInterface(ucAddr).__callback__(
                 requestId, uint(keccak256(abi.encodePacked(sig[0], sig[1]))));
         } else {
             revert("Unsupported traffic type");
         }
+        Group memory grp = workingGroups[PendingRequests[requestId].groupId];
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimServiceFee(requestId,msg.sender,grp.members);
     }
 
     function toBytes(uint x) private pure returns (bytes memory b) {
@@ -594,21 +644,22 @@ contract DOSProxy is Ownable {
     }
 
     // System-level secure distributed random number generator.
-    function updateRandomness(uint[2] calldata sig, uint8 version) external fromValidStakingNode {
+    function updateRandomness(uint[2] calldata sig) external fromValidStakingNode {
         if (!validateAndVerify(
                 uint8(TrafficType.SystemRandom),
                 lastRandomness,
                 toBytes(lastRandomness),
                 BN256.G1Point(sig[0], sig[1]),
-                lastHandledGroup.groupPubKey,
-                version))
+                lastHandledGroup.groupPubKey))
         {
             return;
         }
+
         // Update new randomness = sha3(collectively signed group signature)
         // TODO: include and test with blockhash.
+        uint oldRandomness = lastRandomness;
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
-        lastUpdatedBlock = block.number;
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimServiceFee(oldRandomness,msg.sender,lastHandledGroup.members);
     }
 
     /// @notice Caller ensures pendingGroupList is not empty and pending group header has indeed expired.
@@ -687,6 +738,7 @@ contract DOSProxy is Ownable {
 
         // Reset.
         bootstrapRound = 0;
+        bootstrapEndBlk = 0;
         uint rndSeed = CommitRevealInterface(addressBridge.getCommitRevealAddress()).getRandom(_cid);
         if (rndSeed == 0) {
             emit LogError("CommitReveal failure, bootstrapRound reset");
@@ -809,7 +861,6 @@ contract DOSProxy is Ownable {
                 dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
                 expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                 expiredWorkingGroupIds.length--;
-                emit GuardianReward(block.number, msg.sender);
             } else {
                 emit LogError("No expired working group to clean up");
             }
@@ -848,6 +899,7 @@ contract DOSProxy is Ownable {
                      bootstrapRevealDuration,
                      bootstrapStartThreshold
                  );
+                 bootstrapEndBlk = block.number+bootstrapCommitDuration+bootstrapRevealDuration;
                  return true;
             } else {
                 emit LogError("Skipped group formation, already in bootstrap phase");
@@ -863,6 +915,7 @@ contract DOSProxy is Ownable {
                 "No enough expired working group");
         require(numPendingNodes >= groupSize * groupingThreshold / 100,
                 "Not enough newly registered nodes");
+          emit LogError("__callback__");
 
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);
@@ -909,7 +962,7 @@ contract DOSProxy is Ownable {
 
     // Regroup a shuffled node array.
     function regroup(address[] memory candidates, uint num) private {
-        require(candidates.length == groupSize * num);
+        require(candidates.length == groupSize * num, "candidates.length is wrong");
 
         address[] memory members = new address[](groupSize);
         uint groupId;
@@ -963,11 +1016,11 @@ contract DOSProxy is Ownable {
             workingGroups[groupId] = Group(
                 groupId,
                 BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
-                numPendingGroups*lifeMagnify,
+                numPendingGroups*lifeDiversity,
                 block.number,
                 memberArray
             );
-
+            emit LogGroupBuild(groupId,numPendingGroups*lifeDiversity+groupMaturityPeriod,block.number);
             // Update pendingGroupList
             (uint prev, bool removed) = removeIdFromList(pendingGroupList, groupId);
             // Reset pendingGroupTail if necessary.
