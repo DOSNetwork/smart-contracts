@@ -75,7 +75,7 @@ contract SimpleDice is DOSOnChainSDK {
 
         // Request a safe, unmanipulatable random number from DOS Network with
         // optional seed.
-        uint gameId = DOSRandom(1, now);
+        uint gameId = DOSRandom(now);
 
         games[gameId] = DiceInfo(rollUnder, msg.value, msg.sender);
         // Emit event to notify Dapp frontend

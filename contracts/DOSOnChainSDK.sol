@@ -6,7 +6,7 @@ import "./Ownable.sol";
 
 contract DOSProxyInterface {
     function query(address, uint, string memory, string memory) public returns (uint);
-    function requestRandom(address, uint8, uint) public returns (uint);
+    function requestRandom(address, uint) public returns (uint);
 }
 
 contract DOSPaymentInterface {
@@ -105,23 +105,13 @@ contract DOSOnChainSDK is Ownable{
     //       asynchronously through the __callback__ function.
     //       Depending on the mode, the return value would be a random number
     //       (for fast mode) or a requestId (for safe mode).
-    // @mode: 1: safe mode - The asynchronous but safe way to generate a new
-    //                       secure random number by a group of off-chain
-    //                       clients using VRF and Threshold Signature. There
-    //                       would be a fee to run in safe mode.
-    //        0: fast mode - Return a random number in one invocation directly.
-    //                       The returned random is the sha3 hash of latest
-    //                       generated random number by DOS Network combining
-    //                       with the optional seed.
-    //                       Thus the result should NOT be considered safe and
-    //                       is for testing purpose only. It's free of charge.
     // @seed: Optional random seed provided by caller.
-    function DOSRandom(uint8 mode, uint seed)
+    function DOSRandom(uint seed)
         internal
         resolveAddress
         returns (uint)
     {
-        return dosProxy.requestRandom(address(this), mode, seed);
+        return dosProxy.requestRandom(address(this), seed);
     }
 
     // @dev: Must override __callback__ to process a corresponding random

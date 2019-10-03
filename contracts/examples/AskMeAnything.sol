@@ -63,15 +63,9 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
         }
     }
 
-    // Request a fast but insecure random number to use directly.
-    function requestFastRandom() public {
-        lastRequestedRandom = random;
-        random = DOSRandom(0, now);
-    }
-
     function requestSafeRandom(uint8 internalSerial) public {
         lastRequestedRandom = random;
-        uint requestId = DOSRandom(1, now);
+        uint requestId = DOSRandom(now);
         _valid[requestId] = true;
         emit RequestSent(msg.sender, internalSerial, true, requestId);
     }

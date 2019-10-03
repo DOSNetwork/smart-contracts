@@ -440,7 +440,7 @@ contract DOSProxy is Ownable {
         uint curr = list[prev];
         while (curr != HEAD_I) {
             PendingGroup storage pgrp = pendingGroups[curr];
-            (address prevNode, bool found) = findNodeFromList(pgrp.memberList,node);
+            (, bool found) = findNodeFromList(pgrp.memberList,node);
             if (found) {
                 cleanUpOldestExpiredPendingGroup(curr);
                 return true;
@@ -519,44 +519,35 @@ contract DOSProxy is Ownable {
     }
 
     // Request a new user-level random number.
-    function requestRandom(address from, uint8 mode, uint userSeed)
+    function requestRandom(address from, uint userSeed)
         public
         returns (uint)
     {
-        // fast mode
-        if (mode == 0) {
-            return uint(keccak256(abi.encodePacked(
-                ++requestIdSeed,lastRandomness, userSeed)));
-        } else if (mode == 1) {
-            // safe mode
-            // TODO: restrict request from paid calling contract address.
-            uint requestId = uint(keccak256(abi.encodePacked(
-                ++requestIdSeed, from, userSeed)));
-            uint idx = dispatchJob(TrafficType.UserRandom, requestId);
-            // TODO: keep id receipt and handle later in v2.0.
-            if (idx == UINTMAX) {
-                emit LogError("No live working group, skipped random request");
-                return 0;
-            }
-            Group storage grp = workingGroups[workingGroupIds[idx]];
-            PendingRequests[requestId] = PendingRequest(requestId, grp.groupId,grp.groupPubKey, from);
-            // sign(requestId ||lastSystemRandomness || userSeed ||
-            // selected sender in group)
-            emit LogRequestUserRandom(
-                requestId,
-                lastRandomness,
-                userSeed,
-                grp.groupId
-            );
-            if (from == address(this)) {
-                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr,requestId,uint(TrafficType.UserRandom));
-            } else {
-                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from,requestId,uint(TrafficType.UserRandom));
-            }
-            return requestId;
-        } else {
-            revert("Non-supported random request");
+        // TODO: restrict request from paid calling contract address.
+        uint requestId = uint(keccak256(abi.encodePacked(
+            ++requestIdSeed, from, userSeed)));
+        uint idx = dispatchJob(TrafficType.UserRandom, requestId);
+        // TODO: keep id receipt and handle later in v2.0.
+        if (idx == UINTMAX) {
+            emit LogError("No live working group, skipped random request");
+            return 0;
         }
+        Group storage grp = workingGroups[workingGroupIds[idx]];
+        PendingRequests[requestId] = PendingRequest(requestId, grp.groupId,grp.groupPubKey, from);
+        // sign(requestId ||lastSystemRandomness || userSeed ||
+        // selected sender in group)
+        emit LogRequestUserRandom(
+            requestId,
+            lastRandomness,
+            userSeed,
+            grp.groupId
+        );
+        if (from == address(this)) {
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr,requestId,uint(TrafficType.UserRandom));
+        } else {
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from,requestId,uint(TrafficType.UserRandom));
+        }
+        return requestId;
     }
 
     // Random submitter validation + group signature verification.
@@ -869,7 +860,7 @@ contract DOSProxy is Ownable {
 
         if (workingGroupIds.length != 0) {
             if (expiredWorkingGroupIds.length >= groupToPick) {
-                requestRandom(address(this), 1, block.number);
+                requestRandom(address(this), block.number);
                 emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
                 return true;
             } else {
