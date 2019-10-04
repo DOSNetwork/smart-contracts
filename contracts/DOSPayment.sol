@@ -64,7 +64,7 @@ contract DOSPayment is Ownable {
 
     // DOS Address Bridge on rinkeby testnet
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x8597DeAeC7a42444EE704F317e9Eb8c82DfB3CeE);
+        DOSAddressBridgeInterface(0x848C0Bb953755293230b705464654F647967639A);
 
     // DOS Token on rinkeby testnet
     address public networkToken = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;

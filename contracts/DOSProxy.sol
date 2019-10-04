@@ -90,7 +90,7 @@ contract DOSProxy is Ownable {
 
     // DOSAddressBridge on rinkeby testnet
     DOSAddressBridgeInterface public addressBridge =
-        DOSAddressBridgeInterface(0x8597DeAeC7a42444EE704F317e9Eb8c82DfB3CeE);
+        DOSAddressBridgeInterface(0x848C0Bb953755293230b705464654F647967639A);
     address public proxyFundsAddr = 0x2a3B59AC638F90d82BdAF5E2dA5D37C1a31B29f3;
     address public proxyFundsTokenAddr = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
 
@@ -174,9 +174,7 @@ contract DOSProxy is Ownable {
     event LogNoPendingGroup(uint groupId);
     event LogPendingGroupRemoved(uint groupId);
     event LogError(string err);
-    event UpdateGroupToPick(uint oldNum, uint newNum);
     event UpdateGroupSize(uint oldSize, uint newSize);
-    event UpdateGroupingThreshold(uint oldThreshold, uint newThreshold);
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
     event UpdateBootstrapCommitDuration(uint oldDuration, uint newDuration);
     event UpdateBootstrapRevealDuration(uint oldDuration, uint newDuration);
@@ -184,12 +182,8 @@ contract DOSProxy is Ownable {
     event UpdatePendingGroupMaxLife(uint oldLifeBlocks, uint newLifeBlocks);
     event UpdateBootstrapGroups(uint oldSize, uint newSize);
     event UpdateSystemRandomHardLimit(uint oldLimit, uint newLimit);
-    event UpdateCheckExpireLimit(uint oldLimit, uint newLimit);
-    event UpdateLifeDiversity(uint oldDiversity, uint newDiversity);
     event UpdateProxyFund(address oldFundAddr, address newFundAddr,address oldTokenAddr, address newTokenAddr);
     event GuardianReward(uint blkNum, address indexed guardian);
-    event LogGroupBuild(uint groupId, uint life, uint blkNum);
-    event Dispatch(uint idx, uint workingLength, uint expiredLength);
 
     modifier fromValidStakingNode {
         require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
@@ -242,23 +236,11 @@ contract DOSProxy is Ownable {
         DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
     }
 
-    function setGroupToPick(uint newNum) public onlyOwner {
-        require(newNum != groupToPick && newNum != 0,"Not a valid parameter");
-        emit UpdateGroupToPick(groupToPick, newNum);
-        groupToPick = newNum;
-    }
-
     // groupSize must be an odd number.
     function setGroupSize(uint newSize) public onlyOwner {
         require(newSize != groupSize && newSize % 2 != 0,"Not a valid parameter");
         emit UpdateGroupSize(groupSize, newSize);
         groupSize = newSize;
-    }
-
-    function setGroupingThreshold(uint newThreshold) public onlyOwner {
-        require(newThreshold != groupingThreshold && newThreshold >= 100,"Not a valid parameter");
-        emit UpdateGroupMaturityPeriod(groupingThreshold, newThreshold);
-        groupingThreshold = newThreshold;
     }
 
     function setGroupMaturityPeriod(uint newPeriod) public onlyOwner {
@@ -301,18 +283,8 @@ contract DOSProxy is Ownable {
         require(newLimit != refreshSystemRandomHardLimit && newLimit != 0,"Not a valid parameter");
         emit UpdateSystemRandomHardLimit(refreshSystemRandomHardLimit, newLimit);
         refreshSystemRandomHardLimit = newLimit;
-    }
-
-    function setCheckExpireLimit(uint newLimit) public onlyOwner {
-        require(newLimit != checkExpireLimit && newLimit != 0,"Not a valid parameter");
-        emit UpdateCheckExpireLimit(checkExpireLimit, newLimit);
-        checkExpireLimit = newLimit;
-    }
-
-    function setLifeDiversity(uint newDiversity) public onlyOwner {
-        require(newDiversity != lifeDiversity && newDiversity != 0,"Not a valid parameter");
-        emit UpdateLifeDiversity(lifeDiversity, newDiversity);
-        lifeDiversity = newDiversity;
+        groupMaturityPeriod = refreshSystemRandomHardLimit*24; // in blocks, ~1days
+        lifeDiversity = refreshSystemRandomHardLimit*24; // in blocks, ~1days
     }
 
     function getCodeSize(address addr) private view returns (uint size) {
@@ -325,12 +297,10 @@ contract DOSProxy is Ownable {
         uint dissolveIdx = 0;
         do {
             if (workingGroupIds.length == 0) {
-                emit Dispatch(dissolveIdx,workingGroupIds.length,expiredWorkingGroupIds.length);
                 return UINTMAX;
             }
             if (dissolveIdx >= workingGroupIds.length ||
                 dissolveIdx >= checkExpireLimit) {
-                emit Dispatch(dissolveIdx,workingGroupIds.length,expiredWorkingGroupIds.length);
                 uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness,block.number)));
                 return rnd % workingGroupIds.length;
             }
@@ -1020,7 +990,6 @@ contract DOSProxy is Ownable {
                 block.number,
                 memberArray
             );
-            emit LogGroupBuild(groupId,numPendingGroups*lifeDiversity+groupMaturityPeriod,block.number);
             // Update pendingGroupList
             (uint prev, bool removed) = removeIdFromList(pendingGroupList, groupId);
             // Reset pendingGroupTail if necessary.
