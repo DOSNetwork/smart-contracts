@@ -169,7 +169,7 @@ contract DOSProxy is Ownable {
     event LogPublicKeySuggested(uint groupId, uint pubKeyCount);
     event LogGroupDissolve(uint groupId);
     event LogRegisteredNewPendingNode(address node);
-    event LogUnRegisteredNewPendingNode(address node, uint unregisterFrom);
+    event LogUnRegisteredNewPendingNode(address node, uint8 unregisterFrom);
     event LogGroupingInitiated(uint pendingNodePool, uint groupsize, uint groupingthreshold);
     event LogNoPendingGroup(uint groupId);
     event LogPendingGroupRemoved(uint groupId);
@@ -681,6 +681,8 @@ contract DOSProxy is Ownable {
         if (formGroup()) {
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+        } else {
+            emit LogMessage("No group formation");
         }
     }
     // TODO: Reward guardian nodes.
@@ -714,19 +716,24 @@ contract DOSProxy is Ownable {
     }
     // Todo: Add a whitelist for signalUnregister
     function signalUnregister(address member) public {
-        unregister(member);
-        emit GuardianReward(block.number, msg.sender);
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+        if (unregister(member)) {
+            emit GuardianReward(block.number, msg.sender);
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+        } else {
+            emit LogMessage("Nothing to unregister");
+        }
     }
     /// End of Guardian functions
 
-    function unregisterNode() public fromValidStakingNode {
-        unregister(msg.sender);
+    function unregisterNode() public fromValidStakingNode returns (bool) {
+        return unregister(msg.sender);
     }
 
-    function unregister(address node) private {
+    // Returns true if successfully unregistered node.
+    function unregister(address node) private returns (bool) {
         uint groupId = nodeToGroupIdList[node][HEAD_I];
         bool removed = false;
+        uint8 unregisteredFrom = 0;
         // Check if node is in workingGroups or expiredWorkingGroup
         if (groupId != 0 && groupId != HEAD_I) {
             dissolveWorkingGroup(groupId, true);
@@ -736,8 +743,8 @@ contract DOSProxy is Ownable {
                         workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                     }
                     workingGroupIds.length--;
-                    emit LogUnRegisteredNewPendingNode(node, 1);
                     removed = true;
+                    unregisteredFrom |= 0x1;
                     break;
                 }
             }
@@ -748,8 +755,8 @@ contract DOSProxy is Ownable {
                             expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                         }
                         expiredWorkingGroupIds.length--;
-                        emit LogUnRegisteredNewPendingNode(node, 2);
                         removed = true;
+                        unregisteredFrom |= 0x2;
                         break;
                     }
                 }
@@ -758,7 +765,7 @@ contract DOSProxy is Ownable {
 
         // Check if node is in pendingGroups
         if (!removed && checkAndRemoveFromPendingGroup(node)) {
-            emit LogUnRegisteredNewPendingNode(node, 3);
+            unregisteredFrom |= 0x4;
         }
 
 		// Check if node is in pendingNodeList
@@ -769,13 +776,15 @@ contract DOSProxy is Ownable {
             if (removed) {
                 numPendingNodes--;
                 nodeToGroupIdList[node][HEAD_I] = 0;
-                emit LogUnRegisteredNewPendingNode(node, 0);
                 // Reset pendingNodeTail if necessary.
                 if (pendingNodeTail == node) {
                     pendingNodeTail = prev;
                 }
+                unregisteredFrom |= 0x8;
             }
         }
+        emit LogUnRegisteredNewPendingNode(node, unregisteredFrom);
+        return (unregisteredFrom != 0);
     }
 
     // Caller ensures no index overflow.
