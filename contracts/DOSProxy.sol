@@ -169,11 +169,11 @@ contract DOSProxy is Ownable {
     event LogPublicKeySuggested(uint groupId, uint pubKeyCount);
     event LogGroupDissolve(uint groupId);
     event LogRegisteredNewPendingNode(address node);
-    event LogUnRegisteredNewPendingNode(address node,uint unregisterFrom);
+    event LogUnRegisteredNewPendingNode(address node, uint unregisterFrom);
     event LogGroupingInitiated(uint pendingNodePool, uint groupsize, uint groupingthreshold);
     event LogNoPendingGroup(uint groupId);
     event LogPendingGroupRemoved(uint groupId);
-    event LogError(string err);
+    event LogMessage(string info);
     event UpdateGroupSize(uint oldSize, uint newSize);
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
     event UpdateBootstrapCommitDuration(uint oldDuration, uint newDuration);
@@ -326,7 +326,7 @@ contract DOSProxy is Ownable {
         uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
-            emit LogError("No live working group, trigger bootstrap");
+            emit LogMessage("No live working group, trigger bootstrap");
             return;
         }
 
@@ -362,14 +362,14 @@ contract DOSProxy is Ownable {
         list[HEAD_I] = id;
     }
 
-    /// Remove Node from a storage linkedlist. Need to check tail after this done
+    /// Remove Node from a storage linkedlist.
     function removeNodeFromList(mapping(address => address) storage list, address node) private returns(address, bool) {
-        (address prev, bool found) = findNodeFromList(list,node);
+        (address prev, bool found) = findNodeFromList(list, node);
         if (found) {
             list[prev] = list[node];
             delete list[node];
         }
-        return (prev, true);
+        return (prev, found);
     }
 
     /// Find Node from a storage linkedlist.
@@ -405,18 +405,18 @@ contract DOSProxy is Ownable {
     }
 
     /// Remove node from a storage linkedlist.
-    function removeNodeFromPendingGroup(mapping(uint => uint) storage list, address node) private returns(bool) {
+    function checkAndRemoveFromPendingGroup(address node) private returns(bool) {
         uint prev = HEAD_I;
-        uint curr = list[prev];
+        uint curr = pendingGroupList[prev];
         while (curr != HEAD_I) {
             PendingGroup storage pgrp = pendingGroups[curr];
-            (, bool found) = findNodeFromList(pgrp.memberList,node);
+            (, bool found) = findNodeFromList(pgrp.memberList, node);
             if (found) {
-                cleanUpOldestExpiredPendingGroup(curr);
+                cleanUpPendingGroup(curr);
                 return true;
             }
             prev = curr;
-            curr = list[prev];
+            curr = pendingGroupList[prev];
         }
         return false;
     }
@@ -462,7 +462,7 @@ contract DOSProxy is Ownable {
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 // TODO: keep id receipt and handle later in v2.0.
                 if (idx == UINTMAX) {
-                    emit LogError("No live working group, skipped query");
+                    emit LogMessage("No live working group, skipped query");
                     return 0;
                 }
                 Group storage grp = workingGroups[workingGroupIds[idx]];
@@ -499,7 +499,7 @@ contract DOSProxy is Ownable {
         uint idx = dispatchJob(TrafficType.UserRandom, requestId);
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
-            emit LogError("No live working group, skipped random request");
+            emit LogMessage("No live working group, skipped random request");
             return 0;
         }
         Group storage grp = workingGroups[workingGroupIds[idx]];
@@ -589,7 +589,7 @@ contract DOSProxy is Ownable {
             // Safe random number is the collectively signed threshold signature
             // of the message (requestId || lastRandomness || userSeed ||
             // selected sender in group).
-            emit LogError("UserRandom");
+            emit LogMessage("UserRandom");
             UserContractInterface(ucAddr).__callback__(
                 requestId, uint(keccak256(abi.encodePacked(sig[0], sig[1]))));
         } else {
@@ -623,8 +623,7 @@ contract DOSProxy is Ownable {
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimServiceFee(oldRandomness,msg.sender,lastHandledGroup.members);
     }
 
-    /// @notice Caller ensures pendingGroupList is not empty and pending group header has indeed expired.
-    function cleanUpOldestExpiredPendingGroup(uint gid) private {
+    function cleanUpPendingGroup(uint gid) private {
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
         while (member != HEAD_A) {
@@ -654,7 +653,7 @@ contract DOSProxy is Ownable {
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
     function signalRandom() public {
         if (lastUpdatedBlock + refreshSystemRandomHardLimit > block.number) {
-            emit LogError("SystemRandom not expired yet");
+            emit LogMessage("SystemRandom not expired yet");
             return;
         }
 
@@ -665,19 +664,14 @@ contract DOSProxy is Ownable {
     // TODO: Reward guardian nodes.
     /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
     function signalGroupDissolve() public {
-        bool claimed = false;
         // Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
         uint gid = pendingGroupList[HEAD_I];
         if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
-            cleanUpOldestExpiredPendingGroup(gid);
-            claimed = true;
-        } else {
-            emit LogError("No expired pending group to clean up");
-        }
-        // Claim guardian rewards if work is done.
-        if (claimed) {
+            cleanUpPendingGroup(gid);
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+        } else {
+            emit LogMessage("No expired pending group to clean up");
         }
     }
     // TODO: Reward guardian nodes.
@@ -693,7 +687,7 @@ contract DOSProxy is Ownable {
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
         if (numPendingNodes < bootstrapStartThreshold) {
-            emit LogError("Not enough nodes to bootstrap");
+            emit LogMessage("Not enough nodes to bootstrap");
             return;
         }
 
@@ -702,7 +696,7 @@ contract DOSProxy is Ownable {
         bootstrapEndBlk = 0;
         uint rndSeed = CommitRevealInterface(addressBridge.getCommitRevealAddress()).getRandom(_cid);
         if (rndSeed == 0) {
-            emit LogError("CommitReveal failure, bootstrapRound reset");
+            emit LogMessage("CommitReveal failure, bootstrapRound reset");
             return;
         }
         lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, rndSeed)));
@@ -718,9 +712,10 @@ contract DOSProxy is Ownable {
         emit GuardianReward(block.number, msg.sender);
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
-    // Todo:Add a whitelist for signalUnregister
+    // Todo: Add a whitelist for signalUnregister
     function signalUnregister(address member) public {
         unregister(member);
+        emit GuardianReward(block.number, msg.sender);
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
     /// End of Guardian functions
@@ -730,18 +725,18 @@ contract DOSProxy is Ownable {
     }
 
     function unregister(address node) private {
-        //1) Check if node is in workingGroups or expiredWorkingGroup
         uint groupId = nodeToGroupIdList[node][HEAD_I];
+        bool removed = false;
+        // Check if node is in workingGroups or expiredWorkingGroup
         if (groupId != 0 && groupId != HEAD_I) {
             dissolveWorkingGroup(groupId, true);
-            bool removed = false;
             for (uint idx = 0; idx < workingGroupIds.length; idx++) {
                 if (workingGroupIds[idx] == groupId) {
                     if (idx != (workingGroupIds.length - 1)){
                         workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                     }
                     workingGroupIds.length--;
-                    emit LogUnRegisteredNewPendingNode(node,1);
+                    emit LogUnRegisteredNewPendingNode(node, 1);
                     removed = true;
                     break;
                 }
@@ -749,32 +744,33 @@ contract DOSProxy is Ownable {
             if (!removed) {
                 for (uint idx = 0; idx < expiredWorkingGroupIds.length; idx++) {
                     if (expiredWorkingGroupIds[idx] == groupId) {
-                        if (idx != (workingGroupIds.length - 1)){
+                        if (idx != (expiredWorkingGroupIds.length - 1)){
                             expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                         }
                         expiredWorkingGroupIds.length--;
-                        emit LogUnRegisteredNewPendingNode(node,2);
+                        emit LogUnRegisteredNewPendingNode(node, 2);
+                        removed = true;
                         break;
                     }
                 }
             }
-        }else{
-            //2) Check if node is in pendingGroups
-            bool removed = removeNodeFromPendingGroup(pendingGroupList,node);
-            if (removed) {
-                emit LogUnRegisteredNewPendingNode(node,3);
-            }
-		}
-		//3) Check if node is in pendingNodeList
+        }
+
+        // Check if node is in pendingGroups
+        if (!removed && checkAndRemoveFromPendingGroup(node)) {
+            emit LogUnRegisteredNewPendingNode(node, 3);
+        }
+
+		// Check if node is in pendingNodeList
         if (pendingNodeList[node] != address(0)) {
             // Update pendingNodeList
-            (address prev, bool removed) = removeNodeFromList(pendingNodeList, node);
-            // Reset pendingNodeTail if necessary.
+            address prev;
+            (prev, removed) = removeNodeFromList(pendingNodeList, node);
             if (removed) {
                 numPendingNodes--;
                 nodeToGroupIdList[node][HEAD_I] = 0;
-                emit LogUnRegisteredNewPendingNode(node,0);
-                // Reset pendingGroupTail if necessary.
+                emit LogUnRegisteredNewPendingNode(node, 0);
+                // Reset pendingNodeTail if necessary.
                 if (pendingNodeTail == node) {
                     pendingNodeTail = prev;
                 }
@@ -797,7 +793,7 @@ contract DOSProxy is Ownable {
     }
 
     function registerNewNode() public fromValidStakingNode {
-        //Duplicated pending node
+        // Duplicated pending node
         if (pendingNodeList[msg.sender] != address(0)) {
             return;
         }
@@ -813,60 +809,49 @@ contract DOSProxy is Ownable {
     }
 
     // Form into new working groups or bootstrap if necessary.
-    // Return true if triggers state change.
+    // Return true if forms a new group.
     function formGroup() private returns(bool) {
-        if (numPendingNodes < groupSize * groupingThreshold / 100) {
-            emit LogInsufficientPendingNode(numPendingNodes);
-            // Clean up oldest expired working group and related metadata.
+        // Clean up oldest expiredWorkingGroup and push back nodes to pendingNodeList if:
+        // 1. There's not enough pending nodes to form a group;
+        // 2. There's no working group and not enough pending nodes to restart bootstrap.
+        if (numPendingNodes < groupSize * groupingThreshold / 100 ||
+            (workingGroupIds.length == 0 && numPendingNodes < bootstrapStartThreshold)) {
             if (expiredWorkingGroupIds.length > 0) {
                 dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
                 expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                 expiredWorkingGroupIds.length--;
-            } else {
-                emit LogError("No expired working group to clean up");
             }
+        }
+
+        if (numPendingNodes < groupSize * groupingThreshold / 100) {
+            emit LogInsufficientPendingNode(numPendingNodes);
             return false;
         }
 
-        if (workingGroupIds.length != 0) {
+        if (workingGroupIds.length > 0) {
             if (expiredWorkingGroupIds.length >= groupToPick) {
                 requestRandom(address(this), block.number);
                 emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
                 return true;
             } else {
-                // TODO :Do small bootstrap in this condition?
-                emit LogError("Skipped signal, no expired groups in the network");
-                return false;
+                // TODO: Do small bootstrap in this condition?
+                emit LogMessage("Skipped group formation, not enough expired working group.");
 			}
-        }
-
-        if (numPendingNodes < bootstrapStartThreshold) {
-            // Clean up oldest expired working group and related metadata.
-            if (expiredWorkingGroupIds.length > 0) {
-                dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
-                expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
-                expiredWorkingGroupIds.length--;
-                emit GuardianReward(block.number, msg.sender);
-            } else {
-                emit LogError("Skipped signal, no enough nodes or groups in the network");
-            }
-            return false;
-        } else {
-            // System needs re-bootstrap
+        } else if (numPendingNodes >= bootstrapStartThreshold) { // No working group alive and satisfies system re-bootstrap condition.
             if (bootstrapRound == 0) {
                 bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
-                     block.number,
-                     bootstrapCommitDuration,
-                     bootstrapRevealDuration,
-                     bootstrapStartThreshold
-                 );
-                 bootstrapEndBlk = block.number+bootstrapCommitDuration+bootstrapRevealDuration;
-                 return true;
+                    block.number,
+                    bootstrapCommitDuration,
+                    bootstrapRevealDuration,
+                    bootstrapStartThreshold
+                );
+                bootstrapEndBlk = block.number + bootstrapCommitDuration + bootstrapRevealDuration;
+                return true;
             } else {
-                emit LogError("Skipped group formation, already in bootstrap phase");
-                return false;
+                emit LogMessage("Already in bootstrap phase");
             }
         }
+        return false;
     }
 
     // callback to handle re-grouping using generated random number as random seed.
@@ -876,7 +861,6 @@ contract DOSProxy is Ownable {
                 "No enough expired working group");
         require(numPendingNodes >= groupSize * groupingThreshold / 100,
                 "Not enough newly registered nodes");
-          emit LogError("__callback__");
 
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);
