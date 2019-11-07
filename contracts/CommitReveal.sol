@@ -2,13 +2,17 @@ pragma solidity ^0.5.0;
 
 import "./Ownable.sol";
 
+contract DOSAddressBridgeInterface {
+    function getProxyAddress() public view returns(address);
+}
+
 contract CommitReveal is Ownable {
     struct Participant {
         uint secret;
         bytes32 commitment;
         bool revealed;
     }
-    
+
     struct Campaign {
         uint startBlock;
         uint commitDuration;  // in blocks
@@ -24,6 +28,10 @@ contract CommitReveal is Ownable {
     Campaign[] public campaigns;
     // Only whitelised contracts are permitted to kick off commit-reveal process
     mapping(address => bool) public whitelisted;
+
+    // DOSAddressBridge
+    DOSAddressBridgeInterface public addressBridge;
+    address public bridgeAddr;
 
     modifier checkCommit(uint _cid, bytes32 _commitment) {
         Campaign storage c = campaigns[_cid];
@@ -50,20 +58,22 @@ contract CommitReveal is Ownable {
                 "Commit Reveal not finished yet");
         _;
     }
-    modifier onlyWhitelisted {
-        require(whitelisted[msg.sender], "Not whitelisted!");
+    modifier onlyFromProxy() {
+        require(msg.sender==addressBridge.getProxyAddress(), "Not from proxy contract");
         _;
     }
-    
+
     event LogStartCommitReveal(uint cid, uint startBlock, uint commitDuration, uint revealDuration, uint revealThreshold);
     event LogCommit(uint cid, address from, bytes32 commitment);
     event LogReveal(uint cid, address from, uint secret);
     event LogRandom(uint cid, uint random);
     event LogRandomFailure(uint cid, uint commitNum, uint revealNum, uint revealThreshold);
 
-    constructor() public {
+    constructor(address _bridgeAddr) public {
         // campaigns[0] is not used.
         campaigns.length++;
+        bridgeAddr = _bridgeAddr;
+        addressBridge = DOSAddressBridgeInterface(bridgeAddr);
     }
 
     function addToWhitelist(address _addr) public onlyOwner {
@@ -81,7 +91,7 @@ contract CommitReveal is Ownable {
         uint _revealThreshold
     )
         public
-        onlyWhitelisted
+        onlyFromProxy
         returns(uint)
     {
         uint newCid = campaigns.length;

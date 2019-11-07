@@ -24,6 +24,7 @@ contract CommitRevealInterface {
 contract DOSAddressBridgeInterface {
     function getCommitRevealAddress() public view returns(address);
     function getPaymentAddress() public view returns(address);
+    function getStakingAddress() public view returns(address);
 }
 
 contract DOSPaymentInterface {
@@ -32,6 +33,12 @@ contract DOSPaymentInterface {
     function claimServiceFee(uint requestID,address submitter,address[] memory workers) public;
     function claimGuardianReward(address guardian) public;
     function setPaymentMethod(address consumer,address tokenAddr) public;
+}
+
+contract DOSStakingInterface {
+    function nodeStart(address _nodeAddr) public;
+    function nodeStop(address _nodeAddr) public;
+    function isValidStakingNode(address _nodeAddr) public view returns(bool);
 }
 
 contract DOSProxy is Ownable {
@@ -89,10 +96,10 @@ contract DOSProxy is Ownable {
     uint public bootstrapEndBlk = 0;
 
     // DOSAddressBridge on rinkeby testnet
-    DOSAddressBridgeInterface public addressBridge =
-        DOSAddressBridgeInterface(0x848C0Bb953755293230b705464654F647967639A);
-    address public proxyFundsAddr = 0x2a3B59AC638F90d82BdAF5E2dA5D37C1a31B29f3;
-    address public proxyFundsTokenAddr = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
+    DOSAddressBridgeInterface public addressBridge;
+    address public bridgeAddr;
+    address public proxyFundsAddr;
+    address public proxyFundsTokenAddr;
 
     uint private constant UINTMAX = uint(-1);
     // Dummy head and placeholder used in linkedlists.
@@ -186,16 +193,20 @@ contract DOSProxy is Ownable {
     event GuardianReward(uint blkNum, address indexed guardian);
 
     modifier fromValidStakingNode {
-        require(DOSPaymentInterface(addressBridge.getPaymentAddress()).fromValidStakingNode(msg.sender),
+        require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
                 "Invalid staking node");
         _;
     }
 
-    constructor() public {
+    constructor(address _bridgeAddr,address _proxyFundsAddr,address _proxyFundsTokenAddr) public {
         pendingNodeList[HEAD_A] = HEAD_A;
         pendingNodeTail = HEAD_A;
         pendingGroupList[HEAD_I] = HEAD_I;
         pendingGroupTail = HEAD_I;
+        bridgeAddr = _bridgeAddr;
+        addressBridge = DOSAddressBridgeInterface(bridgeAddr);
+        proxyFundsAddr = _proxyFundsAddr;
+        proxyFundsTokenAddr = _proxyFundsTokenAddr;
         DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
     }
 

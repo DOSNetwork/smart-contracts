@@ -1,15 +1,15 @@
-var DOSAddressBridge = artifacts.require("./DOSAddressBridge.sol");
-var DOSOnChainSDK = artifacts.require("./DOSOnChainSDK.sol");
-var CommitReveal = artifacts.require("./CommitReveal.sol");
-var DOSProxy = artifacts.require("./DOSProxy.sol");
-var DOSPayment = artifacts.require("./DOSPayment.sol");
-
+const DOSAddressBridge = artifacts.require("./DOSAddressBridge.sol");
+const DOSOnChainSDK = artifacts.require("./DOSOnChainSDK.sol");
+const CommitReveal = artifacts.require("./CommitReveal.sol");
+const DOSProxy = artifacts.require("./DOSProxy.sol");
+const DOSPayment = artifacts.require("./DOSPayment.sol");
+const TestToken = artifacts.require("./TestToken.sol");
+const Staking = artifacts.require("./Staking.sol");
 
 module.exports = function(deployer, network) {
-  if (network === "development") {
-    deployer.deploy(DOSAddressBridge);
-    deployer.deploy(CommitReveal);
-    deployer.deploy(DOSPayment);
-    deployer.deploy(DOSProxy);
-  }
+    deployer.deploy(DOSAddressBridge).then(function() {
+        deployer.deploy(TestToken).then(function() {
+            return deployer.deploy(Staking, TestToken.address,TestToken.address,TestToken.address,DOSAddressBridge.address);
+        });
+    });
 }
