@@ -50,8 +50,6 @@ contract DOSPayment is Ownable {
     // producer address => Rewards
     mapping(address => Rewards) _nodeRewards;
 
-    // DOS Token on rinkeby testnet
-    address public _defaultTokenAddr = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
     uint public _defaultDenominator = 5;
     uint public _defaultSubmitterRate = 3;
     uint public _defaultWorkerRate = 2;
@@ -59,30 +57,23 @@ contract DOSPayment is Ownable {
     uint public _defaultUserRandomFee = 5000000000000000000; // 1 Tokens
     uint public _defaultUserQueryFee = 5000000000000000000; // 1 Tokens
     uint public _defaultGuardianFee = 1000000000000000000; // 1 Tokens
-    address public _guardianFundsAddr = 0x2a3B59AC638F90d82BdAF5E2dA5D37C1a31B29f3;
-    address public _guardianFundsTokenAddr = _defaultTokenAddr;
+    address public _defaultTokenAddr;
+    address public _guardianFundsAddr;
+    address public _guardianFundsTokenAddr;
 
     // DOSAddressBridge
-    DOSAddressBridgeInterface public addressBridge;
-    address public bridgeAddr;
-
-    // DOS Token on rinkeby testnet
-    address public networkToken = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
-    // DropBurn Token on rinkeby testnet
-    address public dropburnToken = 0x9bfE8F5749d90eB4049Ad94CC4De9b6C4C31f822;
-    uint public minStake = 50000;  // Minimum number of tokens required to be eligible into the protocol network.
-    uint public dropburnMaxQuota = 3;  // Each DropBurn quota reduces 10% of minStake requirement to participate into protocol.
+    DOSAddressBridgeInterface public _addressBridge;
+    address public _bridgeAddr;
 
     event UpdateNetworkTokenAddress(address oldAddress, address newAddress);
     event UpdateDropBurnTokenAddress(address oldAddress, address newAddress);
-    event UpdateDropBurnMaxQuota(uint oldQuota, uint newQuota);
     event LogChargeServiceFee(address consumer ,address tokenAddr,uint requestID,uint serviceType,uint fee);
     event LogRefundServiceFee(address consumer ,address tokenAddr,uint requestID,uint serviceType,uint fee);
     event LogClaimServiceFee(address nodeAddr,address tokenAddr,uint requestID,uint serviceType ,uint feeForSubmitter);
     event LogClaimGuardianFee(address nodeAddr,address tokenAddr,uint feeForSubmitter,address sender);
 
     modifier onlyFromProxy {
-        require(msg.sender == addressBridge.getProxyAddress(), "Not from DOS proxy!");
+        require(msg.sender == _addressBridge.getProxyAddress(), "Not from DOS proxy!");
         _;
     }
 
@@ -98,7 +89,11 @@ contract DOSPayment is Ownable {
         _;
     }
 
-    constructor(address _bridgeAddr) public {
+    constructor(address bridgeAddr,address tokenAddr,address guardianFundsAddr) public {
+        _defaultTokenAddr = tokenAddr;
+        _guardianFundsAddr = guardianFundsAddr;
+        _guardianFundsTokenAddr = tokenAddr;
+
         FeeList storage feeList = _feeList[_defaultTokenAddr];
         feeList.serviceFee[uint(ServiceType.SystemRandom)] = _defaultSystemRandomFee;
         feeList.serviceFee[uint(ServiceType.UserRandom)] = _defaultUserRandomFee;
@@ -107,14 +102,21 @@ contract DOSPayment is Ownable {
         feeList.workerRate = _defaultWorkerRate;
         feeList.denominator = _defaultDenominator;
         feeList.guardianFee = _defaultGuardianFee;
-        bridgeAddr = _bridgeAddr;
-        addressBridge = DOSAddressBridgeInterface(bridgeAddr);
+        _bridgeAddr = bridgeAddr;
+        _addressBridge = DOSAddressBridgeInterface(_bridgeAddr);
     }
 
     function isSupportedToken(address tokenAddr) public view returns(bool){
-       if (tokenAddr == address(0x0) || _feeList[tokenAddr].serviceFee[uint(ServiceType.SystemRandom)] == 0
-       || _feeList[tokenAddr].serviceFee[uint(ServiceType.UserRandom)] == 0
-       || _feeList[tokenAddr].serviceFee[uint(ServiceType.UserQuery)] == 0) {
+       if (tokenAddr == address(0x0)) {
+           return false;
+       }
+       if (_feeList[tokenAddr].serviceFee[uint(ServiceType.SystemRandom)] == 0){
+           return false;
+       }
+       if (_feeList[tokenAddr].serviceFee[uint(ServiceType.UserRandom)] == 0){
+           return false;
+       }
+       if (_feeList[tokenAddr].serviceFee[uint(ServiceType.UserQuery)] == 0){
            return false;
        }
        return true;
@@ -124,7 +126,7 @@ contract DOSPayment is Ownable {
         _paymentMethods[consumer] = tokenAddr;
     }
 
-    function setServiceFee(address tokenAddr,uint serviceType ,uint fee) public onlyOwner{
+    function setServiceFee(address tokenAddr,uint serviceType,uint fee) public onlyOwner{
         require(tokenAddr!=address(0x0), "Not a valid address!");
         FeeList storage feeList = _feeList[tokenAddr];
         feeList.serviceFee[serviceType] = fee;
@@ -254,42 +256,4 @@ contract DOSPayment is Ownable {
         uint amount = ERC20I(tokenAddr).balanceOf(address(this));
         ERC20I(tokenAddr).transfer(msg.sender, amount);
     }
-
-    function setNetworkToken(address addr) public onlyOwner {
-        emit UpdateNetworkTokenAddress(networkToken, addr);
-        networkToken = addr;
-    }
-
-    function setDropBurnToken(address addr) public onlyOwner {
-        emit UpdateDropBurnTokenAddress(dropburnToken, addr);
-        dropburnToken = addr;
-    }
-
-    function setDropBurnMaxQuota(uint quo) public onlyOwner {
-        require(quo != dropburnMaxQuota && quo < 10, "Valid dropburnMaxQuota within 0 to 9");
-
-        emit UpdateDropBurnMaxQuota(dropburnMaxQuota, quo);
-        dropburnMaxQuota = quo;
-    }
-
-    // TODO: Rewrite eligibility and staking algorithm.
-    function fromValidStakingNode(address node) public view returns(bool) {
-        uint networkTokenBalance = ERC20I(networkToken).balanceOf(node);
-        uint networkTokenDecimals = ERC20I(networkToken).decimals();
-        uint minNetworkStakingBalance = minStake * (10 ** networkTokenDecimals);
-        if (networkTokenBalance >= minNetworkStakingBalance) {
-            return true;
-        } else if (dropburnToken == address(0x0)) {
-            return false;
-        } else {
-            uint dropburnTokenNum = ERC20I(dropburnToken).balanceOf(node) / (10 ** ERC20I(dropburnToken).decimals());
-            if (dropburnTokenNum > dropburnMaxQuota) {
-                dropburnTokenNum = dropburnMaxQuota;
-            }
-            return networkTokenBalance >= minNetworkStakingBalance * (10 - dropburnTokenNum) / 10;
-        }
-    }
-
-    // TODO: Implement delegate stake, staking incentive, withdraw incentive algorithms.
-
 }
