@@ -62,9 +62,9 @@ contract DOSPayment is Ownable {
     address public _guardianFundsAddr = 0x2a3B59AC638F90d82BdAF5E2dA5D37C1a31B29f3;
     address public _guardianFundsTokenAddr = _defaultTokenAddr;
 
-    // DOS Address Bridge on rinkeby testnet
-    DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x848C0Bb953755293230b705464654F647967639A);
+    // DOSAddressBridge
+    DOSAddressBridgeInterface public addressBridge;
+    address public bridgeAddr;
 
     // DOS Token on rinkeby testnet
     address public networkToken = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
@@ -81,8 +81,8 @@ contract DOSPayment is Ownable {
     event LogClaimServiceFee(address nodeAddr,address tokenAddr,uint requestID,uint serviceType ,uint feeForSubmitter);
     event LogClaimGuardianFee(address nodeAddr,address tokenAddr,uint feeForSubmitter,address sender);
 
-    modifier onlyProxy {
-        require(msg.sender == dosAddrBridge.getProxyAddress(), "Not from DOS proxy!");
+    modifier onlyFromProxy {
+        require(msg.sender == addressBridge.getProxyAddress(), "Not from DOS proxy!");
         _;
     }
 
@@ -98,7 +98,7 @@ contract DOSPayment is Ownable {
         _;
     }
 
-    constructor() public {
+    constructor(address _bridgeAddr) public {
         FeeList storage feeList = _feeList[_defaultTokenAddr];
         feeList.serviceFee[uint(ServiceType.SystemRandom)] = _defaultSystemRandomFee;
         feeList.serviceFee[uint(ServiceType.UserRandom)] = _defaultUserRandomFee;
@@ -107,6 +107,8 @@ contract DOSPayment is Ownable {
         feeList.workerRate = _defaultWorkerRate;
         feeList.denominator = _defaultDenominator;
         feeList.guardianFee = _defaultGuardianFee;
+        bridgeAddr = _bridgeAddr;
+        addressBridge = DOSAddressBridgeInterface(bridgeAddr);
     }
 
     function isSupportedToken(address tokenAddr) public view returns(bool){
@@ -147,7 +149,7 @@ contract DOSPayment is Ownable {
         _guardianFundsTokenAddr = tokenAddr;
     }
 
-    function chargeServiceFee(address consumer,uint requestID,uint serviceType) public onlyProxy {
+    function chargeServiceFee(address consumer,uint requestID,uint serviceType) public onlyFromProxy {
         // Get tokenAddr
         address tokenAddr = _paymentMethods[consumer];
         if  (!isSupportedToken(tokenAddr)) {
@@ -177,7 +179,7 @@ contract DOSPayment is Ownable {
         ERC20I(tokenAddr).transfer(consumer,fee);
     }
 
-    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public onlyProxy hasPayment(requestID) {
+    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public onlyFromProxy hasPayment(requestID) {
         address tokenAddr = _payments[requestID].tokenAddr;
         uint fee = _payments[requestID].amount;
         uint serviceType = _payments[requestID].serviceType;
@@ -207,7 +209,7 @@ contract DOSPayment is Ownable {
         rewards.amount[tokenAddr] = tokenAmount + amount;
     }
 
-    function claimGuardianReward(address guardianAddr) public onlyProxy {
+    function claimGuardianReward(address guardianAddr) public onlyFromProxy {
         require(_guardianFundsAddr!=address(0x0), "Not a valid guardian funds address!");
         require(_guardianFundsTokenAddr!=address(0x0), "Not a valid token address!");
         uint fee = _feeList[_guardianFundsTokenAddr].guardianFee;
