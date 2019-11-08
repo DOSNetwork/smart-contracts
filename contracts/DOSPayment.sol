@@ -89,7 +89,7 @@ contract DOSPayment is Ownable {
         _;
     }
 
-    constructor(address bridgeAddr,address tokenAddr,address guardianFundsAddr) public {
+    constructor(address bridgeAddr,address guardianFundsAddr,address tokenAddr) public {
         _defaultTokenAddr = tokenAddr;
         _guardianFundsAddr = guardianFundsAddr;
         _guardianFundsTokenAddr = tokenAddr;
