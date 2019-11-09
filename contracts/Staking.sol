@@ -94,8 +94,10 @@ contract Staking is Ownable {
     event UpdateCirculatingSupply(uint oldCirculatingSupply, uint newCirculatingSupply);
     event UpdateMinStakePerNode(uint oldMinStakePerNode, uint newMinStakePerNode);
     event UpdateMaxStakePerNode(uint oldMaxStakePerNode, uint newMaxStakePerNode);
-    event LogNewNode(address owner, address nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
-    event LogTest(uint ratio, uint total,uint staking);
+    event LogNewNode(address indexed owner, address nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
+    event DelegateTo(address indexed sender,uint total, address nodeAddr);
+    event RewardWithdraw(address indexed sender,uint total);
+    event Unbond(address indexed sender,uint tokenAmount, uint dropburnAmount, address nodeAddr);
 
     constructor(address _dostoken,address _dbtoken,address _vault,address _bridgeAddr) public {
         DOSTOKEN = _dostoken;
@@ -280,6 +282,7 @@ contract Staking is Ownable {
         node.nodeDelegators.push(msg.sender);
         node.totalOtherDelegatedAmount += _tokenAmount;
         node.accumulatedRewardRate = accumulatedRewardRate;
+        emit DelegateTo(msg.sender,_tokenAmount, _nodeAddr);
 
         ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _tokenAmount);
     }
@@ -287,7 +290,7 @@ contract Staking is Ownable {
     function nodeUnregister(address _nodeAddr) public {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
         Node storage node = nodes[_nodeAddr];
-        nodeUnbondInternal(node.selfStakedAmount,node.stakedDB,_nodeAddr);
+        nodeUnbond(node.selfStakedAmount,node.stakedDB,_nodeAddr);
     }
 
     function nodeTryDelete(address _nodeAddr) public {
@@ -312,10 +315,6 @@ contract Staking is Ownable {
     // Unbonded tokens are locked for 7 days, during the unbonding period they're not eligible for staking rewards.
     function nodeUnbond(uint _tokenAmount, uint _dropburnAmount, address _nodeAddr) public {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
-        nodeUnbondInternal(_tokenAmount,_dropburnAmount,_nodeAddr);
-    }
-    function nodeUnbondInternal(uint _tokenAmount, uint _dropburnAmount, address _nodeAddr) internal {
-        require(nodeRunners[msg.sender][_nodeAddr], "nodeUnbondInternal Node is not owned by msg.sender");
         Node storage node = nodes[_nodeAddr];
 
         require(_tokenAmount <= node.selfStakedAmount, "Invalid request to unbond more than staked token");
@@ -344,6 +343,7 @@ contract Staking is Ownable {
             minStakePerNode * (10 - min(node.stakedDB - _dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10){
             nodeStopInternal(_nodeAddr);
          }
+         emit Unbond(msg.sender,_tokenAmount, _dropburnAmount, _nodeAddr);
     }
 
     // Used by token holders (delegators) to unbond their delegations.
@@ -438,6 +438,7 @@ contract Staking is Ownable {
                     nodes[_nodeAddr].nodeDelegators.length--;
                 }
             }
+            emit RewardWithdraw(msg.sender, tokenAmount);
             ERC20I(DOSTOKEN).transfer(msg.sender, tokenAmount);
         }
         nodeTryDelete(_nodeAddr);

@@ -256,6 +256,9 @@ contract("Staking", async accounts => {
       let tx = await staking.delegate(value, nodeAddr, {
         from: accounts[idx]
       });
+      truffleAssert.eventEmitted(tx, "DelegateTo", ev => {
+        return ev.sender === accounts[idx];
+      });
     }
 
     let apr = await staking.getCurrentAPR();
@@ -284,6 +287,16 @@ contract("Staking", async accounts => {
         "After 1 year, delegator balance should be 36000 "
       );
     }
+    const options = {
+      filter: { sender: accounts[2] },
+      fromBlock: 0,
+      toBlock: "latest"
+    };
+
+    const eventList = await staking.getPastEvents("DelegateTo", options);
+    //assert.equal(eventList.lenght, 1, "");
+    console.log("length", eventList.length);
+    console.log(eventList[0].event);
   });
   it("test delegatorClaimReward - node only runs 73 days during a year", async () => {
     let stakedTokenPerNode = 50000;
