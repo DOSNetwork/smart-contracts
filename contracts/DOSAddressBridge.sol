@@ -11,11 +11,13 @@ contract DOSAddressBridge is Ownable {
     address private _paymentAddress;
     // Deployed DOSRegistry contract address.
     address private _registryAddress;
+    address private _stakingAddress;
 
     event ProxyAddressUpdated(address previousProxy, address newProxy);
     event CommitRevealAddressUpdated(address previousAddr, address newAddr);
     event PaymentAddressUpdated(address previousPayment, address newPayment);
     event RegistryAddressUpdated(address previousRegistry, address newRegistry);
+    event StakingAddressUpdated(address previousStaking, address newStaking);
 
     function getProxyAddress() public view returns (address) {
         return _proxyAddress;
@@ -51,5 +53,14 @@ contract DOSAddressBridge is Ownable {
     function setRegistryAddress(address newAddr) public onlyOwner {
         emit RegistryAddressUpdated(_registryAddress, newAddr);
         _registryAddress = newAddr;
+    }
+
+    function getStakingAddress() public view returns (address) {
+        return _stakingAddress;
+    }
+
+    function setStakingAddress(address newAddr) public onlyOwner {
+        emit StakingAddressUpdated(_stakingAddress, newAddr);
+        _stakingAddress = newAddr;
     }
 }
