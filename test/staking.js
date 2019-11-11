@@ -86,6 +86,46 @@ contract("Staking", async accounts => {
       "totalStakedTokens should be 500000000000000000000000 "
     );
   });
+  it("test uptime", async () => {
+    let stakedTokenPerNode = 500000;
+    let proxyAddr = accounts[14];
+    let stakingRewardsVault = accounts[0];
+    let tokenPool = accounts[0];
+
+    let ttk = await Ttk.new();
+    let bridge = await Bridge.new();
+    await bridge.setProxyAddress(proxyAddr);
+    let staking = await Staking.new(
+      ttk.address,
+      ttk.address,
+      stakingRewardsVault,
+      bridge.address
+    );
+    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+
+    let decimals = web3.utils.toBN(18);
+    let amount = web3.utils.toBN(stakedTokenPerNode);
+    let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+
+    await ttk.transfer(accounts[1], value, { from: tokenPool });
+    await ttk.approve(staking.address, -1, { from: accounts[1] });
+    await staking.newNode(accounts[1], value, 0, 1, { from: accounts[1] });
+    await staking.nodeStart(accounts[1], { from: proxyAddr });
+
+    let advancement = 86400 * 1; // 1 Days
+    await time.increase(advancement);
+    await staking.nodeStop(accounts[1], { from: proxyAddr });
+    advancement = 86400 * 1; // 1 Days
+    await time.increase(advancement);
+    //let node = await staking.nodes.call(accounts[1]);
+    let uptime = await staking.getNodeUptime(accounts[1]);
+    console.log(Math.round(uptime.toNumber() / (60 * 60 * 24)));
+    assert.equal(
+      Math.round(uptime.toNumber() / (60 * 60 * 24)),
+      1,
+      "After 2 days, uptime should be 1 day "
+    );
+  });
   it("test nodeClaimReward", async () => {
     let stakedTokenPerNode = 500000;
     let proxyAddr = accounts[14];
@@ -294,9 +334,9 @@ contract("Staking", async accounts => {
     };
 
     const eventList = await staking.getPastEvents("DelegateTo", options);
-    //assert.equal(eventList.lenght, 1, "");
-    console.log("length", eventList.length);
-    console.log(eventList[0].event);
+    assert.equal(eventList.lenght, 1, "");
+    //console.log("length", eventList.length);
+    //console.log(eventList[0].event);
   });
   it("test delegatorClaimReward - node only runs 73 days during a year", async () => {
     let stakedTokenPerNode = 50000;

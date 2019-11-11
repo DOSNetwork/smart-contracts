@@ -53,6 +53,8 @@ contract Staking is Ownable {
         uint totalOtherDelegatedAmount;
         uint accumulatedReward;
         uint accumulatedRewardRate;
+        uint lastStartTime;
+        uint lastStopTime;
         bool running;
         //
         address[] nodeDelegators;
@@ -181,7 +183,7 @@ contract Staking is Ownable {
         }
 
         address[] memory nodeDelegators;
-        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, false,nodeDelegators);
+        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0,0,false,nodeDelegators);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
         emit LogNewNode(msg.sender, _nodeAddr, _tokenAmount, _dropburnAmount, _rewardCut);
@@ -190,6 +192,7 @@ contract Staking is Ownable {
     function nodeStart(address _nodeAddr) public onlyFromProxy {
         Node storage node = nodes[_nodeAddr];
         node.running = true;
+        node.lastStartTime = now;
         updateGlobalRewardRate();
         node.accumulatedRewardRate = accumulatedRewardRate;
         for (uint i = 0; i < node.nodeDelegators.length; i++) {
@@ -217,6 +220,7 @@ contract Staking is Ownable {
         node.running = false;
         // This would change interest rate
 	    totalStakedTokens -= node.selfStakedAmount - node.totalOtherDelegatedAmount;
+        node.lastStopTime = now;
     }
 
     // For node runners to configure new staking settings.
@@ -491,6 +495,15 @@ contract Staking is Ownable {
         // This would change interest rate
         circulatingSupply += claimedReward;
         ERC20I(DOSTOKEN).transferFrom(stakingRewardsVault, msg.sender, claimedReward);
+    }
+
+    function getNodeUptime(address nodeAddr) public view returns(uint) {
+        Node storage node = nodes[nodeAddr];
+        if (node.running){
+            return now - node.lastStartTime;
+        }else{
+            return node.lastStopTime - node.lastStartTime;
+        }
     }
 
     // return a percentage in [4.00, 80.00] (400, 8000)
