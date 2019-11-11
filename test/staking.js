@@ -28,7 +28,7 @@ contract("Staking", async accounts => {
     assert.equal(balance.valueOf(), 30000);
     ttk.approve(staking.address, -1, { from: accounts[1] });
     try {
-      let tx = await staking.newNode(accounts[1], 50000, 0, 1, {
+      let tx = await staking.newNode(accounts[1], 50000, 0, 1, "test", {
         from: accounts[1]
       });
       assert.fail(true, false, "The function should throw error");
@@ -61,7 +61,7 @@ contract("Staking", async accounts => {
 
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, {
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
       from: nodeStakingAddr
     });
     let apr = await staking.getCurrentAPR();
@@ -109,7 +109,9 @@ contract("Staking", async accounts => {
 
     await ttk.transfer(accounts[1], value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: accounts[1] });
-    await staking.newNode(accounts[1], value, 0, 1, { from: accounts[1] });
+    await staking.newNode(accounts[1], value, 0, 1, "test", {
+      from: accounts[1]
+    });
     await staking.nodeStart(accounts[1], { from: proxyAddr });
 
     let advancement = 86400 * 1; // 1 Days
@@ -117,7 +119,8 @@ contract("Staking", async accounts => {
     await staking.nodeStop(accounts[1], { from: proxyAddr });
     advancement = 86400 * 1; // 1 Days
     await time.increase(advancement);
-    //let node = await staking.nodes.call(accounts[1]);
+    let node = await staking.nodes.call(accounts[1]);
+    console.log(node.description);
     let uptime = await staking.getNodeUptime(accounts[1]);
     console.log(Math.round(uptime.toNumber() / (60 * 60 * 24)));
     assert.equal(
@@ -155,7 +158,7 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= nodes; i++) {
       await ttk.transfer(accounts[i], value, { from: tokenPool });
       await ttk.approve(staking.address, -1, { from: accounts[i] });
-      let tx = await staking.newNode(accounts[i], value, 0, 1, {
+      let tx = await staking.newNode(accounts[i], value, 0, 1, "test", {
         from: accounts[i]
       });
       await staking.nodeStart(accounts[i], {
@@ -206,7 +209,7 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= nodes; i++) {
       await ttk.transfer(accounts[i], value, { from: tokenPool });
       await ttk.approve(staking.address, -1, { from: accounts[i] });
-      let tx = await staking.newNode(accounts[i], value, 0, 1, {
+      let tx = await staking.newNode(accounts[i], value, 0, 1, "test", {
         from: accounts[i]
       });
     }
@@ -281,7 +284,7 @@ contract("Staking", async accounts => {
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, {
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
       from: nodeStakingAddr
     });
 
@@ -334,7 +337,7 @@ contract("Staking", async accounts => {
     };
 
     const eventList = await staking.getPastEvents("DelegateTo", options);
-    assert.equal(eventList.lenght, 1, "");
+    assert.equal(eventList.length, 1, "");
     //console.log("length", eventList.length);
     //console.log(eventList[0].event);
   });
@@ -363,7 +366,7 @@ contract("Staking", async accounts => {
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, {
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
       from: nodeStakingAddr
     });
 
@@ -449,7 +452,7 @@ contract("Staking", async accounts => {
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, {
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
       from: nodeStakingAddr
     });
     let nodeAddrs = await staking.getNodeAddrs();

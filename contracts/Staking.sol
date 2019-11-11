@@ -56,6 +56,7 @@ contract Staking is Ownable {
         uint lastStartTime;
         uint lastStopTime;
         bool running;
+        string description;
         //
         address[] nodeDelegators;
         // release time => UnbondRequest metadata
@@ -171,7 +172,7 @@ contract Staking is Ownable {
         return false;
     }
 
-    function newNode(address _nodeAddr, uint _tokenAmount, uint _dropburnAmount, uint _rewardCut)
+    function newNode(address _nodeAddr, uint _tokenAmount, uint _dropburnAmount, uint _rewardCut,string memory _desc)
         public checkStakingValidity(_tokenAmount, _dropburnAmount, _rewardCut) {
         require(!nodeRunners[msg.sender][_nodeAddr], "Node is already registered");
 
@@ -183,7 +184,8 @@ contract Staking is Ownable {
         }
 
         address[] memory nodeDelegators;
-        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0,0,false,nodeDelegators);
+        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0,0,false,
+        _desc,nodeDelegators);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
         emit LogNewNode(msg.sender, _nodeAddr, _tokenAmount, _dropburnAmount, _rewardCut);
