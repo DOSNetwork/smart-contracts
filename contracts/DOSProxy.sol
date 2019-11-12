@@ -95,7 +95,7 @@ contract DOSProxy is Ownable {
     uint public bootstrapRound = 0;
     uint public bootstrapEndBlk = 0;
 
-    // DOSAddressBridge on rinkeby testnet
+    // DOSAddressBridge
     DOSAddressBridgeInterface public addressBridge;
     address public bridgeAddr;
     address public proxyFundsAddr;
@@ -795,6 +795,7 @@ contract DOSProxy is Ownable {
             }
         }
         emit LogUnRegisteredNewPendingNode(node, unregisteredFrom);
+        DOSStakingInterface(addressBridge.getStakingAddress()).nodeStop(node);
         return (unregisteredFrom != 0);
     }
 
@@ -824,6 +825,7 @@ contract DOSProxy is Ownable {
         nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
         insertToPendingNodeListTail(msg.sender);
         emit LogRegisteredNewPendingNode(msg.sender);
+        DOSStakingInterface(addressBridge.getStakingAddress()).nodeStart(msg.sender);
 
         formGroup();
     }

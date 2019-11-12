@@ -455,15 +455,6 @@ contract Staking is Ownable {
         nodeTryDelete(_nodeAddr);
     }
 
-    function nodeChekcReward(address _nodeAddr) public returns(uint) {
-        Node storage node = nodes[_nodeAddr];
-        require(node.ownerAddr == msg.sender, "msg.sender is not authorized to claim from node");
-        updateGlobalRewardRate();
-        node.accumulatedReward = getNodeRewardTokens(_nodeAddr);
-        node.accumulatedRewardRate = accumulatedRewardRate;
-        return node.accumulatedReward;
-    }
-
     function nodeClaimReward(address _nodeAddr) public {
         Node storage node = nodes[_nodeAddr];
         require(node.ownerAddr == msg.sender, "msg.sender is not authorized to claim from node");

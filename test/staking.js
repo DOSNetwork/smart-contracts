@@ -120,9 +120,7 @@ contract("Staking", async accounts => {
     advancement = 86400 * 1; // 1 Days
     await time.increase(advancement);
     let node = await staking.nodes.call(accounts[1]);
-    console.log(node.description);
     let uptime = await staking.getNodeUptime(accounts[1]);
-    console.log(Math.round(uptime.toNumber() / (60 * 60 * 24)));
     assert.equal(
       Math.round(uptime.toNumber() / (60 * 60 * 24)),
       1,
@@ -338,8 +336,6 @@ contract("Staking", async accounts => {
 
     const eventList = await staking.getPastEvents("DelegateTo", options);
     assert.equal(eventList.length, 1, "");
-    //console.log("length", eventList.length);
-    //console.log(eventList[0].event);
   });
   it("test delegatorClaimReward - node only runs 73 days during a year", async () => {
     let stakedTokenPerNode = 50000;
