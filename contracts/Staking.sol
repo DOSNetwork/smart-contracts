@@ -53,6 +53,8 @@ contract Staking is Ownable {
         uint totalOtherDelegatedAmount;
         uint accumulatedReward;
         uint accumulatedRewardRate;
+        uint pendingWithdrawToken;
+        uint pendingWithdrawDB;
         uint lastStartTime;
         uint lastStopTime;
         bool running;
@@ -184,7 +186,7 @@ contract Staking is Ownable {
         }
 
         address[] memory nodeDelegators;
-        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0,0,false,
+        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, 0, false,
         _desc,nodeDelegators);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
@@ -334,8 +336,9 @@ contract Staking is Ownable {
         }
         node.accumulatedRewardRate = accumulatedRewardRate;
         node.selfStakedAmount -= _tokenAmount;
+        node.pendingWithdrawToken += _tokenAmount;
         node.stakedDB -= _dropburnAmount;
-
+        node.pendingWithdrawDB += _dropburnAmount;
 
         if (_tokenAmount > 0 || _dropburnAmount > 0) {
             // create an UnbondRequest
@@ -413,6 +416,8 @@ contract Staking is Ownable {
         require(node.ownerAddr == msg.sender, "msg.sender is not authorized to withdraw from node");
 
         (uint tokenAmount, uint dropburnAmount) = withdrawAll(node.releaseTime, node.unbondRequests);
+        node.pendingWithdrawToken -= tokenAmount;
+        node.pendingWithdrawDB -= dropburnAmount;
 
         nodeTryDelete(_nodeAddr);
         if (tokenAmount > 0) {
