@@ -260,34 +260,10 @@ contract DOSProxy is Ownable {
         groupMaturityPeriod = newPeriod;
     }
 
-    function setBootstrapCommitDuration(uint newCommitDuration) public onlyOwner {
-        require(newCommitDuration != bootstrapCommitDuration && newCommitDuration != 0,"Not a valid parameter");
-        emit UpdateBootstrapCommitDuration(bootstrapCommitDuration, newCommitDuration);
-        bootstrapCommitDuration = newCommitDuration;
-    }
-
-    function setBootstrapRevealDuration(uint newRevealDuration) public onlyOwner {
-        require(newRevealDuration != bootstrapRevealDuration && newRevealDuration != 0,"Not a valid parameter");
-        emit UpdateBootstrapRevealDuration(bootstrapRevealDuration, newRevealDuration);
-        bootstrapRevealDuration = newRevealDuration;
-    }
-
-    function setbootstrapStartThreshold(uint newNum) public onlyOwner {
-        require(newNum != bootstrapStartThreshold && newNum >= groupSize * (groupToPick + 1),"Not a valid parameter");
-        emit UpdatebootstrapStartThreshold(bootstrapStartThreshold, newNum);
-        bootstrapStartThreshold = newNum;
-    }
-
     function setPendingGroupMaxLife(uint newLife) public onlyOwner {
         require(newLife != pendingGroupMaxLife && newLife != 0,"Not a valid parameter");
         emit UpdatePendingGroupMaxLife(pendingGroupMaxLife, newLife);
         pendingGroupMaxLife = newLife;
-    }
-
-    function setBootstrapGroups(uint newGroups) public onlyOwner {
-        require(newGroups != bootstrapGroups && newGroups != 0,"Not a valid parameter");
-        emit UpdateBootstrapGroups(bootstrapGroups, newGroups);
-        bootstrapGroups = newGroups;
     }
 
     function setSystemRandomHardLimit(uint newLimit) public onlyOwner {
