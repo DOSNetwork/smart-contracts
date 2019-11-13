@@ -306,15 +306,12 @@ contract Staking is Ownable {
             nodes[_nodeAddr].totalOtherDelegatedAmount == 0 && nodes[_nodeAddr].accumulatedReward == 0 &&
             nodes[_nodeAddr].nodeDelegators.length==0) {
                 delete nodes[_nodeAddr];
-                uint idx = 0;
-                for (; idx < nodeAddrs.length; idx++) {
-                    if (nodeAddrs[idx] == msg.sender) {
-                        break;
+                for (uint idx = 0; idx < nodeAddrs.length; idx++) {
+                    if (nodeAddrs[idx] == _nodeAddr) {
+                        nodeAddrs[idx] = nodeAddrs[nodeAddrs.length - 1];
+                        nodeAddrs.length--;
+                        return;
                     }
-                }
-                if (idx < nodeAddrs.length) {
-                    nodeAddrs[idx] = nodeAddrs[nodeAddrs.length - 1];
-                    nodeAddrs.length--;
                 }
         }
     }
