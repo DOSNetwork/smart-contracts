@@ -71,6 +71,8 @@ contract DOSProxy is Ownable {
         mapping(address => address) memberList;
     }
 
+    uint public initBlkN;
+
     uint requestIdSeed;
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
@@ -199,6 +201,7 @@ contract DOSProxy is Ownable {
     }
 
     constructor(address _bridgeAddr,address _proxyFundsAddr,address _proxyFundsTokenAddr) public {
+        initBlkN = block.number;
         pendingNodeList[HEAD_A] = HEAD_A;
         pendingNodeTail = HEAD_A;
         pendingGroupList[HEAD_I] = HEAD_I;

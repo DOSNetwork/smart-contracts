@@ -21,7 +21,7 @@ contract DOSAddressBridgeInterface {
 
 contract Staking is Ownable {
     uint public constant ONEYEAR = 365 days;
-
+    uint public initBlkN;
     // Testnet token contract addresses
     address public  DOSTOKEN;
     address public  DBTOKEN ;
@@ -105,6 +105,7 @@ contract Staking is Ownable {
     event Unbond(address indexed sender,uint tokenAmount, uint dropburnAmount, address nodeAddr);
 
     constructor(address _dostoken,address _dbtoken,address _vault,address _bridgeAddr) public {
+        initBlkN = block.number;
         DOSTOKEN = _dostoken;
         DBTOKEN = _dbtoken;
         stakingRewardsVault = _vault;
