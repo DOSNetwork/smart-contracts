@@ -177,6 +177,7 @@ contract Staking is Ownable {
     function newNode(address _nodeAddr, uint _tokenAmount, uint _dropburnAmount, uint _rewardCut,string memory _desc)
         public checkStakingValidity(_tokenAmount, _dropburnAmount, _rewardCut) {
         require(!nodeRunners[msg.sender][_nodeAddr], "Node is already registered");
+        require(nodes[_nodeAddr].ownerAddr == address(0),"Node is already registered");
 
         nodeRunners[msg.sender][_nodeAddr] = true;
         // Deposit tokens.

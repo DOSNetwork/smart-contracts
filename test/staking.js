@@ -36,6 +36,46 @@ contract("Staking", async accounts => {
       assert.include(String(err), "revert", "");
     }
   });
+  it("test newNode - node should only be registered once", async () => {
+    let stakedTokenPerNode = 50000;
+    let proxyAddr = accounts[11];
+    let stakingRewardsVault = accounts[0];
+    let tokenPool = accounts[0];
+    let nodeStakingAddr = accounts[1];
+    let nodeAddr = accounts[1];
+
+    let ttk = await Ttk.new();
+    let bridge = await Bridge.new();
+    await bridge.setProxyAddress(proxyAddr);
+    let staking = await Staking.new(
+      ttk.address,
+      ttk.address,
+      stakingRewardsVault,
+      bridge.address
+    );
+    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+
+    let decimals = web3.utils.toBN(18);
+    let amount = web3.utils.toBN(stakedTokenPerNode);
+    let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+
+    await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
+    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
+    await ttk.transfer(accounts[2], value, { from: tokenPool });
+    await ttk.approve(staking.address, -1, { from: accounts[2] });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+      from: nodeStakingAddr
+    });
+
+    try {
+      await staking.newNode(nodeAddr, value, 0, 10, "test", {
+        from: accounts[2]
+      });
+      assert.fail(true, false, "The function should throw error");
+    } catch (err) {
+      assert.include(String(err), "revert", "");
+    }
+  });
   it("test updateNodeStaking", async () => {
     let stakedTokenPerNode = 50000;
     let proxyAddr = accounts[11];
