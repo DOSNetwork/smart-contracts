@@ -297,6 +297,122 @@ contract("Staking", async accounts => {
       );
     }
   });
+  it("test withdrawAble", async () => {
+    let stakedTokenPerNode = 50000;
+    let proxyAddr = accounts[11];
+    let stakingRewardsVault = accounts[0];
+    let tokenPool = accounts[0];
+    let nodeStakingAddr = accounts[1];
+    let nodeAddr = accounts[1];
+    let delegater = 8;
+
+    let ttk = await Ttk.new();
+    let bridge = await Bridge.new();
+    await bridge.setProxyAddress(proxyAddr);
+    let staking = await Staking.new(
+      ttk.address,
+      ttk.address,
+      stakingRewardsVault,
+      bridge.address
+    );
+    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+
+    let decimals = web3.utils.toBN(18);
+    let amount = web3.utils.toBN(stakedTokenPerNode * 2);
+    let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+    await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
+    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+      from: nodeStakingAddr
+    });
+
+    await staking.nodeStart(nodeAddr, {
+      from: proxyAddr
+    });
+
+    amount = web3.utils.toBN(stakedTokenPerNode);
+    value = amount.mul(web3.utils.toBN(10).pow(decimals));
+    for (var i = 1; i <= delegater; i++) {
+      let idx = i + 1;
+      await ttk.transfer(accounts[idx], value, { from: tokenPool });
+      await ttk.approve(staking.address, -1, { from: accounts[idx] });
+      let tx = await staking.delegate(value, nodeAddr, {
+        from: accounts[idx]
+      });
+    }
+
+    let advancement = 86400 * 10; // 10 Days
+    await time.increase(advancement);
+
+    let unboundAmount = web3.utils.toBN(stakedTokenPerNode / 2);
+    let unboundValue = unboundAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.nodeUnbond(unboundValue, 0, nodeAddr, {
+      from: nodeStakingAddr
+    });
+    for (var i = 1; i <= delegater; i++) {
+      let idx = i + 1;
+      await staking.delegatorUnbond(unboundValue, nodeAddr, {
+        from: accounts[idx]
+      });
+    }
+
+    advancement = 86400 * 3; // 3 Days
+    await time.increase(advancement);
+
+    for (var i = 1; i <= delegater; i++) {
+      let idx = i + 1;
+      await staking.delegatorUnbond(unboundValue, nodeAddr, {
+        from: accounts[idx]
+      });
+      let wei = await staking.delegatorWithdrawAble(nodeAddr, {
+        from: accounts[idx]
+      });
+      let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
+      assert.equal(
+        withdrawAbleAmount,
+        0,
+        "After 3 days, withdrawAble should be 0 "
+      );
+    }
+    advancement = 86400 * 4; // 3 Days
+    await time.increase(advancement);
+    let wei = await staking.nodeWithdrawAble(nodeAddr, {
+      from: nodeStakingAddr
+    });
+    let withdrawAbleAmount = Math.round(wei[0].valueOf() / 1000000000000000000);
+    assert.equal(
+      withdrawAbleAmount,
+      stakedTokenPerNode / 2,
+      "After 7 days, withdrawAble should be 25000 "
+    );
+    for (var i = 1; i <= delegater; i++) {
+      let idx = i + 1;
+      let wei = await staking.delegatorWithdrawAble(nodeAddr, {
+        from: accounts[idx]
+      });
+      let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
+      assert.equal(
+        withdrawAbleAmount,
+        stakedTokenPerNode / 2,
+        "After 7 days, withdrawAble should be 25000 "
+      );
+    }
+    advancement = 86400 * 3; // 3 Days
+    await time.increase(advancement);
+
+    for (var i = 1; i <= delegater; i++) {
+      let idx = i + 1;
+      let wei = await staking.delegatorWithdrawAble(nodeAddr, {
+        from: accounts[idx]
+      });
+      let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
+      assert.equal(
+        withdrawAbleAmount,
+        stakedTokenPerNode,
+        "After 13 days, withdrawAble should be 50000 "
+      );
+    }
+  });
   it("test delegatorClaimReward", async () => {
     let stakedTokenPerNode = 50000;
     let proxyAddr = accounts[11];

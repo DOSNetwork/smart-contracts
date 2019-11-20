@@ -300,7 +300,7 @@ contract Staking is Ownable {
     function nodeUnregister(address _nodeAddr) public {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
         Node storage node = nodes[_nodeAddr];
-        nodeUnbond(node.selfStakedAmount,node.stakedDB,_nodeAddr);
+        nodeUnbondInternal(node.selfStakedAmount,node.stakedDB,_nodeAddr);
     }
 
     function nodeTryDelete(address _nodeAddr) public {
@@ -317,7 +317,6 @@ contract Staking is Ownable {
                 }
         }
     }
-
     // Used by node runners to unbond their stakes.
     // Unbonded tokens are locked for 7 days, during the unbonding period they're not eligible for staking rewards.
     function nodeUnbond(uint _tokenAmount, uint _dropburnAmount, address _nodeAddr) public {
@@ -326,7 +325,16 @@ contract Staking is Ownable {
 
         require(_tokenAmount <= node.selfStakedAmount, "Invalid request to unbond more than staked token");
         require(_dropburnAmount <= node.stakedDB, "Invalid request to unbond more than staked DropBurn token");
-
+        require(node.selfStakedAmount - _tokenAmount >=
+                minStakePerNode * (10 - min(node.stakedDB - _dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10,
+                "Invalid unbond request to maintain node staking requirement");
+        nodeUnbondInternal(_tokenAmount,_dropburnAmount,_nodeAddr);
+    }
+    // Used by node runners to unbond their stakes.
+    // Unbonded tokens are locked for 7 days, during the unbonding period they're not eligible for staking rewards.
+    function nodeUnbondInternal(uint _tokenAmount, uint _dropburnAmount, address _nodeAddr) internal {
+        require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
+        Node storage node = nodes[_nodeAddr];
         if (node.running==true) {
             updateGlobalRewardRate();
             node.accumulatedReward = getNodeRewardTokens(_nodeAddr);
@@ -547,5 +555,46 @@ contract Staking is Ownable {
         }else{
             return delegator.accumulatedReward;
         }
+    }
+
+
+    function nodeWithdrawAble(address _nodeAddr) public view returns(uint,uint) {
+        Node storage node = nodes[_nodeAddr];
+        require(node.ownerAddr == msg.sender, "msg.sender is not authorized to withdraw from node");
+
+        return withdrawAbleAmount(node.releaseTime, node.unbondRequests);
+    }
+
+    function delegatorWithdrawAble(address _nodeAddr) public view returns(uint) {
+        Delegation storage delegator = delegators[msg.sender][_nodeAddr];
+        require(nodes[_nodeAddr].ownerAddr != address(0), "Node doesn't exist");
+        require(delegator.delegatedNode == _nodeAddr, "Cannot withdraw from non-delegated node");
+        uint tokenAmount = 0;
+        (tokenAmount, ) = withdrawAbleAmount(delegator.releaseTime, delegator.unbondRequests);
+        return tokenAmount;
+    }
+
+    function withdrawAbleAmount(mapping(uint => uint) storage releaseTimeList, mapping(uint => UnbondRequest) storage requestList)
+        internal
+        view
+        returns(uint, uint)
+    {
+        uint accumulatedDos = 0;
+        uint accumulatedDropburn = 0;
+        uint prev = LISTHEAD;
+        uint curr = releaseTimeList[prev];
+        while (curr != LISTHEAD && curr > now) {
+            prev = curr;
+            curr = releaseTimeList[prev];
+        }
+        // All next items are withdrawable.
+        while (curr != LISTHEAD) {
+            accumulatedDos += requestList[curr].dosAmount;
+            accumulatedDropburn += requestList[curr].dbAmount;
+            prev = curr;
+            curr = releaseTimeList[prev];
+
+        }
+        return (accumulatedDos, accumulatedDropburn);
     }
 }
