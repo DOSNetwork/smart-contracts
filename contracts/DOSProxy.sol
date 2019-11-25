@@ -138,6 +138,10 @@ contract DOSProxy is Ownable {
     uint public lastRandomness;
     Group lastHandledGroup;
 
+    // Only whitelised guardian are permitted to kick off signalUnregister process
+    // TODO : Chose a random group to check and has a consensus about which nodes should be unregister in v2.0.
+    mapping(address => bool) public whitelisted;
+
     enum TrafficType {
         SystemRandom,
         UserRandom,
@@ -185,6 +189,7 @@ contract DOSProxy is Ownable {
     event LogMessage(string info);
     event UpdateGroupSize(uint oldSize, uint newSize);
     event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
+    event UpdateLifeDiversity(uint lifeDiversity, uint newDiversity);
     event UpdateBootstrapCommitDuration(uint oldDuration, uint newDuration);
     event UpdateBootstrapRevealDuration(uint oldDuration, uint newDuration);
     event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
@@ -200,6 +205,10 @@ contract DOSProxy is Ownable {
         _;
     }
 
+    modifier onlyWhitelisted {
+        require(whitelisted[msg.sender], "Not whitelisted!");
+        _;
+    }
     constructor(address _bridgeAddr,address _proxyFundsAddr,address _proxyFundsTokenAddr) public {
         initBlkN = block.number;
         pendingNodeList[HEAD_A] = HEAD_A;
@@ -211,6 +220,14 @@ contract DOSProxy is Ownable {
         proxyFundsAddr = _proxyFundsAddr;
         proxyFundsTokenAddr = _proxyFundsTokenAddr;
         DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
+    }
+
+    function addToWhitelist(address _addr) public onlyOwner {
+        whitelisted[_addr] = true;
+    }
+
+    function removeFromWhitelist(address _addr) public onlyOwner {
+        delete whitelisted[_addr];
     }
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
@@ -261,6 +278,12 @@ contract DOSProxy is Ownable {
         require(newPeriod != groupMaturityPeriod && newPeriod != 0,"Not a valid parameter");
         emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
         groupMaturityPeriod = newPeriod;
+    }
+
+    function setLifeDiversity(uint newDiversity) public onlyOwner {
+        require(newDiversity != lifeDiversity && newDiversity != 0,"Not a valid parameter");
+        emit UpdateLifeDiversity(lifeDiversity, newDiversity);
+        lifeDiversity = newDiversity;
     }
 
     function setPendingGroupMaxLife(uint newLife) public onlyOwner {
@@ -638,7 +661,6 @@ contract DOSProxy is Ownable {
 
     /// Guardian node functions
     // TODO: Tune guardian signal algorithm.
-    // TODO: Reward guardian nodes.
     /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
     function signalRandom() public {
@@ -651,7 +673,7 @@ contract DOSProxy is Ownable {
         emit GuardianReward(block.number, msg.sender);
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
-    // TODO: Reward guardian nodes.
+
     /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
     function signalGroupDissolve() public {
         // Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
@@ -664,7 +686,6 @@ contract DOSProxy is Ownable {
             emit LogMessage("No expired pending group to clean up");
         }
     }
-    // TODO: Reward guardian nodes.
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
     ///  If there aren't enough working groups to choose to dossolve, probably a new bootstrap is needed.
     function signalGroupFormation() public {
@@ -675,7 +696,6 @@ contract DOSProxy is Ownable {
             emit LogMessage("No group formation");
         }
     }
-    // TODO: Reward guardian nodes.
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
         if (numPendingNodes < bootstrapStartThreshold) {
@@ -704,8 +724,8 @@ contract DOSProxy is Ownable {
         emit GuardianReward(block.number, msg.sender);
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
-    // Todo: Add a whitelist for signalUnregister
-    function signalUnregister(address member) public {
+    // TODO: Chose a random group to check and has a consensus about which nodes should be unregister
+    function signalUnregister(address member) public onlyWhitelisted{
         if (unregister(member)) {
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
