@@ -31,7 +31,7 @@ contract Staking is Ownable {
     uint private constant LISTHEAD = 0x1;
 
     uint public minStakePerNode = 50000 * (10 ** DOSDECIMAL);
-    uint public maxStakePerNode = 500000 * (10 ** DOSDECIMAL);
+    //uint public maxStakePerNode = 500000 * (10 ** DOSDECIMAL);
     uint public dropburnMaxQuota = 3;
     uint public totalStakedTokens;
     uint public inverseStakeRatio;
@@ -98,7 +98,7 @@ contract Staking is Ownable {
     event UpdateUnbondDuration(uint oldDuration, uint newDuration);
     event UpdateCirculatingSupply(uint oldCirculatingSupply, uint newCirculatingSupply);
     event UpdateMinStakePerNode(uint oldMinStakePerNode, uint newMinStakePerNode);
-    event UpdateMaxStakePerNode(uint oldMaxStakePerNode, uint newMaxStakePerNode);
+    //event UpdateMaxStakePerNode(uint oldMaxStakePerNode, uint newMaxStakePerNode);
     event LogNewNode(address indexed owner, address nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
     event DelegateTo(address indexed sender,uint total, address nodeAddr);
     event RewardWithdraw(address indexed sender,uint total);
@@ -141,10 +141,10 @@ contract Staking is Ownable {
     }
 
     /// @dev used when maxStakePerNode is updated
-    function setMaxStakePerNode(uint _maxStake) public onlyOwner {
-        emit UpdateMaxStakePerNode(maxStakePerNode, _maxStake);
-        maxStakePerNode = _maxStake;
-    }
+    //function setMaxStakePerNode(uint _maxStake) public onlyOwner {
+    //    emit UpdateMaxStakePerNode(maxStakePerNode, _maxStake);
+    //    maxStakePerNode = _maxStake;
+    //}
     function getNodeAddrs() public view returns(address[]memory){
         return nodeAddrs;
     }
@@ -156,7 +156,7 @@ contract Staking is Ownable {
         require(0 <= _rewardCut && _rewardCut < 100, "Not valid reward cut percentage");
         require(_tokenAmount>=minStakePerNode * (10 - min(_dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10,
                 "Not enough dos token to start a node");
-        require(_tokenAmount<=maxStakePerNode, "Reach maximum number of dos tokens per node");
+        //require(_tokenAmount<=maxStakePerNode, "Reach maximum number of dos tokens per node");
         _;
     }
 
@@ -251,8 +251,8 @@ contract Staking is Ownable {
             ERC20I(DBTOKEN).transferFrom(msg.sender, address(this), _newDropburnAmount);
         }
         if (_newTokenAmount != 0) {
-            require(node.selfStakedAmount + node.totalOtherDelegatedAmount + _newTokenAmount <= maxStakePerNode,
-                    "Reach maximum number of dos tokens per node");
+            //require(node.selfStakedAmount + node.totalOtherDelegatedAmount + _newTokenAmount <= maxStakePerNode,
+            //        "Reach maximum number of dos tokens per node");
             node.selfStakedAmount += _newTokenAmount;
             if (node.running==true) {
                 // This would change interest rate
@@ -268,8 +268,8 @@ contract Staking is Ownable {
         Node storage node = nodes[_nodeAddr];
         require(node.ownerAddr != address(0), "Node doesn't exist");
         require(msg.sender != node.ownerAddr, "Node owner cannot self-delegate");
-        require(node.selfStakedAmount + node.totalOtherDelegatedAmount + _tokenAmount <= maxStakePerNode,
-                "Reach maximum number of dos tokens per node");
+        //require(node.selfStakedAmount + node.totalOtherDelegatedAmount + _tokenAmount <= maxStakePerNode,
+        //        "Reach maximum number of dos tokens per node");
 
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
         require(delegator.delegatedNode == address(0) || delegator.delegatedNode == _nodeAddr, "Invalid delegated node address");
