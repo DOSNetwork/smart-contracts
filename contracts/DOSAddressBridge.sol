@@ -12,12 +12,15 @@ contract DOSAddressBridge is Ownable {
     // Deployed DOSRegistry contract address.
     address private _registryAddress;
     address private _stakingAddress;
+    // BootStrap URL
+    string private _bootStrapUrl;
 
     event ProxyAddressUpdated(address previousProxy, address newProxy);
     event CommitRevealAddressUpdated(address previousAddr, address newAddr);
     event PaymentAddressUpdated(address previousPayment, address newPayment);
     event RegistryAddressUpdated(address previousRegistry, address newRegistry);
     event StakingAddressUpdated(address previousStaking, address newStaking);
+    event BootStrapUrlUpdated(string previousURL, string newURL);
 
     function getProxyAddress() public view returns (address) {
         return _proxyAddress;
@@ -62,5 +65,14 @@ contract DOSAddressBridge is Ownable {
     function setStakingAddress(address newAddr) public onlyOwner {
         emit StakingAddressUpdated(_stakingAddress, newAddr);
         _stakingAddress = newAddr;
+    }
+
+    function getBootStrapUrl() public view returns (string memory) {
+        return _bootStrapUrl;
+    }
+
+    function setBootStrapUrl(string memory url) public  onlyOwner {
+        emit BootStrapUrlUpdated(_bootStrapUrl, url);
+        _bootStrapUrl = url;
     }
 }
