@@ -30,7 +30,7 @@ contract Staking is Ownable {
     uint public constant DBDECIMAL = 0;
     uint private constant LISTHEAD = 0x1;
 
-    uint public minStakePerNode = 50000 * (10 ** DOSDECIMAL);
+    uint public minStakePerNode = 100000 * (10 ** DOSDECIMAL);
     //uint public maxStakePerNode = 500000 * (10 ** DOSDECIMAL);
     uint public dropburnMaxQuota = 3;
     uint public totalStakedTokens;
@@ -307,6 +307,7 @@ contract Staking is Ownable {
         if (nodes[_nodeAddr].selfStakedAmount == 0 && nodes[_nodeAddr].stakedDB == 0 &&
             nodes[_nodeAddr].totalOtherDelegatedAmount == 0 && nodes[_nodeAddr].accumulatedReward == 0 &&
             nodes[_nodeAddr].nodeDelegators.length==0) {
+                delete nodeRunners[nodes[_nodeAddr].ownerAddr][_nodeAddr];
                 delete nodes[_nodeAddr];
                 for (uint idx = 0; idx < nodeAddrs.length; idx++) {
                     if (nodeAddrs[idx] == _nodeAddr) {
