@@ -362,7 +362,7 @@ contract Staking is Ownable {
             node.releaseTime[LISTHEAD] = releaseTime;
         }
 
-        if (node.selfStakedAmount - _tokenAmount >=
+        if (node.selfStakedAmount - _tokenAmount <
             minStakePerNode * (10 - min(node.stakedDB - _dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10){
             nodeStopInternal(_nodeAddr);
          }
