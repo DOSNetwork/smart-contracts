@@ -196,37 +196,43 @@ contract Staking is Ownable {
     }
 
     function nodeStart(address _nodeAddr) public onlyFromProxy {
+        require(nodes[_nodeAddr].ownerAddr != address(0),"Node is not registered");
         Node storage node = nodes[_nodeAddr];
-        node.running = true;
-        node.lastStartTime = now;
-        updateGlobalRewardRate();
-        node.accumulatedRewardRate = accumulatedRewardRate;
-        for (uint i = 0; i < node.nodeDelegators.length; i++) {
-            Delegation storage delegator = delegators[node.nodeDelegators[i]][_nodeAddr];
-            delegator.accumulatedRewardRate = accumulatedRewardRate;
+        if (!node.running) {
+            node.running = true;
+            node.lastStartTime = now;
+            updateGlobalRewardRate();
+            node.accumulatedRewardRate = accumulatedRewardRate;
+            for (uint i = 0; i < node.nodeDelegators.length; i++) {
+                Delegation storage delegator = delegators[node.nodeDelegators[i]][_nodeAddr];
+                delegator.accumulatedRewardRate = accumulatedRewardRate;
+            }
+            // This would change interest rate
+            totalStakedTokens += node.selfStakedAmount + node.totalOtherDelegatedAmount;
         }
-        // This would change interest rate
-        totalStakedTokens += node.selfStakedAmount + node.totalOtherDelegatedAmount;
     }
 
     function nodeStop(address _nodeAddr) public onlyFromProxy {
+        require(nodes[_nodeAddr].ownerAddr != address(0),"Node is not registered");
         nodeStopInternal(_nodeAddr);
     }
 
     function nodeStopInternal(address _nodeAddr) internal {
         Node storage node = nodes[_nodeAddr];
-        updateGlobalRewardRate();
-        node.accumulatedReward = getNodeRewardTokens(_nodeAddr);
-        node.accumulatedRewardRate = accumulatedRewardRate;
-        for (uint i = 0; i < node.nodeDelegators.length; i++) {
-            Delegation storage delegator = delegators[node.nodeDelegators[i]][_nodeAddr];
-            delegator.accumulatedReward = getDelegatorRewardTokens(node.nodeDelegators[i], _nodeAddr);
-            delegator.accumulatedRewardRate = accumulatedRewardRate;
+        if (node.running) {
+            updateGlobalRewardRate();
+            node.accumulatedReward = getNodeRewardTokens(_nodeAddr);
+            node.accumulatedRewardRate = accumulatedRewardRate;
+            for (uint i = 0; i < node.nodeDelegators.length; i++) {
+                Delegation storage delegator = delegators[node.nodeDelegators[i]][_nodeAddr];
+                delegator.accumulatedReward = getDelegatorRewardTokens(node.nodeDelegators[i], _nodeAddr);
+                delegator.accumulatedRewardRate = accumulatedRewardRate;
+            }
+            node.running = false;
+            // This would change interest rate
+	        totalStakedTokens -= node.selfStakedAmount - node.totalOtherDelegatedAmount;
+            node.lastStopTime = now;
         }
-        node.running = false;
-        // This would change interest rate
-	    totalStakedTokens -= node.selfStakedAmount - node.totalOtherDelegatedAmount;
-        node.lastStopTime = now;
     }
 
     // For node runners to configure new staking settings.
@@ -559,17 +565,16 @@ contract Staking is Ownable {
     }
 
 
-    function nodeWithdrawAble(address _nodeAddr) public view returns(uint,uint) {
+    function nodeWithdrawAble(address _owner,address _nodeAddr) public view returns(uint,uint) {
         Node storage node = nodes[_nodeAddr];
-        require(node.ownerAddr == msg.sender, "msg.sender is not authorized to withdraw from node");
-
+        if (node.ownerAddr != _owner){
+            return (0,0);
+        }
         return withdrawAbleAmount(node.releaseTime, node.unbondRequests);
     }
 
-    function delegatorWithdrawAble(address _nodeAddr) public view returns(uint) {
-        Delegation storage delegator = delegators[msg.sender][_nodeAddr];
-        require(nodes[_nodeAddr].ownerAddr != address(0), "Node doesn't exist");
-        require(delegator.delegatedNode == _nodeAddr, "Cannot withdraw from non-delegated node");
+    function delegatorWithdrawAble(address _owner,address _nodeAddr) public view returns(uint) {
+        Delegation storage delegator = delegators[_owner][_nodeAddr];
         uint tokenAmount = 0;
         (tokenAmount, ) = withdrawAbleAmount(delegator.releaseTime, delegator.unbondRequests);
         return tokenAmount;

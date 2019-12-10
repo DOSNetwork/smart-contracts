@@ -12,6 +12,176 @@ const {
 } = require("@openzeppelin/test-helpers");
 
 contract("Staking", async accounts => {
+  it("test totalStakedTokens", async () => {
+    let stakedTokenPerNode = 100000;
+    let proxyAddr = accounts[11];
+    let stakingRewardsVault = accounts[0];
+    let tokenPool = accounts[0];
+    let nodeStakingAddr = accounts[1];
+    let nodeAddr = accounts[1];
+
+    let ttk = await Ttk.new();
+    let bridge = await Bridge.new();
+    await bridge.setProxyAddress(proxyAddr);
+    let staking = await Staking.new(
+      ttk.address,
+      ttk.address,
+      stakingRewardsVault,
+      bridge.address
+    );
+    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+
+    let decimals = web3.utils.toBN(18);
+    let amount = web3.utils.toBN(stakedTokenPerNode);
+    let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+
+    await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
+    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+      from: nodeStakingAddr
+    });
+    let apr = await staking.getCurrentAPR();
+    assert.equal(apr, 8000, "After 1 year, delegator balance should be 7200 ");
+
+    let total = await staking.totalStakedTokens.call();
+    assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
+
+    await staking.nodeStart(nodeAddr, {
+      from: proxyAddr
+    });
+
+    await staking.nodeStart(nodeAddr, {
+      from: proxyAddr
+    });
+
+    total = await staking.totalStakedTokens.call();
+    assert.equal(
+      total.toString(),
+      100000000000000000000000,
+      "totalStakedTokens should be 100000000000000000000000 "
+    );
+
+    let advancement = 86400 * 1; // 1 Days
+    await time.increase(advancement);
+
+    await staking.nodeStop(nodeAddr, {
+      from: proxyAddr
+    });
+    await staking.nodeStop(nodeAddr, {
+      from: proxyAddr
+    });
+
+    total = await staking.totalStakedTokens.call();
+    assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
+    await staking.nodeStart(nodeAddr, {
+      from: proxyAddr
+    });
+    await staking.nodeStart(nodeAddr, {
+      from: proxyAddr
+    });
+    total = await staking.totalStakedTokens.call();
+    assert.equal(
+      total.toString(),
+      100000000000000000000000,
+      "totalStakedTokens should be 100000000000000000000000 "
+    );
+    await staking.nodeUnregister(nodeAddr, {
+      from: nodeStakingAddr
+    });
+    await staking.nodeStart(nodeAddr, {
+      from: proxyAddr
+    });
+    total = await staking.totalStakedTokens.call();
+    assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
+  });
+  it("test nodeClaimReward", async () => {
+    let stakedTokenPerNode = 1000000;
+    let circulatingSupply = 263900000;
+    let proxyAddr = accounts[14];
+    let stakingRewardsVault = accounts[0];
+    let tokenPool = accounts[0];
+    let nodes = 13;
+    let delegater = 9;
+
+    let ttk = await Ttk.new();
+    let bridge = await Bridge.new();
+    await bridge.setProxyAddress(proxyAddr);
+    let staking = await Staking.new(
+      ttk.address,
+      ttk.address,
+      stakingRewardsVault,
+      bridge.address
+    );
+    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+
+    let decimals = web3.utils.toBN(18);
+    let amount = web3.utils.toBN(stakedTokenPerNode);
+    let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+
+    let SupplyAmount = web3.utils.toBN(circulatingSupply);
+    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.setCirculatingSupply(SupplyValue, {
+      from: accounts[0]
+    });
+
+    for (var i = 1; i <= nodes; i++) {
+      await ttk.transfer(accounts[i], value, { from: tokenPool });
+      await ttk.approve(staking.address, -1, { from: accounts[i] });
+      await staking.newNode(accounts[i], value, 0, 1, "test", {
+        from: accounts[i]
+      });
+    }
+    for (var i = 1; i <= nodes; i++) {
+      await staking.nodeStart(accounts[i], {
+        from: proxyAddr
+      });
+    }
+    let apr = await staking.getCurrentAPR();
+    let accumulatedRewardRate = await staking.accumulatedRewardRate.call();
+    //assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
+    console.log(
+      "APR",
+      apr.toNumber(),
+      "accumulatedRewardRate",
+      accumulatedRewardRate.toNumber()
+    );
+
+    assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
+
+    let advancement = 86400 * 365; // 365 Days
+    await time.increase(advancement);
+
+    for (var i = 1; i <= delegater; i++) {
+      let idx = i + 1;
+      await ttk.transfer(accounts[idx], value, { from: tokenPool });
+      await ttk.approve(staking.address, -1, { from: accounts[idx] });
+      let tx = await staking.delegate(value, accounts[1], {
+        from: accounts[idx]
+      });
+      truffleAssert.eventEmitted(tx, "DelegateTo", ev => {
+        return ev.sender === accounts[idx];
+      });
+    }
+    apr = await staking.getCurrentAPR();
+    accumulatedRewardRate = await staking.accumulatedRewardRate.call();
+    //assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
+    console.log(
+      "APR",
+      apr.toNumber(),
+      "accumulatedRewardRate",
+      accumulatedRewardRate.toNumber()
+    );
+    for (var i = 1; i <= nodes; i++) {
+      await staking.nodeClaimReward(accounts[i], { from: accounts[i] });
+      let balance = await ttk.balanceOf(accounts[i]);
+      let nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
+      assert.equal(
+        nodeBalance,
+        "800000",
+        "After 1 year, nodeBalance should be 1000000 * 0.8 "
+      );
+    }
+  });
   it("test newNode - node has no enough balance", async () => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
@@ -23,7 +193,7 @@ contract("Staking", async accounts => {
       bridge.address
     );
 
-    ttk.transfer(accounts[1], 30000, { from: accounts[0] });
+    await ttk.transfer(accounts[1], 30000, { from: accounts[0] });
     let balance = await ttk.balanceOf(accounts[1]);
     assert.equal(balance.valueOf(), 30000);
     ttk.approve(staking.address, -1, { from: accounts[1] });
@@ -37,7 +207,7 @@ contract("Staking", async accounts => {
     }
   });
   it("test newNode - node should only be registered once", async () => {
-    let stakedTokenPerNode = 50000;
+    let stakedTokenPerNode = 100000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -63,6 +233,7 @@ contract("Staking", async accounts => {
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
     await ttk.transfer(accounts[2], value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: accounts[2] });
+
     await staking.newNode(nodeAddr, value, 0, 10, "test", {
       from: nodeStakingAddr
     });
@@ -76,8 +247,63 @@ contract("Staking", async accounts => {
       assert.include(String(err), "revert", "");
     }
   });
+  it("test unregister-newNode - node should be able to register after unregister", async () => {
+    let stakedTokenPerNode = 100000;
+    let proxyAddr = accounts[11];
+    let stakingRewardsVault = accounts[0];
+    let tokenPool = accounts[0];
+    let nodeStakingAddr = accounts[1];
+    let nodeAddr = accounts[1];
+
+    let ttk = await Ttk.new();
+    let bridge = await Bridge.new();
+    await bridge.setProxyAddress(proxyAddr);
+    let staking = await Staking.new(
+      ttk.address,
+      ttk.address,
+      stakingRewardsVault,
+      bridge.address
+    );
+    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+
+    let decimals = web3.utils.toBN(18);
+    let amount = web3.utils.toBN(stakedTokenPerNode);
+    let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+
+    await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
+    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
+    await ttk.transfer(accounts[2], value, { from: tokenPool });
+    await ttk.approve(staking.address, -1, { from: accounts[2] });
+
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+      from: nodeStakingAddr
+    });
+    let nodeAddrs = await staking.getNodeAddrs();
+    assert.equal(
+      nodeAddrs.length,
+      1,
+      "After newNode, length of nodeAddrs should be 1 "
+    );
+    await staking.nodeUnregister(nodeAddr, {
+      from: nodeStakingAddr
+    });
+    let advancement = 86400 * 7; // 1 Days
+    await time.increase(advancement);
+    await staking.nodeWithdraw(nodeAddr, {
+      from: nodeStakingAddr
+    });
+    nodeAddrs = await staking.getNodeAddrs();
+    assert.equal(
+      nodeAddrs.length,
+      0,
+      "After nodeWithdraw, length of nodeAddrs should be 0 "
+    );
+    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+      from: nodeStakingAddr
+    });
+  });
   it("test updateNodeStaking", async () => {
-    let stakedTokenPerNode = 50000;
+    let stakedTokenPerNode = 100000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -122,12 +348,12 @@ contract("Staking", async accounts => {
     total = await staking.totalStakedTokens.call();
     assert.equal(
       total.toString(),
-      500000000000000000000000,
-      "totalStakedTokens should be 500000000000000000000000 "
+      1000000000000000000000000,
+      "totalStakedTokens should be 1000000000000000000000000 "
     );
   });
   it("test uptime", async () => {
-    let stakedTokenPerNode = 500000;
+    let stakedTokenPerNode = 100000;
     let proxyAddr = accounts[14];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -168,7 +394,8 @@ contract("Staking", async accounts => {
     );
   });
   it("test nodeClaimReward", async () => {
-    let stakedTokenPerNode = 500000;
+    let stakedTokenPerNode = 1000000;
+    let circulatingSupply = 263900000;
     let proxyAddr = accounts[14];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -189,37 +416,42 @@ contract("Staking", async accounts => {
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
 
-    let apr = await staking.getCurrentAPR();
-    let totalReward = 0;
-    let nodeBalance = 0;
+    let SupplyAmount = web3.utils.toBN(circulatingSupply);
+    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.setCirculatingSupply(SupplyValue, {
+      from: accounts[0]
+    });
 
     for (var i = 1; i <= nodes; i++) {
       await ttk.transfer(accounts[i], value, { from: tokenPool });
       await ttk.approve(staking.address, -1, { from: accounts[i] });
-      let tx = await staking.newNode(accounts[i], value, 0, 1, "test", {
+      await staking.newNode(accounts[i], value, 0, 1, "test", {
         from: accounts[i]
       });
+    }
+    for (var i = 1; i <= nodes; i++) {
       await staking.nodeStart(accounts[i], {
         from: proxyAddr
       });
     }
-
+    let apr = await staking.getCurrentAPR();
+    assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
     let advancement = 86400 * 365; // 365 Days
     await time.increase(advancement);
     for (var i = 1; i <= nodes; i++) {
       await staking.nodeClaimReward(accounts[i], { from: accounts[i] });
       let balance = await ttk.balanceOf(accounts[i]);
-      nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
-      totalReward = totalReward + nodeBalance;
+      let nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
       assert.equal(
         nodeBalance,
-        400000,
-        "After 1 year, nodeBalance should be 500000 * 0.8 "
+        "800000",
+        "After 1 year, nodeBalance should be 1000000 * 0.8 "
       );
     }
   });
   it("test nodeClaimReward - node only runs 73 days during a year", async () => {
-    let stakedTokenPerNode = 500000;
+    let stakedTokenPerNode = 1000000;
+    let circulatingSupply = 263900000;
     let proxyAddr = accounts[14];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -239,10 +471,14 @@ contract("Staking", async accounts => {
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+    let SupplyAmount = web3.utils.toBN(circulatingSupply);
+    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.setCirculatingSupply(SupplyValue, {
+      from: accounts[0]
+    });
 
     let apr = await staking.getCurrentAPR();
-    let totalReward = 0;
-    let nodeBalance = 0;
+    assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
 
     for (var i = 1; i <= nodes; i++) {
       await ttk.transfer(accounts[i], value, { from: tokenPool });
@@ -288,17 +524,18 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= nodes; i++) {
       await staking.nodeClaimReward(accounts[i], { from: accounts[i] });
       let balance = await ttk.balanceOf(accounts[i]);
-      nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
-      totalReward = totalReward + nodeBalance;
+      let nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
+      console.log(nodeBalance.toString());
       assert.equal(
         nodeBalance,
-        80000,
-        "After 1 year, nodeBalance should be 500000 * 0.8 / (365 / 73) "
+        160000,
+        "After 1 year, nodeBalance should be 1000000 * 0.8 / (365 / 73) "
       );
     }
   });
   it("test withdrawAble", async () => {
-    let stakedTokenPerNode = 50000;
+    let stakedTokenPerNode = 100000;
+    let circulatingSupply = 263900000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -320,6 +557,12 @@ contract("Staking", async accounts => {
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode * 2);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+    let SupplyAmount = web3.utils.toBN(circulatingSupply);
+    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.setCirculatingSupply(SupplyValue, {
+      from: accounts[0]
+    });
+
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
     await staking.newNode(nodeAddr, value, 0, 10, "test", {
@@ -364,7 +607,7 @@ contract("Staking", async accounts => {
       await staking.delegatorUnbond(unboundValue, nodeAddr, {
         from: accounts[idx]
       });
-      let wei = await staking.delegatorWithdrawAble(nodeAddr, {
+      let wei = await staking.delegatorWithdrawAble(accounts[idx], nodeAddr, {
         from: accounts[idx]
       });
       let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
@@ -376,25 +619,25 @@ contract("Staking", async accounts => {
     }
     advancement = 86400 * 4; // 3 Days
     await time.increase(advancement);
-    let wei = await staking.nodeWithdrawAble(nodeAddr, {
+    let wei = await staking.nodeWithdrawAble(nodeStakingAddr, nodeAddr, {
       from: nodeStakingAddr
     });
     let withdrawAbleAmount = Math.round(wei[0].valueOf() / 1000000000000000000);
     assert.equal(
       withdrawAbleAmount,
       stakedTokenPerNode / 2,
-      "After 7 days, withdrawAble should be 25000 "
+      "After 7 days, withdrawAble should be 50000 "
     );
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
-      let wei = await staking.delegatorWithdrawAble(nodeAddr, {
+      let wei = await staking.delegatorWithdrawAble(accounts[idx], nodeAddr, {
         from: accounts[idx]
       });
       let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
       assert.equal(
         withdrawAbleAmount,
         stakedTokenPerNode / 2,
-        "After 7 days, withdrawAble should be 25000 "
+        "After 7 days, withdrawAble should be 50000 "
       );
     }
     advancement = 86400 * 3; // 3 Days
@@ -402,7 +645,7 @@ contract("Staking", async accounts => {
 
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
-      let wei = await staking.delegatorWithdrawAble(nodeAddr, {
+      let wei = await staking.delegatorWithdrawAble(accounts[idx], nodeAddr, {
         from: accounts[idx]
       });
       let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
@@ -414,7 +657,9 @@ contract("Staking", async accounts => {
     }
   });
   it("test delegatorClaimReward", async () => {
-    let stakedTokenPerNode = 50000;
+    let stakedTokenPerNode = 100000;
+    let circulatingSupply = 263900000;
+
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -436,6 +681,11 @@ contract("Staking", async accounts => {
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+    let SupplyAmount = web3.utils.toBN(circulatingSupply);
+    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.setCirculatingSupply(SupplyValue, {
+      from: accounts[0]
+    });
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
     await staking.newNode(nodeAddr, value, 0, 10, "test", {
@@ -467,8 +717,8 @@ contract("Staking", async accounts => {
     nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
     assert.equal(
       nodeBalance,
-      76000,
-      "After 1 year, node balance should be 76000 "
+      152000,
+      "After 1 year, node balance should be 152000 "
     );
     let delegatorBalance = 0;
     for (var i = 1; i <= delegater; i++) {
@@ -480,8 +730,8 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
       assert.equal(
         delegatorBalance,
-        36000,
-        "After 1 year, delegator balance should be 36000 "
+        72000,
+        "After 1 year, delegator balance should be 72000 "
       );
     }
     const options = {
@@ -494,7 +744,9 @@ contract("Staking", async accounts => {
     assert.equal(eventList.length, 1, "");
   });
   it("test delegatorClaimReward - node only runs 73 days during a year", async () => {
-    let stakedTokenPerNode = 50000;
+    let stakedTokenPerNode = 100000;
+    let circulatingSupply = 263900000;
+
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -516,6 +768,11 @@ contract("Staking", async accounts => {
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+    let SupplyAmount = web3.utils.toBN(circulatingSupply);
+    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.setCirculatingSupply(SupplyValue, {
+      from: accounts[0]
+    });
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
     await staking.newNode(nodeAddr, value, 0, 10, "test", {
@@ -561,8 +818,8 @@ contract("Staking", async accounts => {
     nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
     assert.equal(
       nodeBalance,
-      15200,
-      "After 1 year, node balance should be 15200 "
+      30400,
+      "After 1 year, node balance should be 30400 "
     );
     let delegatorBalance = 0;
     for (var i = 1; i <= delegater; i++) {
@@ -574,13 +831,15 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
       assert.equal(
         delegatorBalance,
-        7200,
-        "After 1 year, delegator balance should be 7200 "
+        14400,
+        "After 1 year, delegator balance should be 14400 "
       );
     }
   });
   it("test nodeUnregister - node only runs 73 days during a year", async () => {
-    let stakedTokenPerNode = 50000;
+    let stakedTokenPerNode = 100000;
+    let circulatingSupply = 263900000;
+
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -602,6 +861,11 @@ contract("Staking", async accounts => {
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
+    let SupplyAmount = web3.utils.toBN(circulatingSupply);
+    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
+    await staking.setCirculatingSupply(SupplyValue, {
+      from: accounts[0]
+    });
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
     await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
     await staking.newNode(nodeAddr, value, 0, 10, "test", {
@@ -658,8 +922,8 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
       assert.equal(
         delegatorBalance,
-        7200,
-        "After 1 year, delegator balance should be 7200 "
+        14400,
+        "After 1 year, delegator balance should be 14400 "
       );
 
       await staking.delegatorWithdraw(nodeAddr, {
@@ -669,8 +933,8 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
       assert.equal(
         delegatorBalance,
-        57200,
-        "After 1 year, delegator balance should be 57200 "
+        114400,
+        "After 1 year, delegator balance should be 114400 "
       );
     }
 
@@ -679,16 +943,16 @@ contract("Staking", async accounts => {
     nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
     assert.equal(
       nodeBalance,
-      15200,
-      "After 1 year, node balance should be 15200 "
+      30400,
+      "After 1 year, node balance should be 30400 "
     );
     await staking.nodeWithdraw(nodeAddr, { from: nodeStakingAddr });
     balance = await ttk.balanceOf(nodeStakingAddr);
     nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
     assert.equal(
       nodeBalance,
-      65200,
-      "After 1 year, node balance should be 65200 "
+      130400,
+      "After 1 year, node balance should be 130400 "
     );
     nodeAddrs = await staking.getNodeAddrs();
     assert.equal(
