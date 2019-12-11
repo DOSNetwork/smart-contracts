@@ -141,7 +141,7 @@ contract DOSProxy is Ownable {
     // Only whitelised guardian are permitted to kick off signalUnregister process
     // TODO : Chose a random group to check and has a consensus about which nodes should be unregister in v2.0.
     mapping(address => bool) public whitelisted;
-
+    bool public enableStaking = true;
     enum TrafficType {
         SystemRandom,
         UserRandom,
@@ -200,8 +200,10 @@ contract DOSProxy is Ownable {
     event GuardianReward(uint blkNum, address indexed guardian);
 
     modifier fromValidStakingNode {
-        require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
-                "Invalid staking node");
+        if (enableStaking){
+            require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
+                    "Invalid staking node");
+        }
         _;
     }
 
@@ -265,6 +267,11 @@ contract DOSProxy is Ownable {
         proxyFundsAddr = newFund;
         proxyFundsTokenAddr = newFundToken;
         DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
+    }
+
+    function setEnableStaking(bool newSetting) public onlyOwner {
+        require(newSetting != enableStaking,"Not a valid parameter");
+        enableStaking = newSetting;
     }
 
     // groupSize must be an odd number.
@@ -794,7 +801,9 @@ contract DOSProxy is Ownable {
             }
         }
         emit LogUnRegisteredNewPendingNode(node, unregisteredFrom);
-        DOSStakingInterface(addressBridge.getStakingAddress()).nodeStop(node);
+        if (enableStaking) {
+            DOSStakingInterface(addressBridge.getStakingAddress()).nodeStop(node);
+        }
         return (unregisteredFrom != 0);
     }
 
@@ -824,8 +833,9 @@ contract DOSProxy is Ownable {
         nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
         insertToPendingNodeListTail(msg.sender);
         emit LogRegisteredNewPendingNode(msg.sender);
-        DOSStakingInterface(addressBridge.getStakingAddress()).nodeStart(msg.sender);
-
+        if (enableStaking) {
+            DOSStakingInterface(addressBridge.getStakingAddress()).nodeStart(msg.sender);
+        }
         formGroup();
     }
 
