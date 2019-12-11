@@ -307,6 +307,7 @@ contract Staking is Ownable {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
         Node storage node = nodes[_nodeAddr];
         nodeUnbondInternal(node.selfStakedAmount,node.stakedDB,_nodeAddr);
+        nodeStopInternal(_nodeAddr);
     }
 
     function nodeTryDelete(address _nodeAddr) public {
@@ -362,11 +363,7 @@ contract Staking is Ownable {
             node.releaseTime[LISTHEAD] = releaseTime;
         }
 
-        if (node.selfStakedAmount - _tokenAmount <
-            minStakePerNode * (10 - min(node.stakedDB - _dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10){
-            nodeStopInternal(_nodeAddr);
-         }
-         emit Unbond(msg.sender,_tokenAmount, _dropburnAmount, _nodeAddr);
+        emit Unbond(msg.sender,_tokenAmount, _dropburnAmount, _nodeAddr);
     }
 
     // Used by token holders (delegators) to unbond their delegations.
