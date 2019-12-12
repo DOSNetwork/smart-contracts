@@ -53,10 +53,10 @@ contract DOSPayment is Ownable {
     uint public _defaultDenominator = 5;
     uint public _defaultSubmitterRate = 3;
     uint public _defaultWorkerRate = 2;
-    uint public _defaultSystemRandomFee = 5000000000000000000; // 1 Tokens
-    uint public _defaultUserRandomFee = 5000000000000000000; // 1 Tokens
-    uint public _defaultUserQueryFee = 5000000000000000000; // 1 Tokens
-    uint public _defaultGuardianFee = 1000000000000000000; // 1 Tokens
+    uint public _defaultSystemRandomFee = 50000000000000000000; // 10 Tokens
+    uint public _defaultUserRandomFee = 50000000000000000000; // 10 Tokens
+    uint public _defaultUserQueryFee = 50000000000000000000; // 10 Tokens
+    uint public _defaultGuardianFee = 10000000000000000000; // 10 Tokens
     address public _defaultTokenAddr;
     address public _guardianFundsAddr;
     address public _guardianFundsTokenAddr;

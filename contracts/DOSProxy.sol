@@ -77,9 +77,9 @@ contract DOSProxy is Ownable {
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
-    uint public refreshSystemRandomHardLimit = 240; // in blocks, ~1 hour
-    uint public groupMaturityPeriod = refreshSystemRandomHardLimit*24; // in blocks, ~1days
-    uint public lifeDiversity = refreshSystemRandomHardLimit*24; // in blocks, ~1days
+    uint public refreshSystemRandomHardLimit = 1440; // in blocks, ~6 hour
+    uint public groupMaturityPeriod = refreshSystemRandomHardLimit*28; // in blocks, ~7days
+    uint public lifeDiversity = refreshSystemRandomHardLimit*12; // in blocks, ~3days
     // avoid looping in a big loop that causing over gas.
     uint public checkExpireLimit = 50;
 
