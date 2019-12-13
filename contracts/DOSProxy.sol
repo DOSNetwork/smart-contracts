@@ -281,6 +281,12 @@ contract DOSProxy is Ownable {
         groupSize = newSize;
     }
 
+    function setBootstrapStartThreshold(uint newThreshold) public onlyOwner {
+        require(newThreshold != bootstrapStartThreshold,"Not a valid parameter");
+        emit UpdatebootstrapStartThreshold(bootstrapStartThreshold, newThreshold);
+        bootstrapStartThreshold = newThreshold;
+    }
+
     function setGroupMaturityPeriod(uint newPeriod) public onlyOwner {
         require(newPeriod != groupMaturityPeriod && newPeriod != 0,"Not a valid parameter");
         emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
@@ -303,8 +309,6 @@ contract DOSProxy is Ownable {
         require(newLimit != refreshSystemRandomHardLimit && newLimit != 0,"Not a valid parameter");
         emit UpdateSystemRandomHardLimit(refreshSystemRandomHardLimit, newLimit);
         refreshSystemRandomHardLimit = newLimit;
-        groupMaturityPeriod = refreshSystemRandomHardLimit*24; // in blocks, ~1days
-        lifeDiversity = refreshSystemRandomHardLimit*24; // in blocks, ~1days
     }
 
     function getCodeSize(address addr) private view returns (uint size) {
