@@ -9,7 +9,9 @@
 - `$ truffle compile`
 
 ### Deploy:
+- `$ ganache-cli`
 - `$ truffle migrate --reset`
 
 ### Test:
+- `$ ganache-cli -a 20`; // Config more than 10 test accounts 
 - `$ truffle test`

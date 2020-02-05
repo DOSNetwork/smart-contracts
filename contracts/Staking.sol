@@ -11,7 +11,7 @@ contract ERC20I{
     function balanceOf(address who) public view returns (uint);
     function decimals() public view returns (uint);
     function transfer(address to, uint value) public returns (bool);
-    function transferFrom( address from, address to, uint value) public returns (bool);
+    function transferFrom(address from, address to, uint value) public returns (bool);
     function approve(address spender, uint value) public returns (bool);
 }
 
@@ -22,28 +22,23 @@ contract DOSAddressBridgeInterface {
 contract Staking is Ownable {
     uint public constant ONEYEAR = 365 days;
     uint public initBlkN;
-    // Testnet token contract addresses
-    address public  DOSTOKEN;
-    address public  DBTOKEN ;
-    address public  stakingRewardsVault;
+    address public DOSTOKEN;
+    address public DBTOKEN ;
+    address public stakingRewardsVault;
+    address public bridgeAddr;  // DOS address bridge
     uint public constant DOSDECIMAL = 18;
     uint public constant DBDECIMAL = 0;
     uint private constant LISTHEAD = 0x1;
 
     uint public minStakePerNode = 100000 * (10 ** DOSDECIMAL);
-    //uint public maxStakePerNode = 500000 * (10 ** DOSDECIMAL);
     uint public dropburnMaxQuota = 3;
     uint public totalStakedTokens;
     uint public inverseStakeRatio;
-    uint public circulatingSupply = 131950000 * (10 ** DOSDECIMAL);
+    uint public circulatingSupply = 335000000 * (10 ** DOSDECIMAL);
     uint public unbondDuration = 7 days;
 
-    uint public lastRateUpdatedTime;  // in seconds
+    uint public lastRateUpdatedTime;    // in seconds
     uint public accumulatedRewardRate;  // A float point multiplied by 1e10
-
-    // DOSAddressBridge
-    DOSAddressBridgeInterface public addressBridge;
-    address public bridgeAddr;
 
     struct Node {
         address ownerAddr;
@@ -59,7 +54,6 @@ contract Staking is Ownable {
         uint lastStopTime;
         bool running;
         string description;
-        //
         address[] nodeDelegators;
         // release time => UnbondRequest metadata
         mapping (uint => UnbondRequest) unbondRequests;
@@ -98,7 +92,6 @@ contract Staking is Ownable {
     event UpdateUnbondDuration(uint oldDuration, uint newDuration);
     event UpdateCirculatingSupply(uint oldCirculatingSupply, uint newCirculatingSupply);
     event UpdateMinStakePerNode(uint oldMinStakePerNode, uint newMinStakePerNode);
-    //event UpdateMaxStakePerNode(uint oldMaxStakePerNode, uint newMaxStakePerNode);
     event LogNewNode(address indexed owner, address nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
     event DelegateTo(address indexed sender,uint total, address nodeAddr);
     event RewardWithdraw(address indexed sender,uint total);
@@ -110,7 +103,6 @@ contract Staking is Ownable {
         DBTOKEN = _dbtoken;
         stakingRewardsVault = _vault;
         bridgeAddr = _bridgeAddr;
-        addressBridge = DOSAddressBridgeInterface(bridgeAddr);
     }
 
     /// @dev used when drop burn max quota duration is changed
@@ -127,9 +119,10 @@ contract Staking is Ownable {
     }
 
     /// @dev used when locked token is unlocked
-    // TODO: update global accumulatedRewardRate accordingly
     function setCirculatingSupply(uint _newSupply) public onlyOwner {
         require(circulatingSupply >= totalStakedTokens,"CirculatingSupply is less than totalStakedTokens");
+
+        updateGlobalRewardRate();
         emit UpdateCirculatingSupply(circulatingSupply, _newSupply);
         circulatingSupply = _newSupply;
     }
@@ -140,11 +133,6 @@ contract Staking is Ownable {
         minStakePerNode = _minStake;
     }
 
-    /// @dev used when maxStakePerNode is updated
-    //function setMaxStakePerNode(uint _maxStake) public onlyOwner {
-    //    emit UpdateMaxStakePerNode(maxStakePerNode, _maxStake);
-    //    maxStakePerNode = _maxStake;
-    //}
     function getNodeAddrs() public view returns(address[]memory){
         return nodeAddrs;
     }
@@ -156,12 +144,11 @@ contract Staking is Ownable {
         require(0 <= _rewardCut && _rewardCut < 100, "Not valid reward cut percentage");
         require(_tokenAmount>=minStakePerNode * (10 - min(_dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10,
                 "Not enough dos token to start a node");
-        //require(_tokenAmount<=maxStakePerNode, "Reach maximum number of dos tokens per node");
         _;
     }
 
     modifier onlyFromProxy() {
-        require(msg.sender==addressBridge.getProxyAddress(), "Not from proxy contract");
+        require(msg.sender == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress(), "Not from proxy contract");
         _;
     }
 
@@ -257,8 +244,6 @@ contract Staking is Ownable {
             ERC20I(DBTOKEN).transferFrom(msg.sender, address(this), _newDropburnAmount);
         }
         if (_newTokenAmount != 0) {
-            //require(node.selfStakedAmount + node.totalOtherDelegatedAmount + _newTokenAmount <= maxStakePerNode,
-            //        "Reach maximum number of dos tokens per node");
             node.selfStakedAmount += _newTokenAmount;
             if (node.running==true) {
                 // This would change interest rate
@@ -274,8 +259,6 @@ contract Staking is Ownable {
         Node storage node = nodes[_nodeAddr];
         require(node.ownerAddr != address(0), "Node doesn't exist");
         require(msg.sender != node.ownerAddr, "Node owner cannot self-delegate");
-        //require(node.selfStakedAmount + node.totalOtherDelegatedAmount + _tokenAmount <= maxStakePerNode,
-        //        "Reach maximum number of dos tokens per node");
 
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
         require(delegator.delegatedNode == address(0) || delegator.delegatedNode == _nodeAddr, "Invalid delegated node address");
