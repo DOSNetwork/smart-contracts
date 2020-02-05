@@ -1,8 +1,8 @@
-var HDWalletProvider = require("truffle-hdwallet-provider");
+var HDWalletProvider = require("@truffle/hdwallet-provider");
 var infura_token = "8e609c76fce442f8a1735fbea9999747";
 
-// Replace with valid mnemonic
-var mnemonic = "aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll";
+// Test mnemonic with no real value, replace with valid mnemonic
+var mnemonic = "metal maple virus during involve heavy find type hour thrive maximum radar";
 
 module.exports = {
   networks: {
