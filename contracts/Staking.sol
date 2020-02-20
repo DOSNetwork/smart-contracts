@@ -1,13 +1,14 @@
 pragma solidity ^0.5.0;
 
 import "./Ownable.sol";
+import "./lib/math.sol";
 
 /**
  * @title Staking and delegation contract
  * @author Dos Network
  */
 
-contract ERC20I{
+contract ERC20I {
     function balanceOf(address who) public view returns (uint);
     function decimals() public view returns (uint);
     function transfer(address to, uint value) public returns (bool);
@@ -20,23 +21,23 @@ contract DOSAddressBridgeInterface {
 }
 
 contract Staking is Ownable {
-    uint public constant ONEYEAR = 365 days;
+    using DSMath for *;
+
     uint public initBlkN;
     address public DOSTOKEN;
     address public DBTOKEN ;
     address public stakingRewardsVault;
     address public bridgeAddr;  // DOS address bridge
+    uint public constant ONEYEAR = 365 days;
     uint public constant DOSDECIMAL = 18;
     uint public constant DBDECIMAL = 0;
     uint private constant LISTHEAD = 0x1;
-
     uint public minStakePerNode = 100000 * (10 ** DOSDECIMAL);
     uint public dropburnMaxQuota = 3;
     uint public totalStakedTokens;
     uint public inverseStakeRatio;
     uint public circulatingSupply = 335000000 * (10 ** DOSDECIMAL);
     uint public unbondDuration = 7 days;
-
     uint public lastRateUpdatedTime;    // in seconds
     uint public accumulatedRewardRate;  // A float point multiplied by 1e10
 
@@ -97,7 +98,7 @@ contract Staking is Ownable {
     event RewardWithdraw(address indexed sender,uint total);
     event Unbond(address indexed sender,uint tokenAmount, uint dropburnAmount, address nodeAddr);
 
-    constructor(address _dostoken,address _dbtoken,address _vault,address _bridgeAddr) public {
+    constructor(address _dostoken, address _dbtoken, address _vault, address _bridgeAddr) public {
         initBlkN = block.number;
         DOSTOKEN = _dostoken;
         DBTOKEN = _dbtoken;
@@ -128,7 +129,7 @@ contract Staking is Ownable {
     }
 
     /// @dev used when minStakePerNode is updated
-    function setMinStakePerNode(uint _minStake)  public onlyOwner {
+    function setMinStakePerNode(uint _minStake) public onlyOwner {
         emit UpdateMinStakePerNode(minStakePerNode, _minStake);
         minStakePerNode = _minStake;
     }
@@ -136,13 +137,10 @@ contract Staking is Ownable {
     function getNodeAddrs() public view returns(address[]memory){
         return nodeAddrs;
     }
-    function min(uint a, uint b) internal pure returns (uint256) {
-        return a < b ? a : b;
-    }
 
     modifier checkStakingValidity(uint _tokenAmount, uint _dropburnAmount, uint _rewardCut) {
         require(0 <= _rewardCut && _rewardCut < 100, "Not valid reward cut percentage");
-        require(_tokenAmount>=minStakePerNode * (10 - min(_dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10,
+        require(_tokenAmount >= minStakePerNode.mul(10.sub(DSMath.min(_dropburnAmount, dropburnMaxQuota))).div(10),
                 "Not enough dos token to start a node");
         _;
     }
@@ -156,7 +154,7 @@ contract Staking is Ownable {
         Node storage node = nodes[nodeAddr];
         uint _tokenAmount = node.selfStakedAmount;
         uint _dropburnAmount = node.stakedDB;
-        if (_tokenAmount>=minStakePerNode * (10 - min(_dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10) {
+        if (_tokenAmount >= minStakePerNode.mul(10.sub(DSMath.min(_dropburnAmount, dropburnMaxQuota))).div(10)) {
             return true;
         }
         return false;
@@ -175,8 +173,7 @@ contract Staking is Ownable {
         }
 
         address[] memory nodeDelegators;
-        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, 0, false,
-        _desc,nodeDelegators);
+        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, 0, false, _desc, nodeDelegators);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
         emit LogNewNode(msg.sender, _nodeAddr, _tokenAmount, _dropburnAmount, _rewardCut);
@@ -195,7 +192,7 @@ contract Staking is Ownable {
                 delegator.accumulatedRewardRate = accumulatedRewardRate;
             }
             // This would change interest rate
-            totalStakedTokens += node.selfStakedAmount + node.totalOtherDelegatedAmount;
+            totalStakedTokens = totalStakedTokens.add(node.selfStakedAmount.add(node.totalOtherDelegatedAmount));
         }
     }
 
@@ -217,7 +214,7 @@ contract Staking is Ownable {
             }
             node.running = false;
             // This would change interest rate
-	        totalStakedTokens -= node.selfStakedAmount - node.totalOtherDelegatedAmount;
+	        totalStakedTokens = totalStakedTokens.sub(node.selfStakedAmount.sub(node.totalOtherDelegatedAmount));
             node.lastStopTime = now;
         }
     }
@@ -227,7 +224,7 @@ contract Staking is Ownable {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
 
         Node storage node = nodes[_nodeAddr];
-        if (node.running==true) {
+        if (node.running) {
             // Update global accumulated interest rate.
             updateGlobalRewardRate();
             node.accumulatedReward = getNodeRewardTokens(_nodeAddr);
@@ -240,14 +237,14 @@ contract Staking is Ownable {
             node.rewardCut = _newCut;
         }
         if (_newDropburnAmount != 0) {
-            node.stakedDB += _newDropburnAmount;
+            node.stakedDB = node.stakedDB.add(_newDropburnAmount);
             ERC20I(DBTOKEN).transferFrom(msg.sender, address(this), _newDropburnAmount);
         }
         if (_newTokenAmount != 0) {
-            node.selfStakedAmount += _newTokenAmount;
-            if (node.running==true) {
+            node.selfStakedAmount = node.selfStakedAmount.add(_newTokenAmount);
+            if (node.running) {
                 // This would change interest rate
-                totalStakedTokens += _newTokenAmount;
+                totalStakedTokens = totalStakedTokens.add(_newTokenAmount);
             }
             ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _newTokenAmount);
         }
@@ -262,26 +259,26 @@ contract Staking is Ownable {
 
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
         require(delegator.delegatedNode == address(0) || delegator.delegatedNode == _nodeAddr, "Invalid delegated node address");
-        if (node.running==true) {
+        if (node.running) {
             // Update global accumulated interest rate.
             updateGlobalRewardRate();
             delegator.accumulatedReward = getDelegatorRewardTokens(msg.sender, _nodeAddr);
         }
         delegator.accumulatedRewardRate = accumulatedRewardRate;
-        delegator.delegatedAmount += _tokenAmount;
+        delegator.delegatedAmount = delegator.delegatedAmount.add(_tokenAmount);
         if (delegator.delegatedNode == address(0)) {
             // New delegation
             delegator.delegatedNode = _nodeAddr;
             delegator.releaseTime[LISTHEAD] = LISTHEAD;
         }
-        if (node.running==true) {
+        if (node.running) {
             node.accumulatedReward = getNodeRewardTokens(_nodeAddr);
-            totalStakedTokens += _tokenAmount;
+            totalStakedTokens = totalStakedTokens.add(_tokenAmount);
         }
         node.nodeDelegators.push(msg.sender);
-        node.totalOtherDelegatedAmount += _tokenAmount;
+        node.totalOtherDelegatedAmount = node.totalOtherDelegatedAmount.add(_tokenAmount);
         node.accumulatedRewardRate = accumulatedRewardRate;
-        emit DelegateTo(msg.sender,_tokenAmount, _nodeAddr);
+        emit DelegateTo(msg.sender, _tokenAmount, _nodeAddr);
 
         ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _tokenAmount);
     }
@@ -289,7 +286,7 @@ contract Staking is Ownable {
     function nodeUnregister(address _nodeAddr) public {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
         Node storage node = nodes[_nodeAddr];
-        nodeUnbondInternal(node.selfStakedAmount,node.stakedDB,_nodeAddr);
+        nodeUnbondInternal(node.selfStakedAmount, node.stakedDB, _nodeAddr);
         nodeStopInternal(_nodeAddr);
     }
 
@@ -316,31 +313,31 @@ contract Staking is Ownable {
 
         require(_tokenAmount <= node.selfStakedAmount, "Invalid request to unbond more than staked token");
         require(_dropburnAmount <= node.stakedDB, "Invalid request to unbond more than staked DropBurn token");
-        require(node.selfStakedAmount - _tokenAmount >=
-                minStakePerNode * (10 - min(node.stakedDB - _dropburnAmount / (10 ** DBDECIMAL), dropburnMaxQuota)) / 10,
+        require(node.selfStakedAmount.sub(_tokenAmount) >=
+                minStakePerNode.mul(10.sub(DSMath.min(node.stakedDB.sub(_dropburnAmount), dropburnMaxQuota))).div(10),
                 "Invalid unbond request to maintain node staking requirement");
-        nodeUnbondInternal(_tokenAmount,_dropburnAmount,_nodeAddr);
+        nodeUnbondInternal(_tokenAmount, _dropburnAmount, _nodeAddr);
     }
     // Used by node runners to unbond their stakes.
     // Unbonded tokens are locked for 7 days, during the unbonding period they're not eligible for staking rewards.
     function nodeUnbondInternal(uint _tokenAmount, uint _dropburnAmount, address _nodeAddr) internal {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
         Node storage node = nodes[_nodeAddr];
-        if (node.running==true) {
+        if (node.running) {
             updateGlobalRewardRate();
             node.accumulatedReward = getNodeRewardTokens(_nodeAddr);
             // This would change interest rate
-            totalStakedTokens -= _tokenAmount;
+            totalStakedTokens = totalStakedTokens.sub(_tokenAmount);
         }
         node.accumulatedRewardRate = accumulatedRewardRate;
-        node.selfStakedAmount -= _tokenAmount;
-        node.pendingWithdrawToken += _tokenAmount;
-        node.stakedDB -= _dropburnAmount;
-        node.pendingWithdrawDB += _dropburnAmount;
+        node.selfStakedAmount = node.selfStakedAmount.sub(_tokenAmount);
+        node.pendingWithdrawToken = node.pendingWithdrawToken.add(_tokenAmount);
+        node.stakedDB = node.stakedDB.sub(_dropburnAmount);
+        node.pendingWithdrawDB = node.pendingWithdrawDB.add(_dropburnAmount);
 
         if (_tokenAmount > 0 || _dropburnAmount > 0) {
             // create an UnbondRequest
-            uint releaseTime = now + unbondDuration;
+            uint releaseTime = now.add(unbondDuration);
             node.unbondRequests[releaseTime] = UnbondRequest(_tokenAmount, _dropburnAmount);
             node.releaseTime[releaseTime] = node.releaseTime[LISTHEAD];
             node.releaseTime[LISTHEAD] = releaseTime;
@@ -355,22 +352,22 @@ contract Staking is Ownable {
         require(nodes[_nodeAddr].ownerAddr != address(0), "Node doesn't exist");
         require(delegator.delegatedNode == _nodeAddr, "Cannot unbond from non-delegated node");
         require(_tokenAmount <= delegator.delegatedAmount, "Cannot unbond more than delegated token");
-        if (nodes[_nodeAddr].running==true) {
+        if (nodes[_nodeAddr].running) {
             updateGlobalRewardRate();
             delegator.accumulatedReward = getDelegatorRewardTokens(msg.sender, _nodeAddr);
             // This would change interest rate
-            totalStakedTokens -= _tokenAmount;
+            totalStakedTokens = totalStakedTokens.sub(_tokenAmount);
             nodes[_nodeAddr].accumulatedReward = getNodeRewardTokens(_nodeAddr);
         }
         delegator.accumulatedRewardRate = accumulatedRewardRate;
-        delegator.delegatedAmount -= _tokenAmount;
-        delegator.pendingWithdraw += _tokenAmount;
+        delegator.delegatedAmount = delegator.delegatedAmount.sub(_tokenAmount);
+        delegator.pendingWithdraw = delegator.pendingWithdraw.add(_tokenAmount);
         nodes[_nodeAddr].accumulatedRewardRate = accumulatedRewardRate;
-        nodes[_nodeAddr].totalOtherDelegatedAmount -= _tokenAmount;
+        nodes[_nodeAddr].totalOtherDelegatedAmount = nodes[_nodeAddr].totalOtherDelegatedAmount.sub(_tokenAmount);
 
         if (_tokenAmount > 0) {
             // create a UnbondRequest
-            uint releaseTime = now + unbondDuration;
+            uint releaseTime = now.add(unbondDuration);
             delegator.unbondRequests[releaseTime] = UnbondRequest(_tokenAmount, 0);
             delegator.releaseTime[releaseTime] = delegator.releaseTime[LISTHEAD];
             delegator.releaseTime[LISTHEAD] = releaseTime;
@@ -394,8 +391,8 @@ contract Staking is Ownable {
         }
         // All next items are withdrawable.
         while (curr != LISTHEAD) {
-            accumulatedDos += requestList[curr].dosAmount;
-            accumulatedDropburn += requestList[curr].dbAmount;
+            accumulatedDos = accumulatedDos.add(requestList[curr].dosAmount);
+            accumulatedDropburn = accumulatedDropburn.add(requestList[curr].dbAmount);
             prev = curr;
             curr = releaseTimeList[prev];
             delete releaseTimeList[prev];
@@ -410,8 +407,8 @@ contract Staking is Ownable {
         require(node.ownerAddr == msg.sender, "msg.sender is not authorized to withdraw from node");
 
         (uint tokenAmount, uint dropburnAmount) = withdrawAll(node.releaseTime, node.unbondRequests);
-        node.pendingWithdrawToken -= tokenAmount;
-        node.pendingWithdrawDB -= dropburnAmount;
+        node.pendingWithdrawToken = node.pendingWithdrawToken.sub(tokenAmount);
+        node.pendingWithdrawDB = node.pendingWithdrawDB.sub(dropburnAmount);
 
         nodeTryDelete(_nodeAddr);
         if (tokenAmount > 0) {
@@ -429,7 +426,7 @@ contract Staking is Ownable {
 
         (uint tokenAmount, ) = withdrawAll(delegator.releaseTime, delegator.unbondRequests);
         if (tokenAmount > 0) {
-            delegator.pendingWithdraw -= tokenAmount;
+            delegator.pendingWithdraw = delegator.pendingWithdraw.sub(tokenAmount);
             if (delegator.delegatedAmount == 0 && delegator.pendingWithdraw == 0 && delegator.accumulatedReward == 0) {
                 delete delegators[msg.sender][_nodeAddr];
                 uint idx = 0;
@@ -457,7 +454,7 @@ contract Staking is Ownable {
         node.accumulatedReward = 0;
         node.accumulatedRewardRate = accumulatedRewardRate;
         // This would change interest rate
-        circulatingSupply += claimedReward;
+        circulatingSupply = circulatingSupply.add(claimedReward);
         ERC20I(DOSTOKEN).transferFrom(stakingRewardsVault, msg.sender, claimedReward);
     }
 
@@ -485,16 +482,16 @@ contract Staking is Ownable {
             delegator.accumulatedRewardRate = accumulatedRewardRate;
         }
         // This would change interest rate
-        circulatingSupply += claimedReward;
+        circulatingSupply = circulatingSupply.add(claimedReward);
         ERC20I(DOSTOKEN).transferFrom(stakingRewardsVault, msg.sender, claimedReward);
     }
 
     function getNodeUptime(address nodeAddr) public view returns(uint) {
         Node storage node = nodes[nodeAddr];
-        if (node.running){
-            return now - node.lastStartTime;
+        if (node.running) {
+            return now.sub(node.lastStartTime);
         }else{
-            return node.lastStopTime - node.lastStartTime;
+            return node.lastStopTime.sub(node.lastStartTime);
         }
     }
 
@@ -503,31 +500,34 @@ contract Staking is Ownable {
         if (totalStakedTokens == 0) {
             return 8000;
         }
-        uint localinverseStakeRatio = circulatingSupply * 1e4 / totalStakedTokens;
+        uint localinverseStakeRatio = circulatingSupply.mul(1e4).div(totalStakedTokens);
         if (localinverseStakeRatio > 20 * 1e4) {
             // staking rate <= 5%, APR 80%
             return 8000;
         } else {
-            return localinverseStakeRatio / 25;
+            return localinverseStakeRatio.div(25);
         }
     }
 
     function rewardRateDelta() public view returns (uint) {
-        return (now - lastRateUpdatedTime) * getCurrentAPR() * 1e6 / ONEYEAR;
+        return now.sub(lastRateUpdatedTime).mul(getCurrentAPR()).mul(1e6).div(ONEYEAR);
     }
 
     function updateGlobalRewardRate() public {
-        accumulatedRewardRate += rewardRateDelta();
+        accumulatedRewardRate = accumulatedRewardRate.add(rewardRateDelta());
         lastRateUpdatedTime = now;
     }
 
     function getNodeRewardTokens(address nodeAddr) public view returns(uint) {
         Node storage node = nodes[nodeAddr];
-        if (node.running){
-            return node.accumulatedReward +
-                (node.selfStakedAmount + node.totalOtherDelegatedAmount * node.rewardCut / 100)  *
-                (accumulatedRewardRate - node.accumulatedRewardRate) / 1e10;
-        }else {
+        if (node.running) {
+            return
+                node.accumulatedReward.add(
+                    node.selfStakedAmount.add(node.totalOtherDelegatedAmount.mul(node.rewardCut).div(100)).mul(
+                        accumulatedRewardRate.sub(node.accumulatedRewardRate)
+                    ).div(1e10)
+                );
+        } else {
             return node.accumulatedReward;
         }
     }
@@ -535,25 +535,27 @@ contract Staking is Ownable {
     function getDelegatorRewardTokens(address _delegator, address _nodeAddr) public view returns(uint) {
         Node storage node = nodes[_nodeAddr];
         Delegation storage delegator = delegators[_delegator][_nodeAddr];
-        if (node.running){
-            return delegator.accumulatedReward +
-                (delegator.delegatedAmount * (100 - node.rewardCut) / 100) *
-                (accumulatedRewardRate - delegator.accumulatedRewardRate) / 1e10;
-        }else{
+        if (node.running) {
+            return
+                delegator.accumulatedReward.add(
+                    delegator.delegatedAmount.mul(100.sub(node.rewardCut)).div(100).mul(
+                        accumulatedRewardRate.sub(delegator.accumulatedRewardRate)
+                    ).div(1e10)
+                );
+        } else {
             return delegator.accumulatedReward;
         }
     }
 
-
-    function nodeWithdrawAble(address _owner,address _nodeAddr) public view returns(uint,uint) {
+    function nodeWithdrawAble(address _owner, address _nodeAddr) public view returns(uint, uint) {
         Node storage node = nodes[_nodeAddr];
         if (node.ownerAddr != _owner){
-            return (0,0);
+            return (0, 0);
         }
         return withdrawAbleAmount(node.releaseTime, node.unbondRequests);
     }
 
-    function delegatorWithdrawAble(address _owner,address _nodeAddr) public view returns(uint) {
+    function delegatorWithdrawAble(address _owner, address _nodeAddr) public view returns(uint) {
         Delegation storage delegator = delegators[_owner][_nodeAddr];
         uint tokenAmount = 0;
         (tokenAmount, ) = withdrawAbleAmount(delegator.releaseTime, delegator.unbondRequests);
@@ -575,8 +577,8 @@ contract Staking is Ownable {
         }
         // All next items are withdrawable.
         while (curr != LISTHEAD) {
-            accumulatedDos += requestList[curr].dosAmount;
-            accumulatedDropburn += requestList[curr].dbAmount;
+            accumulatedDos = accumulatedDos.add(requestList[curr].dosAmount);
+            accumulatedDropburn = accumulatedDropburn.add(requestList[curr].dbAmount);
             prev = curr;
             curr = releaseTimeList[prev];
 
