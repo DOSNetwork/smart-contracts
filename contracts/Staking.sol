@@ -52,7 +52,6 @@ contract Staking is Ownable {
         uint pendingWithdrawToken;
         uint pendingWithdrawDB;
         uint lastStartTime;
-        uint lastStopTime;
         bool running;
         string description;
         address[] nodeDelegators;
@@ -173,7 +172,7 @@ contract Staking is Ownable {
         }
 
         address[] memory nodeDelegators;
-        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, 0, false, _desc, nodeDelegators);
+        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, false, _desc, nodeDelegators);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
         emit LogNewNode(msg.sender, _nodeAddr, _tokenAmount, _dropburnAmount, _rewardCut);
@@ -192,7 +191,7 @@ contract Staking is Ownable {
                 delegator.accumulatedRewardRate = accumulatedRewardRate;
             }
             // This would change interest rate
-            totalStakedTokens = totalStakedTokens.add(node.selfStakedAmount.add(node.totalOtherDelegatedAmount));
+            totalStakedTokens = totalStakedTokens.add(node.selfStakedAmount).add(node.totalOtherDelegatedAmount);
         }
     }
 
@@ -214,8 +213,7 @@ contract Staking is Ownable {
             }
             node.running = false;
             // This would change interest rate
-	        totalStakedTokens = totalStakedTokens.sub(node.selfStakedAmount.sub(node.totalOtherDelegatedAmount));
-            node.lastStopTime = now;
+            totalStakedTokens = totalStakedTokens.sub(node.selfStakedAmount).sub(node.totalOtherDelegatedAmount);
         }
     }
 
@@ -286,8 +284,8 @@ contract Staking is Ownable {
     function nodeUnregister(address _nodeAddr) public {
         require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
         Node storage node = nodes[_nodeAddr];
-        nodeUnbondInternal(node.selfStakedAmount, node.stakedDB, _nodeAddr);
         nodeStopInternal(_nodeAddr);
+        nodeUnbondInternal(node.selfStakedAmount, node.stakedDB, _nodeAddr);
     }
 
     function nodeTryDelete(address _nodeAddr) public {
@@ -491,7 +489,7 @@ contract Staking is Ownable {
         if (node.running) {
             return now.sub(node.lastStartTime);
         }else{
-            return node.lastStopTime.sub(node.lastStartTime);
+            return 0;
         }
     }
 

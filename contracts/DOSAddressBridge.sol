@@ -9,10 +9,9 @@ contract DOSAddressBridge is Ownable {
     address private _commitrevealAddress;
     // Deployed DOSPayment contract address.
     address private _paymentAddress;
-    // Deployed DOSRegistry contract address.
-    address private _registryAddress;
+    // Deployed StakingGateway contract address.
     address private _stakingAddress;
-    // BootStrap URL
+    // BootStrap node lists.
     string private _bootStrapUrl;
 
     event ProxyAddressUpdated(address previousProxy, address newProxy);
@@ -47,15 +46,6 @@ contract DOSAddressBridge is Ownable {
     function setPaymentAddress(address newAddr) public onlyOwner {
         emit PaymentAddressUpdated(_paymentAddress, newAddr);
         _paymentAddress = newAddr;
-    }
-
-    function getRegistryAddress() public view returns (address) {
-        return _registryAddress;
-    }
-
-    function setRegistryAddress(address newAddr) public onlyOwner {
-        emit RegistryAddressUpdated(_registryAddress, newAddr);
-        _registryAddress = newAddr;
     }
 
     function getStakingAddress() public view returns (address) {

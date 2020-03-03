@@ -389,8 +389,8 @@ contract("Staking", async accounts => {
     let uptime = await staking.getNodeUptime(accounts[1]);
     assert.equal(
       Math.round(uptime.toNumber() / (60 * 60 * 24)),
-      1,
-      "After 2 days, uptime should be 1 day "
+      0,
+      "After 1 day up then 1 day down, uptime should be 0 day"
     );
   });
   it("test nodeClaimReward", async () => {
