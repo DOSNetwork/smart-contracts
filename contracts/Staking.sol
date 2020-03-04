@@ -35,7 +35,6 @@ contract Staking is Ownable {
     uint public minStakePerNode = 100000 * (10 ** DOSDECIMAL);
     uint public dropburnMaxQuota = 3;
     uint public totalStakedTokens;
-    uint public inverseStakeRatio;
     uint public circulatingSupply = 335000000 * (10 ** DOSDECIMAL);
     uint public unbondDuration = 7 days;
     uint public lastRateUpdatedTime;    // in seconds
@@ -93,9 +92,10 @@ contract Staking is Ownable {
     event UpdateCirculatingSupply(uint oldCirculatingSupply, uint newCirculatingSupply);
     event UpdateMinStakePerNode(uint oldMinStakePerNode, uint newMinStakePerNode);
     event LogNewNode(address indexed owner, address nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
-    event DelegateTo(address indexed sender,uint total, address nodeAddr);
-    event RewardWithdraw(address indexed sender,uint total);
-    event Unbond(address indexed sender,uint tokenAmount, uint dropburnAmount, address nodeAddr);
+    event Delegate(address indexed from, address indexed to, uint amount);
+    event Withdraw(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dbAmount);
+    event Unbond(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dropburnAmount);
+    event ClaimReward(address indexed to, bool nodeRunner, uint amount);
 
     constructor(address _dostoken, address _dbtoken, address _vault, address _bridgeAddr) public {
         initBlkN = block.number;
@@ -276,9 +276,9 @@ contract Staking is Ownable {
         node.nodeDelegators.push(msg.sender);
         node.totalOtherDelegatedAmount = node.totalOtherDelegatedAmount.add(_tokenAmount);
         node.accumulatedRewardRate = accumulatedRewardRate;
-        emit DelegateTo(msg.sender, _tokenAmount, _nodeAddr);
 
         ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _tokenAmount);
+        emit Delegate(msg.sender, _nodeAddr, _tokenAmount);
     }
 
     function nodeUnregister(address _nodeAddr) public {
@@ -288,19 +288,25 @@ contract Staking is Ownable {
         nodeUnbondInternal(node.selfStakedAmount, node.stakedDB, _nodeAddr);
     }
 
-    function nodeTryDelete(address _nodeAddr) public {
-        if (nodes[_nodeAddr].selfStakedAmount == 0 && nodes[_nodeAddr].stakedDB == 0 &&
-            nodes[_nodeAddr].totalOtherDelegatedAmount == 0 && nodes[_nodeAddr].accumulatedReward == 0 &&
-            nodes[_nodeAddr].nodeDelegators.length==0) {
-                delete nodeRunners[nodes[_nodeAddr].ownerAddr][_nodeAddr];
-                delete nodes[_nodeAddr];
-                for (uint idx = 0; idx < nodeAddrs.length; idx++) {
-                    if (nodeAddrs[idx] == _nodeAddr) {
-                        nodeAddrs[idx] = nodeAddrs[nodeAddrs.length - 1];
-                        nodeAddrs.length--;
-                        return;
-                    }
+    function nodeTryDelete(address _nodeAddr) internal {
+        if (!nodes[_nodeAddr].running &&
+            nodes[_nodeAddr].selfStakedAmount == 0 &&
+            nodes[_nodeAddr].stakedDB == 0 &&
+            nodes[_nodeAddr].totalOtherDelegatedAmount == 0 &&
+            nodes[_nodeAddr].accumulatedReward == 0 &&
+            nodes[_nodeAddr].nodeDelegators.length == 0 &&
+            nodes[_nodeAddr].pendingWithdrawToken == 0 &&
+            nodes[_nodeAddr].pendingWithdrawDB == 0
+        ) {
+            delete nodeRunners[nodes[_nodeAddr].ownerAddr][_nodeAddr];
+            delete nodes[_nodeAddr];
+            for (uint idx = 0; idx < nodeAddrs.length; idx++) {
+                if (nodeAddrs[idx] == _nodeAddr) {
+                    nodeAddrs[idx] = nodeAddrs[nodeAddrs.length - 1];
+                    nodeAddrs.length--;
+                    return;
                 }
+            }
         }
     }
     // Used by node runners to unbond their stakes.
@@ -341,7 +347,7 @@ contract Staking is Ownable {
             node.releaseTime[LISTHEAD] = releaseTime;
         }
 
-        emit Unbond(msg.sender,_tokenAmount, _dropburnAmount, _nodeAddr);
+        emit Unbond(msg.sender, _nodeAddr, true, _tokenAmount, _dropburnAmount);
     }
 
     // Used by token holders (delegators) to unbond their delegations.
@@ -370,6 +376,8 @@ contract Staking is Ownable {
             delegator.releaseTime[releaseTime] = delegator.releaseTime[LISTHEAD];
             delegator.releaseTime[LISTHEAD] = releaseTime;
         }
+
+        emit Unbond(msg.sender, _nodeAddr, false, _tokenAmount, 0);
     }
 
     function withdrawAll(mapping(uint => uint) storage releaseTimeList, mapping(uint => UnbondRequest) storage requestList)
@@ -409,13 +417,16 @@ contract Staking is Ownable {
         node.pendingWithdrawDB = node.pendingWithdrawDB.sub(dropburnAmount);
 
         nodeTryDelete(_nodeAddr);
+
         if (tokenAmount > 0) {
             ERC20I(DOSTOKEN).transfer(msg.sender, tokenAmount);
         }
         if (dropburnAmount > 0) {
             ERC20I(DBTOKEN).transfer(msg.sender, dropburnAmount);
         }
+        emit Withdraw(_nodeAddr, msg.sender, true, tokenAmount, dropburnAmount);
     }
+
     // Delegators call this function to withdraw available unbonded tokens from a specific node after unbond period.
     function delegatorWithdraw(address _nodeAddr) public {
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
@@ -437,11 +448,12 @@ contract Staking is Ownable {
                     nodes[_nodeAddr].nodeDelegators[idx] = nodes[_nodeAddr].nodeDelegators[nodes[_nodeAddr].nodeDelegators.length - 1];
                     nodes[_nodeAddr].nodeDelegators.length--;
                 }
+                nodeTryDelete(_nodeAddr);
             }
-            emit RewardWithdraw(msg.sender, tokenAmount);
+
             ERC20I(DOSTOKEN).transfer(msg.sender, tokenAmount);
         }
-        nodeTryDelete(_nodeAddr);
+        emit Withdraw(_nodeAddr, msg.sender, false, tokenAmount, 0);
     }
 
     function nodeClaimReward(address _nodeAddr) public {
@@ -454,16 +466,7 @@ contract Staking is Ownable {
         // This would change interest rate
         circulatingSupply = circulatingSupply.add(claimedReward);
         ERC20I(DOSTOKEN).transferFrom(stakingRewardsVault, msg.sender, claimedReward);
-    }
-
-    function delegatorChekcReward(address _nodeAddr) public returns(uint) {
-        Delegation storage delegator = delegators[msg.sender][_nodeAddr];
-        require(nodes[_nodeAddr].ownerAddr != address(0), "Node doesn't exist");
-        require(delegator.delegatedNode == _nodeAddr, "Cannot claim from non-delegated node");
-        updateGlobalRewardRate();
-        delegator.accumulatedReward = getDelegatorRewardTokens(msg.sender, _nodeAddr);
-        delegator.accumulatedRewardRate = accumulatedRewardRate;
-        return delegator.accumulatedReward;
+        emit ClaimReward(msg.sender, true, claimedReward);
     }
 
     function delegatorClaimReward(address _nodeAddr) public {
@@ -482,13 +485,14 @@ contract Staking is Ownable {
         // This would change interest rate
         circulatingSupply = circulatingSupply.add(claimedReward);
         ERC20I(DOSTOKEN).transferFrom(stakingRewardsVault, msg.sender, claimedReward);
+        emit ClaimReward(msg.sender, false, claimedReward);
     }
 
     function getNodeUptime(address nodeAddr) public view returns(uint) {
         Node storage node = nodes[nodeAddr];
         if (node.running) {
             return now.sub(node.lastStartTime);
-        }else{
+        } else {
             return 0;
         }
     }

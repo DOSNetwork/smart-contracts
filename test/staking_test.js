@@ -94,6 +94,8 @@ contract("Staking", async accounts => {
     total = await staking.totalStakedTokens.call();
     assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
   });
+
+
   it("test nodeClaimReward", async () => {
     let stakedTokenPerNode = 1000000;
     let circulatingSupply = 263900000;
@@ -158,8 +160,8 @@ contract("Staking", async accounts => {
       let tx = await staking.delegate(value, accounts[1], {
         from: accounts[idx]
       });
-      truffleAssert.eventEmitted(tx, "DelegateTo", ev => {
-        return ev.sender === accounts[idx];
+      truffleAssert.eventEmitted(tx, "Delegate", ev => {
+        return ev.from === accounts[idx] && ev.to === accounts[1];
       });
     }
     apr = await staking.getCurrentAPR();
@@ -182,6 +184,8 @@ contract("Staking", async accounts => {
       );
     }
   });
+
+
   it("test newNode - node has no enough balance", async () => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
@@ -206,6 +210,8 @@ contract("Staking", async accounts => {
       assert.include(String(err), "revert", "");
     }
   });
+
+
   it("test newNode - node should only be registered once", async () => {
     let stakedTokenPerNode = 100000;
     let proxyAddr = accounts[11];
@@ -247,6 +253,8 @@ contract("Staking", async accounts => {
       assert.include(String(err), "revert", "");
     }
   });
+
+
   it("test unregister-newNode - node should be able to register after unregister", async () => {
     let stakedTokenPerNode = 100000;
     let proxyAddr = accounts[11];
@@ -302,6 +310,8 @@ contract("Staking", async accounts => {
       from: nodeStakingAddr
     });
   });
+
+
   it("test updateNodeStaking", async () => {
     let stakedTokenPerNode = 100000;
     let proxyAddr = accounts[11];
@@ -352,6 +362,8 @@ contract("Staking", async accounts => {
       "totalStakedTokens should be 1000000000000000000000000 "
     );
   });
+
+
   it("test uptime", async () => {
     let stakedTokenPerNode = 100000;
     let proxyAddr = accounts[14];
@@ -393,6 +405,8 @@ contract("Staking", async accounts => {
       "After 1 day up then 1 day down, uptime should be 0 day"
     );
   });
+
+
   it("test nodeClaimReward", async () => {
     let stakedTokenPerNode = 1000000;
     let circulatingSupply = 263900000;
@@ -449,6 +463,8 @@ contract("Staking", async accounts => {
       );
     }
   });
+
+
   it("test nodeClaimReward - node only runs 73 days during a year", async () => {
     let stakedTokenPerNode = 1000000;
     let circulatingSupply = 263900000;
@@ -533,6 +549,8 @@ contract("Staking", async accounts => {
       );
     }
   });
+
+
   it("test withdrawAble", async () => {
     let stakedTokenPerNode = 100000;
     let circulatingSupply = 263900000;
@@ -656,6 +674,8 @@ contract("Staking", async accounts => {
       );
     }
   });
+
+
   it("test delegatorClaimReward", async () => {
     let stakedTokenPerNode = 100000;
     let circulatingSupply = 263900000;
@@ -703,8 +723,8 @@ contract("Staking", async accounts => {
       let tx = await staking.delegate(value, nodeAddr, {
         from: accounts[idx]
       });
-      truffleAssert.eventEmitted(tx, "DelegateTo", ev => {
-        return ev.sender === accounts[idx];
+      truffleAssert.eventEmitted(tx, "Delegate", ev => {
+        return ev.from === accounts[idx] && ev.to === nodeAddr;
       });
     }
 
@@ -735,14 +755,16 @@ contract("Staking", async accounts => {
       );
     }
     const options = {
-      filter: { sender: accounts[2] },
+      filter: { from: accounts[2] },
       fromBlock: 0,
       toBlock: "latest"
     };
 
-    const eventList = await staking.getPastEvents("DelegateTo", options);
+    const eventList = await staking.getPastEvents("Delegate", options);
     assert.equal(eventList.length, 1, "");
   });
+
+
   it("test delegatorClaimReward - node only runs 73 days during a year", async () => {
     let stakedTokenPerNode = 100000;
     let circulatingSupply = 263900000;
@@ -836,6 +858,8 @@ contract("Staking", async accounts => {
       );
     }
   });
+
+
   it("test nodeUnregister - node only runs 73 days during a year", async () => {
     let stakedTokenPerNode = 100000;
     let circulatingSupply = 263900000;
@@ -961,4 +985,5 @@ contract("Staking", async accounts => {
       "After unregister, length of nodeAddrs should be 0 "
     );
   });
+
 });
