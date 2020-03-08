@@ -91,7 +91,7 @@ contract Staking is Ownable {
     event UpdateUnbondDuration(uint oldDuration, uint newDuration);
     event UpdateCirculatingSupply(uint oldCirculatingSupply, uint newCirculatingSupply);
     event UpdateMinStakePerNode(uint oldMinStakePerNode, uint newMinStakePerNode);
-    event LogNewNode(address indexed owner, address nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
+    event NewNode(address indexed owner, address indexed nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
     event Delegate(address indexed from, address indexed to, uint amount);
     event Withdraw(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dbAmount);
     event Unbond(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dropburnAmount);
@@ -175,7 +175,7 @@ contract Staking is Ownable {
         nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, false, _desc, nodeDelegators);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
-        emit LogNewNode(msg.sender, _nodeAddr, _tokenAmount, _dropburnAmount, _rewardCut);
+        emit NewNode(msg.sender, _nodeAddr, _tokenAmount, _dropburnAmount, _rewardCut);
     }
 
     function nodeStart(address _nodeAddr) public onlyFromProxy {
