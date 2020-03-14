@@ -95,97 +95,6 @@ contract("Staking", async accounts => {
     assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
   });
 
-
-  it("test nodeClaimReward", async () => {
-    let stakedTokenPerNode = 1000000;
-    let circulatingSupply = 263900000;
-    let proxyAddr = accounts[14];
-    let stakingRewardsVault = accounts[0];
-    let tokenPool = accounts[0];
-    let nodes = 13;
-    let delegater = 9;
-
-    let ttk = await Ttk.new();
-    let bridge = await Bridge.new();
-    await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
-      ttk.address,
-      ttk.address,
-      stakingRewardsVault,
-      bridge.address
-    );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
-
-    let decimals = web3.utils.toBN(18);
-    let amount = web3.utils.toBN(stakedTokenPerNode);
-    let value = amount.mul(web3.utils.toBN(10).pow(decimals));
-
-    let SupplyAmount = web3.utils.toBN(circulatingSupply);
-    let SupplyValue = SupplyAmount.mul(web3.utils.toBN(10).pow(decimals));
-    await staking.setCirculatingSupply(SupplyValue, {
-      from: accounts[0]
-    });
-
-    for (var i = 1; i <= nodes; i++) {
-      await ttk.transfer(accounts[i], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[i] });
-      await staking.newNode(accounts[i], value, 0, 1, "test", {
-        from: accounts[i]
-      });
-    }
-    for (var i = 1; i <= nodes; i++) {
-      await staking.nodeStart(accounts[i], {
-        from: proxyAddr
-      });
-    }
-    let apr = await staking.getCurrentAPR();
-    let accumulatedRewardRate = await staking.accumulatedRewardRate.call();
-    //assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
-    console.log(
-      "APR",
-      apr.toNumber(),
-      "accumulatedRewardRate",
-      accumulatedRewardRate.toNumber()
-    );
-
-    assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
-
-    let advancement = 86400 * 365; // 365 Days
-    await time.increase(advancement);
-
-    for (var i = 1; i <= delegater; i++) {
-      let idx = i + 1;
-      await ttk.transfer(accounts[idx], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[idx] });
-      let tx = await staking.delegate(value, accounts[1], {
-        from: accounts[idx]
-      });
-      truffleAssert.eventEmitted(tx, "Delegate", ev => {
-        return ev.from === accounts[idx] && ev.to === accounts[1];
-      });
-    }
-    apr = await staking.getCurrentAPR();
-    accumulatedRewardRate = await staking.accumulatedRewardRate.call();
-    //assert.equal(apr.toNumber(), 8000, "APR should be 8000 ");
-    console.log(
-      "APR",
-      apr.toNumber(),
-      "accumulatedRewardRate",
-      accumulatedRewardRate.toNumber()
-    );
-    for (var i = 1; i <= nodes; i++) {
-      await staking.nodeClaimReward(accounts[i], { from: accounts[i] });
-      let balance = await ttk.balanceOf(accounts[i]);
-      let nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
-      assert.equal(
-        nodeBalance,
-        "800000",
-        "After 1 year, nodeBalance should be 1000000 * 0.8 "
-      );
-    }
-  });
-
-
   it("test newNode - node has no enough balance", async () => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
@@ -455,7 +364,7 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= nodes; i++) {
       await staking.nodeClaimReward(accounts[i], { from: accounts[i] });
       let balance = await ttk.balanceOf(accounts[i]);
-      let nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
+      let nodeBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         nodeBalance,
         "800000",
@@ -540,8 +449,7 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= nodes; i++) {
       await staking.nodeClaimReward(accounts[i], { from: accounts[i] });
       let balance = await ttk.balanceOf(accounts[i]);
-      let nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
-      console.log(nodeBalance.toString());
+      let nodeBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         nodeBalance,
         160000,
@@ -551,7 +459,7 @@ contract("Staking", async accounts => {
   });
 
 
-  it("test withdrawAble", async () => {
+  it("test withdrawable", async () => {
     let stakedTokenPerNode = 100000;
     let circulatingSupply = 263900000;
     let proxyAddr = accounts[11];
@@ -602,9 +510,6 @@ contract("Staking", async accounts => {
       });
     }
 
-    let advancement = 86400 * 10; // 10 Days
-    await time.increase(advancement);
-
     let unboundAmount = web3.utils.toBN(stakedTokenPerNode / 2);
     let unboundValue = unboundAmount.mul(web3.utils.toBN(10).pow(decimals));
     await staking.nodeUnbond(unboundValue, 0, nodeAddr, {
@@ -617,7 +522,7 @@ contract("Staking", async accounts => {
       });
     }
 
-    advancement = 86400 * 3; // 3 Days
+    let advancement = 86400 * 3; // 3 Days
     await time.increase(advancement);
 
     for (var i = 1; i <= delegater; i++) {
@@ -625,37 +530,37 @@ contract("Staking", async accounts => {
       await staking.delegatorUnbond(unboundValue, nodeAddr, {
         from: accounts[idx]
       });
-      let wei = await staking.delegatorWithdrawAble(accounts[idx], nodeAddr, {
+      let wei = await staking.delegatorWithdrawable(accounts[idx], nodeAddr, {
         from: accounts[idx]
       });
-      let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
+      let withdrawableAmount = Math.round(wei.valueOf() / 1e18);
       assert.equal(
-        withdrawAbleAmount,
+        withdrawableAmount,
         0,
-        "After 3 days, withdrawAble should be 0 "
+        "After 3 days, delegator withdrawable should be 0 "
       );
     }
-    advancement = 86400 * 4; // 3 Days
+    advancement = 86400 * 4; // 4 Days
     await time.increase(advancement);
-    let wei = await staking.nodeWithdrawAble(nodeStakingAddr, nodeAddr, {
+    let wei = await staking.nodeWithdrawable(nodeStakingAddr, nodeAddr, {
       from: nodeStakingAddr
     });
-    let withdrawAbleAmount = Math.round(wei[0].valueOf() / 1000000000000000000);
+    let withdrawableAmount = Math.round(wei[0].valueOf() / 1e18);
     assert.equal(
-      withdrawAbleAmount,
+      withdrawableAmount,
       stakedTokenPerNode / 2,
-      "After 7 days, withdrawAble should be 50000 "
+      "After 7 days, node withdrawable should be 50000 "
     );
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
-      let wei = await staking.delegatorWithdrawAble(accounts[idx], nodeAddr, {
+      let wei = await staking.delegatorWithdrawable(accounts[idx], nodeAddr, {
         from: accounts[idx]
       });
-      let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
+      let withdrawableAmount = Math.round(wei.valueOf() / 1e18);
       assert.equal(
-        withdrawAbleAmount,
+        withdrawableAmount,
         stakedTokenPerNode / 2,
-        "After 7 days, withdrawAble should be 50000 "
+        "After 7 days, delegator withdrawable should be 50000 "
       );
     }
     advancement = 86400 * 3; // 3 Days
@@ -663,14 +568,14 @@ contract("Staking", async accounts => {
 
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
-      let wei = await staking.delegatorWithdrawAble(accounts[idx], nodeAddr, {
+      let wei = await staking.delegatorWithdrawable(accounts[idx], nodeAddr, {
         from: accounts[idx]
       });
-      let withdrawAbleAmount = Math.round(wei.valueOf() / 1000000000000000000);
+      let withdrawableAmount = Math.round(wei.valueOf() / 1e18);
       assert.equal(
-        withdrawAbleAmount,
+        withdrawableAmount,
         stakedTokenPerNode,
-        "After 13 days, withdrawAble should be 50000 "
+        "After 10 days, delegator withdrawable should be 50000 "
       );
     }
   });
@@ -734,7 +639,7 @@ contract("Staking", async accounts => {
 
     await staking.nodeClaimReward(nodeAddr, { from: nodeStakingAddr });
     let balance = await ttk.balanceOf(nodeStakingAddr);
-    nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
+    nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
       152000,
@@ -747,7 +652,7 @@ contract("Staking", async accounts => {
         from: accounts[idx]
       });
       let balance = await ttk.balanceOf(accounts[idx]);
-      delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
+      delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
         72000,
@@ -837,7 +742,7 @@ contract("Staking", async accounts => {
 
     await staking.nodeClaimReward(nodeAddr, { from: nodeStakingAddr });
     let balance = await ttk.balanceOf(nodeStakingAddr);
-    nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
+    nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
       30400,
@@ -850,7 +755,7 @@ contract("Staking", async accounts => {
         from: accounts[idx]
       });
       let balance = await ttk.balanceOf(accounts[idx]);
-      delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
+      delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
         14400,
@@ -943,7 +848,7 @@ contract("Staking", async accounts => {
         from: accounts[idx]
       });
       let balance = await ttk.balanceOf(accounts[idx]);
-      delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
+      delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
         14400,
@@ -954,7 +859,7 @@ contract("Staking", async accounts => {
         from: accounts[idx]
       });
       balance = await ttk.balanceOf(accounts[idx]);
-      delegatorBalance = Math.round(balance.valueOf() / 1000000000000000000);
+      delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
         114400,
@@ -964,7 +869,7 @@ contract("Staking", async accounts => {
 
     await staking.nodeClaimReward(nodeAddr, { from: nodeStakingAddr });
     let balance = await ttk.balanceOf(nodeStakingAddr);
-    nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
+    nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
       30400,
@@ -972,7 +877,7 @@ contract("Staking", async accounts => {
     );
     await staking.nodeWithdraw(nodeAddr, { from: nodeStakingAddr });
     balance = await ttk.balanceOf(nodeStakingAddr);
-    nodeBalance = Math.round(balance.valueOf() / 1000000000000000000);
+    nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
       130400,
