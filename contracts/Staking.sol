@@ -133,7 +133,7 @@ contract Staking is Ownable {
         minStakePerNode = _minStake;
     }
 
-    function getNodeAddrs() public view returns(address[]memory){
+    function getNodeAddrs() public view returns(address[] memory) {
         return nodeAddrs;
     }
 
@@ -548,11 +548,11 @@ contract Staking is Ownable {
         }
     }
 
-    function rewardRateDelta() public view returns (uint) {
+    function rewardRateDelta() internal view returns (uint) {
         return now.sub(lastRateUpdatedTime).mul(getCurrentAPR()).mul(1e6).div(ONEYEAR);
     }
 
-    function updateGlobalRewardIndex() public {
+    function updateGlobalRewardIndex() internal {
         accumulatedRewardIndex = accumulatedRewardIndex.add(rewardRateDelta());
         lastRateUpdatedTime = now;
     }
