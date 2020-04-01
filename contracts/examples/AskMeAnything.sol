@@ -22,13 +22,6 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     event RequestSent(address indexed msgSender, uint8 internalSerial, bool succ, uint requestId);
     event RandomReady(uint requestId, uint generatedRandom);
 
-    modifier auth(uint id) {
-        require(msg.sender == fromDOSProxyContract(),
-                "Unauthenticated response from non-DOS.");
-        require(_valid[id], "Response with invalid request id!");
-        _;
-    }
-    constructor() public DOSOnChainSDK() {}
     function setQueryMode(bool newMode) public onlyOwner {
         repeatedCall = newMode;
     }
@@ -53,7 +46,8 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     }
 
     // User-defined callback function handling query response.
-    function __callback__(uint queryId, bytes calldata result) external auth(queryId) {
+    function __callback__(uint queryId, bytes calldata result) external auth {
+        require(_valid[queryId], "Response with invalid request id!");
         response = string(result);
         emit QueryResponseReady(queryId, response);
         delete _valid[queryId];
@@ -72,10 +66,8 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
 
     // User-defined callback function handling newly generated secure
     // random number.
-    function __callback__(uint requestId, uint generatedRandom)
-        external
-        auth(requestId)
-    {
+    function __callback__(uint requestId, uint generatedRandom) external auth {
+        require(_valid[requestId], "Response with invalid request id!");
         random = generatedRandom;
         emit RandomReady(requestId, generatedRandom);
         delete _valid[requestId];

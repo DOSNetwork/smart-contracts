@@ -21,59 +21,46 @@ contract DOSPayment is Ownable {
     }
 
     struct FeeList {
-        // ServiceType =>serviceFee
+        // ServiceType => serviceFee
         mapping(uint => uint) serviceFee;
-        uint submitterRate;
-        uint workerRate;
-        uint denominator;
+        uint submitterCut;
         uint guardianFee;
     }
 
     struct Payment {
-        address consumer;
+        address payer;
         address tokenAddr;
         uint serviceType;
         uint amount;
     }
 
-    struct Rewards {
-        //tokenAddr to amount
-        mapping(address => uint) amount;
-        address[] tokenAddres;
-    }
-    // consumer addr => payment token addr
-    mapping(address => address) public _paymentMethods;
-    //TokenAddr => feeList
-    mapping(address => FeeList) public _feeList;
+    // payer addr => payment token addr
+    mapping(address => address) public paymentMethods;
+    // tokenAddr => feeList
+    mapping(address => FeeList) public feeLists;
     // requestID => Payment
-    mapping(uint => Payment) public _payments;
-    // producer address => Rewards
-    mapping(address => Rewards) _nodeRewards;
+    mapping(uint => Payment) public payments;
+    // node address => {tokenAddr => amount}
+    mapping(address => mapping(address => uint)) private _balances;
 
-    uint public _defaultDenominator = 5;
-    uint public _defaultSubmitterRate = 3;
-    uint public _defaultWorkerRate = 2;
-    uint public _defaultSystemRandomFee = 50000000000000000000; // 10 Tokens
-    uint public _defaultUserRandomFee = 50000000000000000000; // 10 Tokens
-    uint public _defaultUserQueryFee = 50000000000000000000; // 10 Tokens
-    uint public _defaultGuardianFee = 10000000000000000000; // 10 Tokens
-    address public _defaultTokenAddr;
-    address public _guardianFundsAddr;
-    address public _guardianFundsTokenAddr;
+    uint constant public defaultSubmitterCut = 4;
+    uint constant public defaultSystemRandomFee = 10 * 1e18;  // 10 tokens
+    uint constant public defaultUserRandomFee = 10 * 1e18;    // 10 tokens
+    uint constant public defaultUserQueryFee = 10 * 1e18;     // 10 tokens
+    uint constant public defaultGuardianFee = 10 * 1e18;      // 10 tokens
 
-    // DOSAddressBridge
-    DOSAddressBridgeInterface public _addressBridge;
-    address public _bridgeAddr;
+    address public guardianFundsAddr;
+    address public guardianFundsTokenAddr;
+    address public bridgeAddr;
+    address public defaultTokenAddr;
 
-    event UpdateNetworkTokenAddress(address oldAddress, address newAddress);
-    event UpdateDropBurnTokenAddress(address oldAddress, address newAddress);
-    event LogChargeServiceFee(address consumer ,address tokenAddr,uint requestID,uint serviceType,uint fee);
-    event LogRefundServiceFee(address consumer ,address tokenAddr,uint requestID,uint serviceType,uint fee);
-    event LogClaimServiceFee(address nodeAddr,address tokenAddr,uint requestID,uint serviceType ,uint feeForSubmitter);
-    event LogClaimGuardianFee(address nodeAddr,address tokenAddr,uint feeForSubmitter,address sender);
+    event LogChargeServiceFee(address payer, address tokenAddr, uint requestID, uint serviceType, uint fee);
+    event LogRefundServiceFee(address payer, address tokenAddr, uint requestID, uint serviceType, uint fee);
+    event LogRecordServiceFee(address nodeAddr, address tokenAddr, uint requestID, uint serviceType, uint fee, bool isSubmitter);
+    event LogClaimGuardianFee(address nodeAddr, address tokenAddr, uint feeForSubmitter, address sender);
 
     modifier onlyFromProxy {
-        require(msg.sender == _addressBridge.getProxyAddress(), "Not from DOS proxy!");
+        require(msg.sender == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress(), "Not from DOS proxy!");
         _;
     }
 
@@ -83,177 +70,133 @@ contract DOSPayment is Ownable {
     }
 
     modifier hasPayment(uint requestID) {
-        require(_payments[requestID].amount!=0, "No fee infomation!");
-        require(_payments[requestID].consumer!=address(0x0), "No consumer infomation!");
-        require(_payments[requestID].tokenAddr!=address(0x0), "No tokenAddr infomation!");
+        require(payments[requestID].amount != 0, "No fee infomation!");
+        require(payments[requestID].payer != address(0x0), "No payer infomation!");
+        require(payments[requestID].tokenAddr != address(0x0), "No tokenAddr infomation!");
         _;
     }
 
-    constructor(address bridgeAddr,address guardianFundsAddr,address tokenAddr) public {
-        _defaultTokenAddr = tokenAddr;
-        _guardianFundsAddr = guardianFundsAddr;
-        _guardianFundsTokenAddr = tokenAddr;
+    constructor(address _bridgeAddr, address _guardianFundsAddr, address _tokenAddr) public {
+        guardianFundsAddr = _guardianFundsAddr;
+        guardianFundsTokenAddr = _tokenAddr;
+        bridgeAddr = _bridgeAddr;
+        defaultTokenAddr = _tokenAddr;
 
-        FeeList storage feeList = _feeList[_defaultTokenAddr];
-        feeList.serviceFee[uint(ServiceType.SystemRandom)] = _defaultSystemRandomFee;
-        feeList.serviceFee[uint(ServiceType.UserRandom)] = _defaultUserRandomFee;
-        feeList.serviceFee[uint(ServiceType.UserQuery)] = _defaultUserQueryFee;
-        feeList.submitterRate = _defaultSubmitterRate;
-        feeList.workerRate = _defaultWorkerRate;
-        feeList.denominator = _defaultDenominator;
-        feeList.guardianFee = _defaultGuardianFee;
-        _bridgeAddr = bridgeAddr;
-        _addressBridge = DOSAddressBridgeInterface(_bridgeAddr);
+        FeeList storage feeList = feeLists[_tokenAddr];
+        feeList.serviceFee[uint(ServiceType.SystemRandom)] = defaultSystemRandomFee;
+        feeList.serviceFee[uint(ServiceType.UserRandom)] = defaultUserRandomFee;
+        feeList.serviceFee[uint(ServiceType.UserQuery)] = defaultUserQueryFee;
+        feeList.submitterCut = defaultSubmitterCut;
+        feeList.guardianFee = defaultGuardianFee;
     }
 
-    function isSupportedToken(address tokenAddr) public view returns(bool){
-       if (tokenAddr == address(0x0)) {
-           return false;
-       }
-       if (_feeList[tokenAddr].serviceFee[uint(ServiceType.SystemRandom)] == 0){
-           return false;
-       }
-       if (_feeList[tokenAddr].serviceFee[uint(ServiceType.UserRandom)] == 0){
-           return false;
-       }
-       if (_feeList[tokenAddr].serviceFee[uint(ServiceType.UserQuery)] == 0){
-           return false;
-       }
+    function isSupportedToken(address tokenAddr) public view returns(bool) {
+       if (tokenAddr == address(0x0)) return false;
+       if (feeLists[tokenAddr].serviceFee[uint(ServiceType.SystemRandom)] == 0) return false;
+       if (feeLists[tokenAddr].serviceFee[uint(ServiceType.UserRandom)] == 0) return false;
+       if (feeLists[tokenAddr].serviceFee[uint(ServiceType.UserQuery)] == 0) return false;
        return true;
     }
 
-    function setPaymentMethod(address consumer,address tokenAddr) public onlySupportedToken(tokenAddr){
-        _paymentMethods[consumer] = tokenAddr;
+    function setPaymentMethod(address payer, address tokenAddr) public onlySupportedToken(tokenAddr) {
+        paymentMethods[payer] = tokenAddr;
     }
 
-    function setServiceFee(address tokenAddr,uint serviceType,uint fee) public onlyOwner{
-        require(tokenAddr!=address(0x0), "Not a valid address!");
-        FeeList storage feeList = _feeList[tokenAddr];
-        feeList.serviceFee[serviceType] = fee;
+    function setServiceFee(address tokenAddr, uint serviceType, uint fee) public onlyOwner {
+        require(tokenAddr != address(0x0), "Not a valid token address!");
+        feeLists[tokenAddr].serviceFee[serviceType] = fee;
     }
 
-    function setGuardianFee(address tokenAddr,uint fee) public onlyOwner{
-        require(tokenAddr!=address(0x0), "Not a valid address!");
-        FeeList storage feeList = _feeList[tokenAddr];
-        feeList.guardianFee = fee;
+    function setGuardianFee(address tokenAddr, uint fee) public onlyOwner {
+        require(tokenAddr != address(0x0), "Not a valid address!");
+        feeLists[tokenAddr].guardianFee = fee;
     }
 
-    function setFeeDividend(address tokenAddr,uint submitterRate,uint workerRate,uint denominator) public onlyOwner{
-        require(tokenAddr!=address(0x0), "Not a valid address!");
-        FeeList storage feeList = _feeList[tokenAddr];
-        feeList.submitterRate = submitterRate;
-        feeList.workerRate = workerRate;
-        feeList.denominator = denominator;
+    function setFeeDividend(address tokenAddr, uint submitterCut) public onlyOwner {
+        require(tokenAddr != address(0x0), "Not a valid address!");
+        feeLists[tokenAddr].submitterCut = submitterCut;
     }
 
-    function setGuardianFunds(address fundsAddr,address tokenAddr) public onlyOwner onlySupportedToken(tokenAddr) {
-        _guardianFundsAddr = fundsAddr;
-        _guardianFundsTokenAddr = tokenAddr;
+    function setGuardianFunds(address fundsAddr, address tokenAddr) public onlyOwner onlySupportedToken(tokenAddr) {
+        guardianFundsAddr = fundsAddr;
+        guardianFundsTokenAddr = tokenAddr;
     }
 
-    function chargeServiceFee(address consumer,uint requestID,uint serviceType) public onlyFromProxy {
-        // Get tokenAddr
-        address tokenAddr = _paymentMethods[consumer];
-        if  (!isSupportedToken(tokenAddr)) {
-            revert("Not a valid token address");
-        }
-
+    function chargeServiceFee(address payer, uint requestID, uint serviceType) public onlyFromProxy {
+        address tokenAddr = paymentMethods[payer];
         // Get fee by tokenAddr and serviceType
-        uint fee = _feeList[tokenAddr].serviceFee[serviceType];
-
-        Payment storage payment = _payments[requestID];
-        payment.consumer = consumer;
-        payment.serviceType = serviceType;
-        payment.tokenAddr = tokenAddr;
-        payment.amount = fee;
-
-        emit LogChargeServiceFee(consumer,tokenAddr,requestID,serviceType,fee);
-        ERC20I(tokenAddr).transferFrom(consumer, address(this),fee);
+        uint fee = feeLists[tokenAddr].serviceFee[serviceType];
+        payments[requestID] = Payment(payer, tokenAddr, serviceType, fee);
+        emit LogChargeServiceFee(payer, tokenAddr, requestID, serviceType, fee);
+        ERC20I(tokenAddr).transferFrom(payer, address(this), fee);
     }
 
     function refundServiceFee(uint requestID) public onlyOwner hasPayment(requestID) {
-        uint fee = _payments[requestID].amount;
-        uint serviceType = _payments[requestID].serviceType;
-        address tokenAddr = _payments[requestID].tokenAddr;
-        address consumer = _payments[requestID].consumer;
-        delete _payments[requestID];
-        emit LogRefundServiceFee(consumer,tokenAddr,requestID,serviceType,fee);
-        ERC20I(tokenAddr).transfer(consumer,fee);
+        uint fee = payments[requestID].amount;
+        uint serviceType = payments[requestID].serviceType;
+        address tokenAddr = payments[requestID].tokenAddr;
+        address payer = payments[requestID].payer;
+        delete payments[requestID];
+        emit LogRefundServiceFee(payer, tokenAddr, requestID, serviceType, fee);
+        ERC20I(tokenAddr).transfer(payer, fee);
     }
 
-    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public onlyFromProxy hasPayment(requestID) {
-        address tokenAddr = _payments[requestID].tokenAddr;
-        uint fee = _payments[requestID].amount;
-        uint serviceType = _payments[requestID].serviceType;
-        delete _payments[requestID];
+    function recordServiceFee(uint requestID, address submitter, address[] memory workers) public onlyFromProxy hasPayment(requestID) {
+        address tokenAddr = payments[requestID].tokenAddr;
+        uint feeUnit = payments[requestID].amount / 10;
+        uint serviceType = payments[requestID].serviceType;
+        delete payments[requestID];
 
-        // TODO : Adjust dividends strategy
-        FeeList memory feeList = _feeList[tokenAddr];
-        fee = fee/feeList.denominator;
-        uint feeForSubmitter = fee * feeList.workerRate;
-        uint feeForWorker = (fee * feeList.workerRate)/(workers.length-1);
-
-        payFeeTo(_nodeRewards[submitter],tokenAddr,feeForSubmitter);
-        emit LogClaimServiceFee(submitter,tokenAddr,requestID,serviceType,feeForSubmitter);
+        FeeList storage feeList = feeLists[tokenAddr];
+        uint feeForSubmitter = feeUnit * feeList.submitterCut;
+        _balances[submitter][tokenAddr] += feeForSubmitter;
+        emit LogRecordServiceFee(submitter, tokenAddr, requestID, serviceType, feeForSubmitter, true);
+        uint feeForWorker = feeUnit * (10 - feeList.submitterCut) / (workers.length - 1);
         for (uint i = 0; i < workers.length; i++) {
-            if (workers[i] != submitter){
-                payFeeTo(_nodeRewards[workers[i]],tokenAddr,feeForWorker);
-                emit LogClaimServiceFee(workers[i],tokenAddr,requestID,serviceType,feeForSubmitter);
+            if (workers[i] != submitter) {
+                _balances[workers[i]][tokenAddr] += feeForWorker;
+                emit LogRecordServiceFee(workers[i], tokenAddr, requestID, serviceType, feeForWorker, false);
             }
         }
     }
 
-    function payFeeTo(Rewards storage rewards,address tokenAddr,uint amount) internal{
-        uint tokenAmount = rewards.amount[tokenAddr];
-        if (tokenAmount == 0) {
-            rewards.tokenAddres.push(tokenAddr);
-        }
-        rewards.amount[tokenAddr] = tokenAmount + amount;
-    }
-
     function claimGuardianReward(address guardianAddr) public onlyFromProxy {
-        require(_guardianFundsAddr!=address(0x0), "Not a valid guardian funds address!");
-        require(_guardianFundsTokenAddr!=address(0x0), "Not a valid token address!");
-        uint fee = _feeList[_guardianFundsTokenAddr].guardianFee;
-        emit  LogClaimGuardianFee(guardianAddr,_guardianFundsTokenAddr,fee,msg.sender);
-        ERC20I(_guardianFundsTokenAddr).transferFrom(_guardianFundsAddr,guardianAddr,fee);
+        require(guardianFundsAddr != address(0x0), "Not a valid guardian funds address!");
+        require(guardianFundsTokenAddr != address(0x0), "Not a valid token address!");
+        uint fee = feeLists[guardianFundsTokenAddr].guardianFee;
+        emit LogClaimGuardianFee(guardianAddr, guardianFundsTokenAddr, fee, msg.sender);
+        ERC20I(guardianFundsTokenAddr).transferFrom(guardianFundsAddr, guardianAddr,fee);
     }
 
-    function withdraw() public {
-        require(_nodeRewards[msg.sender].tokenAddres.length!=0, "No rewards!");
-        Rewards storage rewards = _nodeRewards[msg.sender];
-        address tokenAddr = rewards.tokenAddres[rewards.tokenAddres.length-1];
-        rewards.tokenAddres.pop();
-        uint amount = rewards.amount[tokenAddr];
-        delete rewards.amount[tokenAddr];
-        if (amount != 0){
-            ERC20I(tokenAddr).transfer(msg.sender,amount);
+    // node runners call to withdraw recorded service fees.
+    function nodeClaim() public returns(uint) {
+        return nodeClaim(msg.sender, defaultTokenAddr, msg.sender);
+    }
+
+    // node runners call to withdraw recorded service fees to specified address.
+    function nodeClaim(address to) public returns(uint) {
+        return nodeClaim(msg.sender, defaultTokenAddr, to);
+    }
+
+    function nodeClaim(address nodeAddr, address tokenAddr, address to) internal returns(uint) {
+        uint amount = _balances[nodeAddr][tokenAddr];
+        if (amount != 0) {
+            delete _balances[nodeAddr][tokenAddr];
+            ERC20I(tokenAddr).transfer(to, amount);
         }
+        return amount;
     }
 
-    function nodeTokenAddresLength(address nodeAddr) public view returns (uint){
-       return (_nodeRewards[nodeAddr].tokenAddres.length);
+    function nodeFeeBalance(address nodeAddr) public view returns (uint) {
+        return nodeFeeBalance(nodeAddr, defaultTokenAddr);
     }
 
-    function nodeTokenAddres(address nodeAddr,uint idx) public view returns (address){
-       require(_nodeRewards[nodeAddr].tokenAddres.length>idx, "No token address!");
-       return (_nodeRewards[nodeAddr].tokenAddres[idx]);
+    function nodeFeeBalance(address nodeAddr, address tokenAddr) public view returns (uint) {
+        return _balances[nodeAddr][tokenAddr];
     }
 
-    function nodeTokenAmount(address nodeAddr,uint idx) public view returns (uint){
-        require(_nodeRewards[nodeAddr].tokenAddres.length>idx, "No token address!");
-        address tokenAddr = _nodeRewards[nodeAddr].tokenAddres[idx];
-        return (_nodeRewards[nodeAddr].amount[tokenAddr]);
-    }
-
-    function paymentInfo(uint requestID) public view returns (address,uint){
-    Payment storage payment = _payments[requestID];
-       return (payment.tokenAddr,payment.amount);
-    }
-
-    // For test
-    function withdrawAll(uint tokenAddr) public onlyOwner{
-        uint amount = ERC20I(tokenAddr).balanceOf(address(this));
-        ERC20I(tokenAddr).transfer(msg.sender, amount);
+    function paymentInfo(uint requestID) public view returns (address, uint) {
+        Payment storage payment = payments[requestID];
+        return (payment.tokenAddr, payment.amount);
     }
 }

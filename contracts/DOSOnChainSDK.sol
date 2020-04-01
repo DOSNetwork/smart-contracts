@@ -1,7 +1,7 @@
 pragma solidity ^0.5.0;
 
 // Comment out utils library if you don't need it to save gas. (L4 and L17)
-import "./lib/utils.sol";
+// import "./lib/utils.sol";
 import "./Ownable.sol";
 
 contract DOSProxyInterface {
@@ -10,8 +10,8 @@ contract DOSProxyInterface {
 }
 
 contract DOSPaymentInterface {
-    function isSupportedToken(address) public view returns(bool);
-    function setPaymentMethod(address consumer,address tokenAddr) public;
+    function setPaymentMethod(address payer, address tokenAddr) public;
+    function defaultTokenAddr() public returns(address);
 }
 
 contract DOSAddressBridgeInterface {
@@ -25,40 +25,38 @@ contract ERC20I {
     function approve(address spender, uint value) public returns (bool);
 }
 
-contract DOSOnChainSDK is Ownable{
-    // Comment out utils library if you don't need it to save gas. (L4 and L17)
-    using utils for *;
+contract DOSOnChainSDK is Ownable {
+    // Comment out utils library if you don't need it to save gas. (L4 and L30)
+    // using utils for *;
 
     DOSProxyInterface dosProxy;
     DOSAddressBridgeInterface dosAddrBridge =
         DOSAddressBridgeInterface(0x848C0Bb953755293230b705464654F647967639A);
-    address _tokenAddr = 0x214e79c85744CD2eBBc64dDc0047131496871bEe;
 
     modifier resolveAddress {
         dosProxy = DOSProxyInterface(dosAddrBridge.getProxyAddress());
         _;
     }
 
-    modifier onlySupportedToken(address tokenAddr) {
-        DOSPaymentInterface payment = DOSPaymentInterface(dosAddrBridge.getPaymentAddress());
-        require(payment.isSupportedToken(tokenAddr), "Not supported token address!");
+    modifier auth {
+        // Filter out malicious __callback__ caller.
+        require(msg.sender == dosAddrBridge.getProxyAddress(), "Unauthenticated response");
         _;
     }
 
-    constructor() public {
+    // @dev: call setup function and transfer DOS tokens into deployed contract as oracle fees.
+    function setup() public onlyOwner {
         address paymentAddr = dosAddrBridge.getPaymentAddress();
-        ERC20I(_tokenAddr).approve(paymentAddr, uint(-1));
-        DOSPaymentInterface payment = DOSPaymentInterface(dosAddrBridge.getPaymentAddress());
-        payment.setPaymentMethod(address(this),_tokenAddr);
+        address defaultToken = DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
+        ERC20I(defaultToken).approve(paymentAddr, uint(-1));
+        DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).setPaymentMethod(address(this), defaultToken);
     }
 
-    function fromDOSProxyContract() internal view returns (address) {
-        return dosAddrBridge.getProxyAddress();
-    }
-
-    function DOSWithdraw() public onlyOwner{
-        uint amount = ERC20I(_tokenAddr).balanceOf(address(this));
-        ERC20I(_tokenAddr).transfer(msg.sender, amount);
+    // @dev: refund all unused fees to caller.
+    function refund() public onlyOwner {
+        address token = DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
+        uint amount = ERC20I(token).balanceOf(address(this));
+        ERC20I(token).transfer(msg.sender, amount);
     }
 
     // @dev: Call this function to get a unique queryId to differentiate
@@ -121,7 +119,7 @@ contract DOSOnChainSDK is Ownable{
     //             differentiate random numbers generated concurrently.
     // @generatedRandom: Generated secure random number for the specific
     //                   requestId.
-    function __callback__(uint requestId, uint generatedRandom) external {
+    function __callback__(uint requestId, uint generatedRandom) external auth {
         // To be overridden in the caller contract.
     }
 }

@@ -1,10 +1,12 @@
 pragma solidity ^0.5.0;
 
-//import "github.com/DOSNetwork/eth-contracts/contracts/DOSOnChainSDK.sol";
+import "../lib/utils.sol";
 import "../DOSOnChainSDK.sol";
 
 // An example get latest ETH-USD price from Coinbase
 contract CoinbaseEthUsd is DOSOnChainSDK {
+    using utils for *;
+
     // Struct to hold parsed floating string "123.45"
     struct ethusd {
         uint integral;
@@ -16,16 +18,8 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
 
     event GetPrice(uint integral, uint fractional);
 
-    constructor() public DOSOnChainSDK() {}
-
     function check() public {
         queryId = DOSQuery(30, "https://api.coinbase.com/v2/prices/ETH-USD/spot", "$.data.amount");
-    }
-
-    modifier auth {
-        // Filter out malicious __callback__ callers.
-        require(msg.sender == fromDOSProxyContract(), "Unauthenticated response");
-        _;
     }
 
     function __callback__(uint id, bytes calldata result) external auth {

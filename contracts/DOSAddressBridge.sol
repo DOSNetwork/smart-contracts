@@ -17,7 +17,6 @@ contract DOSAddressBridge is Ownable {
     event ProxyAddressUpdated(address previousProxy, address newProxy);
     event CommitRevealAddressUpdated(address previousAddr, address newAddr);
     event PaymentAddressUpdated(address previousPayment, address newPayment);
-    event RegistryAddressUpdated(address previousRegistry, address newRegistry);
     event StakingAddressUpdated(address previousStaking, address newStaking);
     event BootStrapUrlUpdated(string previousURL, string newURL);
 
@@ -61,7 +60,7 @@ contract DOSAddressBridge is Ownable {
         return _bootStrapUrl;
     }
 
-    function setBootStrapUrl(string memory url) public  onlyOwner {
+    function setBootStrapUrl(string memory url) public onlyOwner {
         emit BootStrapUrlUpdated(_bootStrapUrl, url);
         _bootStrapUrl = url;
     }

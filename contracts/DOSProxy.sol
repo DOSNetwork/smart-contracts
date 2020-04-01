@@ -28,11 +28,10 @@ contract DOSAddressBridgeInterface {
 }
 
 contract DOSPaymentInterface {
-    function fromValidStakingNode(address) public view returns(bool);
-    function chargeServiceFee(address ,uint ,uint ) public;
-    function claimServiceFee(uint requestID,address submitter,address[] memory workers) public;
-    function claimGuardianReward(address guardian) public;
-    function setPaymentMethod(address consumer,address tokenAddr) public;
+    function chargeServiceFee(address, uint, uint) public;
+    function recordServiceFee(uint, address, address[] memory) public;
+    function claimGuardianReward(address) public;
+    function setPaymentMethod(address, address) public;
 }
 
 contract DOSStakingInterface {
@@ -72,14 +71,13 @@ contract DOSProxy is Ownable {
     }
 
     uint public initBlkN;
-
-    uint requestIdSeed;
+    uint private requestIdSeed;
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
     uint public refreshSystemRandomHardLimit = 1440; // in blocks, ~6 hour
-    uint public groupMaturityPeriod = refreshSystemRandomHardLimit*28; // in blocks, ~7days
-    uint public lifeDiversity = refreshSystemRandomHardLimit*12; // in blocks, ~3days
+    uint public groupMaturityPeriod = refreshSystemRandomHardLimit * 28; // in blocks, ~7days
+    uint public lifeDiversity = refreshSystemRandomHardLimit * 12; // in blocks, ~3days
     // avoid looping in a big loop that causing over gas.
     uint public checkExpireLimit = 50;
 
@@ -97,9 +95,7 @@ contract DOSProxy is Ownable {
     uint public bootstrapRound = 0;
     uint public bootstrapEndBlk = 0;
 
-    // DOSAddressBridge
     DOSAddressBridgeInterface public addressBridge;
-    address public bridgeAddr;
     address public proxyFundsAddr;
     address public proxyFundsTokenAddr;
 
@@ -140,7 +136,7 @@ contract DOSProxy is Ownable {
 
     // Only whitelised guardian are permitted to kick off signalUnregister process
     // TODO : Chose a random group to check and has a consensus about which nodes should be unregister in v2.0.
-    mapping(address => bool) public whitelisted;
+    mapping(address => bool) public guardianListed;
     bool public enableStaking = true;
     enum TrafficType {
         SystemRandom,
@@ -148,33 +144,14 @@ contract DOSProxy is Ownable {
         UserQuery
     }
 
-    event LogUrl(
-        uint queryId,
-        uint timeout,
-        string dataSource,
-        string selector,
-        uint randomness,
-        uint dispatchedGroupId
-    );
-    event LogRequestUserRandom(
-        uint requestId,
-        uint lastSystemRandomness,
-        uint userSeed,
-        uint dispatchedGroupId
-    );
+    event LogUrl(uint queryId, uint timeout, string dataSource, string selector, uint randomness, uint dispatchedGroupId);
+    event LogRequestUserRandom(uint requestId, uint lastSystemRandomness, uint userSeed, uint dispatchedGroupId);
     event LogNonSupportedType(string invalidSelector);
     event LogNonContractCall(address from);
     event LogCallbackTriggeredFor(address callbackAddr);
     event LogRequestFromNonExistentUC();
     event LogUpdateRandom(uint lastRandomness, uint dispatchedGroupId);
-    event LogValidationResult(
-        uint8 trafficType,
-        uint trafficId,
-        bytes message,
-        uint[2] signature,
-        uint[4] pubKey,
-        bool pass
-    );
+    event LogValidationResult(uint8 trafficType, uint trafficId, bytes message, uint[2] signature, uint[4] pubKey, bool pass);
     event LogInsufficientPendingNode(uint numPendingNodes);
     event LogInsufficientWorkingGroup(uint numWorkingGroups, uint numPendingGroups);
     event LogGrouping(uint groupId, address[] nodeId);
@@ -196,40 +173,40 @@ contract DOSProxy is Ownable {
     event UpdatePendingGroupMaxLife(uint oldLifeBlocks, uint newLifeBlocks);
     event UpdateBootstrapGroups(uint oldSize, uint newSize);
     event UpdateSystemRandomHardLimit(uint oldLimit, uint newLimit);
-    event UpdateProxyFund(address oldFundAddr, address newFundAddr,address oldTokenAddr, address newTokenAddr);
-    event GuardianReward(uint blkNum, address indexed guardian);
+    event UpdateProxyFund(address oldFundAddr, address newFundAddr, address oldTokenAddr, address newTokenAddr);
+    event GuardianReward(uint indexed blkNum, address indexed guardian);
 
     modifier fromValidStakingNode {
-        if (enableStaking){
+        if (enableStaking) {
             require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
                     "Invalid staking node");
         }
         _;
     }
 
-    modifier onlyWhitelisted {
-        require(whitelisted[msg.sender], "Not whitelisted!");
+    modifier onlyGuardianListed {
+        require(guardianListed[msg.sender], "Not whitelisted guardian!");
         _;
     }
-    constructor(address _bridgeAddr,address _proxyFundsAddr,address _proxyFundsTokenAddr) public {
+
+    constructor(address _bridgeAddr, address _proxyFundsAddr, address _proxyFundsTokenAddr) public {
         initBlkN = block.number;
         pendingNodeList[HEAD_A] = HEAD_A;
         pendingNodeTail = HEAD_A;
         pendingGroupList[HEAD_I] = HEAD_I;
         pendingGroupTail = HEAD_I;
-        bridgeAddr = _bridgeAddr;
-        addressBridge = DOSAddressBridgeInterface(bridgeAddr);
+        addressBridge = DOSAddressBridgeInterface(_bridgeAddr);
         proxyFundsAddr = _proxyFundsAddr;
         proxyFundsTokenAddr = _proxyFundsTokenAddr;
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr, proxyFundsTokenAddr);
     }
 
-    function addToWhitelist(address _addr) public onlyOwner {
-        whitelisted[_addr] = true;
+    function addToGuardianList(address _addr) public onlyOwner {
+        guardianListed[_addr] = true;
     }
 
-    function removeFromWhitelist(address _addr) public onlyOwner {
-        delete whitelisted[_addr];
+    function removeFromGuardianList(address _addr) public onlyOwner {
+        delete guardianListed[_addr];
     }
 
     function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
@@ -260,17 +237,17 @@ contract DOSProxy is Ownable {
         return expiredWorkingGroupIds.length;
     }
 
-    function setProxyFund(address newFund,address  newFundToken) public onlyOwner {
-        require(newFund != proxyFundsAddr && newFund != address(0x0),"Not a valid parameter");
-        require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0),"Not a valid parameter");
-        emit UpdateProxyFund(proxyFundsAddr,newFund,proxyFundsTokenAddr,newFundToken);
+    function setProxyFund(address newFund, address newFundToken) public onlyOwner {
+        require(newFund != proxyFundsAddr && newFund != address(0x0), "Not a valid parameter");
+        require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0), "Not a valid parameter");
+        emit UpdateProxyFund(proxyFundsAddr, newFund, proxyFundsTokenAddr, newFundToken);
         proxyFundsAddr = newFund;
         proxyFundsTokenAddr = newFundToken;
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr,proxyFundsTokenAddr);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr, proxyFundsTokenAddr);
     }
 
     function setEnableStaking(bool newSetting) public onlyOwner {
-        require(newSetting != enableStaking,"Not a valid parameter");
+        require(newSetting != enableStaking, "Not a valid parameter");
         enableStaking = newSetting;
     }
 
@@ -325,7 +302,7 @@ contract DOSProxy is Ownable {
             }
             if (dissolveIdx >= workingGroupIds.length ||
                 dissolveIdx >= checkExpireLimit) {
-                uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness,block.number)));
+                uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness, block.number)));
                 return rnd % workingGroupIds.length;
             }
             Group storage group = workingGroups[workingGroupIds[dissolveIdx]];
@@ -358,7 +335,7 @@ contract DOSProxy is Ownable {
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId);
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr,lastRandomness,uint(TrafficType.SystemRandom));
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr, lastRandomness, uint(TrafficType.SystemRandom));
     }
 
     function insertToPendingGroupListTail(uint groupId) private {
@@ -465,7 +442,6 @@ contract DOSProxy is Ownable {
     }
 
     // Returns query id.
-    // TODO: restrict query from subscribed/paid calling contracts.
     function query(
         address from,
         uint timeout,
@@ -490,7 +466,7 @@ contract DOSProxy is Ownable {
                     return 0;
                 }
                 Group storage grp = workingGroups[workingGroupIds[idx]];
-                PendingRequests[queryId] = PendingRequest(queryId, grp.groupId,grp.groupPubKey, from);
+                PendingRequests[queryId] = PendingRequest(queryId, grp.groupId, grp.groupPubKey, from);
                 emit LogUrl(
                     queryId,
                     timeout,
@@ -499,7 +475,7 @@ contract DOSProxy is Ownable {
                     lastRandomness,
                     grp.groupId
                 );
-                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from,queryId,uint(TrafficType.UserQuery));
+                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from, queryId, uint(TrafficType.UserQuery));
                 return queryId;
             } else {
                 emit LogNonSupportedType(selector);
@@ -517,7 +493,6 @@ contract DOSProxy is Ownable {
         public
         returns (uint)
     {
-        // TODO: restrict request from paid calling contract address.
         uint requestId = uint(keccak256(abi.encodePacked(
             ++requestIdSeed, from, userSeed)));
         uint idx = dispatchJob(TrafficType.UserRandom, requestId);
@@ -527,7 +502,7 @@ contract DOSProxy is Ownable {
             return 0;
         }
         Group storage grp = workingGroups[workingGroupIds[idx]];
-        PendingRequests[requestId] = PendingRequest(requestId, grp.groupId,grp.groupPubKey, from);
+        PendingRequests[requestId] = PendingRequest(requestId, grp.groupId, grp.groupPubKey, from);
         // sign(requestId ||lastSystemRandomness || userSeed ||
         // selected sender in group)
         emit LogRequestUserRandom(
@@ -536,11 +511,11 @@ contract DOSProxy is Ownable {
             userSeed,
             grp.groupId
         );
-        if (from == address(this)) {
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr,requestId,uint(TrafficType.UserRandom));
-        } else {
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from,requestId,uint(TrafficType.UserRandom));
-        }
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(
+            from == address(this) ? proxyFundsAddr : from,
+            requestId,
+            uint(TrafficType.UserRandom)
+        );
         return requestId;
     }
 
@@ -620,7 +595,7 @@ contract DOSProxy is Ownable {
             revert("Unsupported traffic type");
         }
         Group memory grp = workingGroups[PendingRequests[requestId].groupId];
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimServiceFee(requestId,msg.sender,grp.members);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(requestId, msg.sender, grp.members);
     }
 
     function toBytes(uint x) private pure returns (bytes memory b) {
@@ -641,10 +616,8 @@ contract DOSProxy is Ownable {
         }
 
         // Update new randomness = sha3(collectively signed group signature)
-        // TODO: include and test with blockhash.
-        uint oldRandomness = lastRandomness;
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimServiceFee(oldRandomness,msg.sender,lastHandledGroup.members);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(lastRandomness, msg.sender, lastHandledGroup.members);
     }
 
     function cleanUpPendingGroup(uint gid) private {
@@ -671,7 +644,7 @@ contract DOSProxy is Ownable {
     }
 
     /// Guardian node functions
-    // TODO: Tune guardian signal algorithm.
+    /// TODO: Tune guardian signal algorithm.
     /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
     function signalRandom() public {
@@ -736,7 +709,7 @@ contract DOSProxy is Ownable {
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
     // TODO: Chose a random group to check and has a consensus about which nodes should be unregister
-    function signalUnregister(address member) public onlyWhitelisted{
+    function signalUnregister(address member) public onlyGuardianListed {
         if (unregister(member)) {
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
@@ -760,7 +733,7 @@ contract DOSProxy is Ownable {
             dissolveWorkingGroup(groupId, true);
             for (uint idx = 0; idx < workingGroupIds.length; idx++) {
                 if (workingGroupIds[idx] == groupId) {
-                    if (idx != (workingGroupIds.length - 1)){
+                    if (idx != (workingGroupIds.length - 1)) {
                         workingGroupIds[idx] = workingGroupIds[workingGroupIds.length - 1];
                     }
                     workingGroupIds.length--;
@@ -772,7 +745,7 @@ contract DOSProxy is Ownable {
             if (!removed) {
                 for (uint idx = 0; idx < expiredWorkingGroupIds.length; idx++) {
                     if (expiredWorkingGroupIds[idx] == groupId) {
-                        if (idx != (expiredWorkingGroupIds.length - 1)){
+                        if (idx != (expiredWorkingGroupIds.length - 1)) {
                             expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                         }
                         expiredWorkingGroupIds.length--;
@@ -871,7 +844,7 @@ contract DOSProxy is Ownable {
             } else {
                 // TODO: Do small bootstrap in this condition?
                 emit LogMessage("Skipped group formation, not enough expired working group.");
-			}
+            }
         } else if (numPendingNodes >= bootstrapStartThreshold) { // No working group alive and satisfies system re-bootstrap condition.
             if (bootstrapRound == 0) {
                 bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(

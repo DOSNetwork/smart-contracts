@@ -1,12 +1,10 @@
 pragma solidity ^0.5.0;
 
-import "./Ownable.sol";
-
 contract DOSAddressBridgeInterface {
     function getProxyAddress() public view returns(address);
 }
 
-contract CommitReveal is Ownable {
+contract CommitReveal {
     struct Participant {
         uint secret;
         bytes32 commitment;
@@ -26,8 +24,6 @@ contract CommitReveal is Ownable {
     }
 
     Campaign[] public campaigns;
-    // Only whitelised contracts are permitted to kick off commit-reveal process
-    mapping(address => bool) public whitelisted;
 
     // DOSAddressBridge
     DOSAddressBridgeInterface public addressBridge;
@@ -59,7 +55,7 @@ contract CommitReveal is Ownable {
         _;
     }
     modifier onlyFromProxy() {
-        require(msg.sender==addressBridge.getProxyAddress(), "Not from proxy contract");
+        require(msg.sender == addressBridge.getProxyAddress(), "Not from proxy contract");
         _;
     }
 
@@ -74,13 +70,6 @@ contract CommitReveal is Ownable {
         campaigns.length++;
         bridgeAddr = _bridgeAddr;
         addressBridge = DOSAddressBridgeInterface(bridgeAddr);
-    }
-
-    function addToWhitelist(address _addr) public onlyOwner {
-        whitelisted[_addr] = true;
-    }
-    function removeFromWhitelist(address _addr) public onlyOwner {
-        delete whitelisted[_addr];
     }
 
     // Returns new campaignId.

@@ -1,6 +1,5 @@
 pragma solidity ^0.5.0;
 
-//import "github.com/DOSNetwork/eth-contracts/contracts/DOSOnChainSDK.sol";
 import "../DOSOnChainSDK.sol";
 
 contract SimpleDice is DOSOnChainSDK {
@@ -28,17 +27,11 @@ contract SimpleDice is DOSOnChainSDK {
     event PlayerWin(uint gameId, uint generated, uint betted, uint amountWin);
     event PlayerLose(uint gameId, uint generated, uint betted);
 
-    modifier auth {
-        // Filter out malicious __callback__ callers.
-        require(msg.sender == fromDOSProxyContract(), "Unauthenticated response");
-        _;
-    }
-
     modifier onlyDev {
         require(msg.sender == devAddress);
         _;
     }
-    constructor() public DOSOnChainSDK() {}
+
     function min(uint a, uint b) internal pure returns(uint) {
         return a < b ? a : b;
     }
