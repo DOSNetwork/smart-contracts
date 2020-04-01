@@ -1,7 +1,8 @@
 pragma solidity ^0.5.0;
-pragma experimental ABIEncoderV2;
+
 import "../lib/BN256.sol";
 import "../Ownable.sol";
+
 contract UserContractInterface {
     // Query callback.
     function __callback__(uint, bytes calldata) external;
@@ -71,7 +72,7 @@ contract DOSProxyMock is Ownable {
     mapping(address => mapping(uint => uint)) public nodeToGroupIdList;
 
     // groupId => Group
-    mapping(uint => Group) public workingGroups;
+    mapping(uint => Group) private workingGroups;
     // Index:groupId
     uint[] public workingGroupIds;
     uint[] public expiredWorkingGroupIds;

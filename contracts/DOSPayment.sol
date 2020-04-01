@@ -168,12 +168,12 @@ contract DOSPayment is Ownable {
         ERC20I(guardianFundsTokenAddr).transferFrom(guardianFundsAddr, guardianAddr,fee);
     }
 
-    // node runners call to withdraw recorded service fees.
+    // @dev: node runners call to withdraw recorded service fees.
     function nodeClaim() public returns(uint) {
         return nodeClaim(msg.sender, defaultTokenAddr, msg.sender);
     }
 
-    // node runners call to withdraw recorded service fees to specified address.
+    // @dev: node runners call to withdraw recorded service fees to specified address.
     function nodeClaim(address to) public returns(uint) {
         return nodeClaim(msg.sender, defaultTokenAddr, to);
     }

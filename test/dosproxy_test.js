@@ -25,28 +25,25 @@ contract("DOSProxy Test", async accounts => {
 	});
 	it("test unregister node from pendingGroup", () => {
     let dosproxy;
-	let group1
-	let group2
-	let group3
-	let groupid1;
-	let groupid2;
-	let groupid3;
-	let group1Mem1;
-	let group1Mem2;
-	let group1Mem3;
-	let group2Mem1;
-	let group2Mem2;
-	let group2Mem3;	
-	let group3Mem1;
-	let group3Mem2;
-	let group3Mem3;	
-	let numPendingNodes
-	let numPendingGroups
-	let workingGroupIdsLength
-	let expiredWorkingGroupIdsLength
-	let tx
-	let tx2
-	let tx3
+  	let groupid1;
+  	let groupid2;
+  	let groupid3;
+  	let group1Mem1;
+  	let group1Mem2;
+  	let group1Mem3;
+  	let group2Mem1;
+  	let group2Mem2;
+  	let group2Mem3;
+  	let group3Mem1;
+  	let group3Mem2;
+  	let group3Mem3;
+  	let numPendingNodes
+  	let numPendingGroups
+  	let workingGroupIdsLength
+	  let expiredWorkingGroupIdsLength
+  	let tx
+	  let tx2
+  	let tx3
     return DOSProxyMock.new()
 		.then(async (instance) => {
         		dosproxy = instance;
@@ -122,36 +119,33 @@ contract("DOSProxy Test", async accounts => {
 			numPendingGroups = await dosproxy.numPendingGroups.call();
 			workingGroupIdsLength = await dosproxy.workingGroupIdsLength.call()
 			expiredWorkingGroupIdsLength = await dosproxy.expiredWorkingGroupIdsLength.call()
-			console.log("numPendingNodes : ",numPendingNodes.toNumber())
-			console.log("numPendingGroups : ",numPendingGroups.toNumber())
-			console.log("workingGroupIdsLength : ",workingGroupIdsLength.toNumber())
-			console.log("expiredWorkingGroupIdsLength : ",expiredWorkingGroupIdsLength.toNumber())
+//			console.log("numPendingNodes : ",numPendingNodes.toNumber())
+//			console.log("numPendingGroups : ",numPendingGroups.toNumber())
+//			console.log("workingGroupIdsLength : ",workingGroupIdsLength.toNumber())
+//			console.log("expiredWorkingGroupIdsLength : ",expiredWorkingGroupIdsLength.toNumber())
 		});	
 	});
 	it("test unregister node from workingGroup", () => {
     let dosproxy;
-	let group1
-	let group2
-	let group3
-	let groupid1;
-	let groupid2;
-	let groupid3;
-	let group1Mem1;
-	let group1Mem2;
-	let group1Mem3;
-	let group2Mem1;
-	let group2Mem2;
-	let group2Mem3;	
-	let group3Mem1;
-	let group3Mem2;
-	let group3Mem3;	
-	let numPendingNodes
-	let numPendingGroups
-	let workingGroupIdsLength
-	let expiredWorkingGroupIdsLength
-	let tx
-	let tx2
-	let tx3
+  	let groupid1;
+  	let groupid2;
+  	let groupid3;
+  	let group1Mem1;
+  	let group1Mem2;
+  	let group1Mem3;
+  	let group2Mem1;
+  	let group2Mem2;
+  	let group2Mem3;
+  	let group3Mem1;
+  	let group3Mem2;
+  	let group3Mem3;
+  	let numPendingNodes
+  	let numPendingGroups
+  	let workingGroupIdsLength
+  	let expiredWorkingGroupIdsLength
+  	let tx
+  	let tx2
+	  let tx3
     return DOSProxyMock.new()
 		.then(async (instance) => {
         		dosproxy = instance;
@@ -246,13 +240,6 @@ contract("DOSProxy Test", async accounts => {
 			numPendingGroups = await dosproxy.numPendingGroups.call();
 			workingGroupIdsLength = await dosproxy.workingGroupIdsLength.call()
 			expiredWorkingGroupIdsLength = await dosproxy.expiredWorkingGroupIdsLength.call()
-			group1 = await dosproxy.workingGroups.call(groupid1)
-			group2 = await dosproxy.workingGroups.call(groupid2)
-			group3 = await dosproxy.workingGroups.call(groupid3)
-			console.log(group1)
-			console.log(group2)
-			console.log(group3)
-			
 			assert.equal(numPendingNodes.toNumber(), 1,
 					"After registerGroupPubKey, numPendingNodes should be 1");
 			assert.equal(numPendingGroups.toNumber(), 0,
@@ -289,21 +276,14 @@ contract("DOSProxy Test", async accounts => {
 			return tx
 		})
 		.then(async (res) => {
-			group1 = await dosproxy.workingGroups.call(groupid1)
-			group2 = await dosproxy.workingGroups.call(groupid2)
-			group3 = await dosproxy.workingGroups.call(groupid3)
-			console.log(group1)
-			console.log(group2)
-			console.log(group3)
-
 			numPendingNodes = await dosproxy.numPendingNodes.call();
 			numPendingGroups = await dosproxy.numPendingGroups.call();
 			workingGroupIdsLength = await dosproxy.workingGroupIdsLength.call()
 			expiredWorkingGroupIdsLength = await dosproxy.expiredWorkingGroupIdsLength.call()
-			console.log("numPendingNodes : ",numPendingNodes.toNumber())
-			console.log("numPendingGroups : ",numPendingGroups.toNumber())
-			console.log("workingGroupIdsLength : ",workingGroupIdsLength.toNumber())
-			console.log("expiredWorkingGroupIdsLength : ",expiredWorkingGroupIdsLength.toNumber())
+//			console.log("numPendingNodes : ",numPendingNodes.toNumber())
+//			console.log("numPendingGroups : ",numPendingGroups.toNumber())
+//			console.log("workingGroupIdsLength : ",workingGroupIdsLength.toNumber())
+//			console.log("expiredWorkingGroupIdsLength : ",expiredWorkingGroupIdsLength.toNumber())
 		});	
 	});
 })

@@ -1,6 +1,6 @@
 pragma solidity ^0.5.0;
 
-// Comment out utils library if you don't need it to save gas. (L4 and L17)
+// Comment out utils library if you don't need it to save gas. (L4 and L30)
 // import "./lib/utils.sol";
 import "./Ownable.sol";
 
@@ -44,8 +44,8 @@ contract DOSOnChainSDK is Ownable {
         _;
     }
 
-    // @dev: call setup function and transfer DOS tokens into deployed contract as oracle fees.
-    function setup() public onlyOwner {
+    // @dev: call setup function first and transfer DOS tokens into deployed contract as oracle fees.
+    function DOSSetup() public onlyOwner {
         address paymentAddr = dosAddrBridge.getPaymentAddress();
         address defaultToken = DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
         ERC20I(defaultToken).approve(paymentAddr, uint(-1));
@@ -53,7 +53,7 @@ contract DOSOnChainSDK is Ownable {
     }
 
     // @dev: refund all unused fees to caller.
-    function refund() public onlyOwner {
+    function DOSRefund() public onlyOwner {
         address token = DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
         uint amount = ERC20I(token).balanceOf(address(this));
         ERC20I(token).transfer(msg.sender, amount);
