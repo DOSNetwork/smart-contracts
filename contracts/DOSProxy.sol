@@ -457,8 +457,7 @@ contract DOSProxy is Ownable {
             // Starts with '$': response format is parsed as json.
             // Starts with '/': response format is parsed as xml/html.
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
-                uint queryId = uint(keccak256(abi.encodePacked(
-                    ++requestIdSeed, from, timeout, dataSource, selector)));
+                uint queryId = uint(keccak256(abi.encode(++requestIdSeed, from, timeout, dataSource, selector)));
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 // TODO: keep id receipt and handle later in v2.0.
                 if (idx == UINTMAX) {
@@ -493,8 +492,7 @@ contract DOSProxy is Ownable {
         public
         returns (uint)
     {
-        uint requestId = uint(keccak256(abi.encodePacked(
-            ++requestIdSeed, from, userSeed)));
+        uint requestId = uint(keccak256(abi.encode(++requestIdSeed, from, userSeed)));
         uint idx = dispatchJob(TrafficType.UserRandom, requestId);
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
