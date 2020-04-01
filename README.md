@@ -8,9 +8,20 @@
 ### Compile:
 - `$ truffle compile`
 
-### Deploy:
+### Deploy to local development network:
 - `$ ganache-cli`
 - `$ truffle migrate --reset`
+
+
+### Deploy to rinkeby testnet:
+- `$ truffle compile --all`
+- `$ truffle migrate --network rinkeby`
+
+
+### Deploy to mainnet:
+- `$ truffle compile --all`
+- `$ truffle migrate --network live`
+
 
 ### Test:
 - `$ ganache-cli -a 20`; // Config more than 10 test accounts 
