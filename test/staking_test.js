@@ -23,7 +23,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -99,7 +100,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     bridge.setProxyAddress(accounts[0]);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       ttk.address,
@@ -132,7 +134,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -175,7 +178,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -232,7 +236,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -282,7 +287,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -327,7 +333,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -385,7 +392,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -472,7 +480,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+    await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -595,7 +604,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+     await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -684,7 +694,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+     await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
@@ -779,7 +790,8 @@ contract("Staking", async accounts => {
     let ttk = await Ttk.new();
     let bridge = await Bridge.new();
     await bridge.setProxyAddress(proxyAddr);
-    let staking = await Staking.new(
+    let staking = await Staking.new();
+     await staking.initialize(
       ttk.address,
       ttk.address,
       stakingRewardsVault,
