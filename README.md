@@ -15,12 +15,12 @@
 
 ### Deploy to rinkeby testnet:
 - `$ truffle compile --all`
-- `$ truffle migrate --network rinkeby`
+- `$ truffle migrate --reset --network rinkeby`
 
 
 ### Deploy to mainnet:
 - `$ truffle compile --all`
-- `$ truffle migrate --network live`
+- `$ truffle migrate --reset --network live`
 
 
 ### Test:

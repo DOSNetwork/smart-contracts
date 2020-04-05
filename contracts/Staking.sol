@@ -97,12 +97,13 @@ contract Staking is Ownable {
     event Unbond(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dropburnAmount);
     event ClaimReward(address indexed to, bool nodeRunner, uint amount);
 
-    constructor(address _dostoken, address _dbtoken, address _vault, address _bridgeAddr) public {
-        initBlkN = block.number;
+    function initialize(address _dostoken, address _dbtoken, address _vault, address _bridgeAddr) public {
+        require(initBlkN == 0, "Already initialized");
         DOSTOKEN = _dostoken;
         DBTOKEN = _dbtoken;
         stakingRewardsVault = _vault;
         bridgeAddr = _bridgeAddr;
+        initBlkN = block.number;
     }
 
     /// @dev used when drop burn max quota duration is changed
