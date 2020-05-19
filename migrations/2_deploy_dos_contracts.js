@@ -34,10 +34,8 @@ module.exports = function(deployer, network, accounts) {
       await deployer.deploy(DOSProxy, DOSAddressBridge.address, RewardsVaultRinkeby, DOSTokenRinkeby);
       await bridgeInstance.setProxyAddress(DOSProxy.address);
 
-      await deployer.deploy(Staking);
-      // This is not compulsory as the implementation can be initialized with dummy values.
-      let StakingImpl = await Staking.deployed();
-      await StakingImpl.initialize(DOSTokenRinkeby, DBTokenRinkeby, RewardsVaultRinkeby, DOSAddressBridge.address);
+      await deployer.deploy(Staking, DOSTokenRinkeby, DBTokenRinkeby, RewardsVaultRinkeby, DOSAddressBridge.address);
+
       await deployer.deploy(StakingGateway, Staking.address);
       await bridgeInstance.setStakingAddress(StakingGateway.address);
       let StakingProxy = await StakingGateway.deployed();
@@ -58,10 +56,8 @@ module.exports = function(deployer, network, accounts) {
       await deployer.deploy(DOSProxy, DOSAddressBridge.address, RewardsVaultMainnet, DOSTokenMainnet);
       await bridgeInstance.setProxyAddress(DOSProxy.address);
 
-      await deployer.deploy(Staking);
-      // This is not compulsory as the implementation can be initialized with dummy values.
-      let StakingImpl = await Staking.deployed();
-      await StakingImpl.initialize(DOSTokenMainnet, DBTokenMainnet, RewardsVaultMainnet, DOSAddressBridge.address);
+      await deployer.deploy(Staking, DOSTokenMainnet, DBTokenMainnet, RewardsVaultMainnet, DOSAddressBridge.address);
+
       await deployer.deploy(StakingGateway, Staking.address);
       await bridgeInstance.setStakingAddress(StakingGateway.address);
       let StakingProxy = await StakingGateway.deployed();

@@ -1,6 +1,5 @@
 pragma solidity ^0.5.0;
 
-import "./Ownable.sol";
 import "./lib/math.sol";
 
 /**
@@ -20,23 +19,24 @@ contract DOSAddressBridgeInterface {
     function getProxyAddress() public view returns(address);
 }
 
-contract Staking is Ownable {
+contract Staking {
     using DSMath for *;
 
+    uint public constant ONEYEAR = 365 days;
+    uint public constant DOSDECIMAL = 18;
+    uint public constant DBDECIMAL = 0;
+    uint public constant LISTHEAD = 0x1;
     uint public initBlkN;
+    address public admin;
     address public DOSTOKEN;
     address public DBTOKEN ;
     address public stakingRewardsVault;
     address public bridgeAddr;  // DOS address bridge
-    uint public constant ONEYEAR = 365 days;
-    uint public constant DOSDECIMAL = 18;
-    uint public constant DBDECIMAL = 0;
-    uint private constant LISTHEAD = 0x1;
-    uint public minStakePerNode = 100000 * (10 ** DOSDECIMAL);
-    uint public dropburnMaxQuota = 3;
+    uint public minStakePerNode;
+    uint public dropburnMaxQuota;
     uint public totalStakedTokens;
-    uint public circulatingSupply = 335000000 * (10 ** DOSDECIMAL);
-    uint public unbondDuration = 7 days;
+    uint public circulatingSupply;
+    uint public unbondDuration;
     uint public lastRateUpdatedTime;    // in seconds
     uint public accumulatedRewardIndex; // Multiplied by 1e10
 
@@ -87,6 +87,7 @@ contract Staking is Ownable {
     // 1:n token holder address => {delegated node 1 : Delegation, ..., delegated node n : Delegation}
     mapping (address => mapping(address => Delegation)) public delegators;
 
+    event UpdateStakingAdmin(address oldAdmin, address newAdmin);
     event UpdateDropBurnMaxQuota(uint oldQuota, uint newQuota);
     event UpdateUnbondDuration(uint oldDuration, uint newDuration);
     event UpdateCirculatingSupply(uint oldCirculatingSupply, uint newCirculatingSupply);
@@ -97,30 +98,51 @@ contract Staking is Ownable {
     event Unbond(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dropburnAmount);
     event ClaimReward(address indexed to, bool nodeRunner, uint amount);
 
+    constructor(address _dostoken, address _dbtoken, address _vault, address _bridgeAddr) public {
+        initialize(_dostoken, _dbtoken, _vault, _bridgeAddr);
+    }
+
     function initialize(address _dostoken, address _dbtoken, address _vault, address _bridgeAddr) public {
         require(initBlkN == 0, "Already initialized");
+
+        initBlkN = block.number;
+        admin = msg.sender;
         DOSTOKEN = _dostoken;
         DBTOKEN = _dbtoken;
         stakingRewardsVault = _vault;
         bridgeAddr = _bridgeAddr;
-        initBlkN = block.number;
+        minStakePerNode = 100000 * (10 ** DOSDECIMAL);
+        dropburnMaxQuota = 3;
+        circulatingSupply = 335000000 * (10 ** DOSDECIMAL);
+        unbondDuration = 7 days;
+    }
+
+    modifier onlyAdmin {
+        require(msg.sender == admin, "onlyAdmin");
+        _;
+    }
+
+    function setAdmin(address newAdmin) public onlyAdmin {
+        require(newAdmin != address(0));
+        emit UpdateStakingAdmin(admin, newAdmin);
+        admin = newAdmin;
     }
 
     /// @dev used when drop burn max quota duration is changed
-    function setDropBurnMaxQuota(uint _quota) public onlyOwner {
+    function setDropBurnMaxQuota(uint _quota) public onlyAdmin {
         require(_quota != dropburnMaxQuota && _quota < 10, "Valid dropburnMaxQuota within 0 to 9");
         emit UpdateDropBurnMaxQuota(dropburnMaxQuota, _quota);
         dropburnMaxQuota = _quota;
     }
 
     /// @dev used when withdraw duration is changed
-    function setUnbondDuration(uint _duration) public onlyOwner {
+    function setUnbondDuration(uint _duration) public onlyAdmin {
         emit UpdateUnbondDuration(unbondDuration, _duration);
         unbondDuration = _duration;
     }
 
     /// @dev used when locked token is unlocked
-    function setCirculatingSupply(uint _newSupply) public onlyOwner {
+    function setCirculatingSupply(uint _newSupply) public onlyAdmin {
         require(circulatingSupply >= totalStakedTokens,"CirculatingSupply is less than totalStakedTokens");
 
         updateGlobalRewardIndex();
@@ -129,7 +151,7 @@ contract Staking is Ownable {
     }
 
     /// @dev used when minStakePerNode is updated
-    function setMinStakePerNode(uint _minStake) public onlyOwner {
+    function setMinStakePerNode(uint _minStake) public onlyAdmin {
         emit UpdateMinStakePerNode(minStakePerNode, _minStake);
         minStakePerNode = _minStake;
     }
