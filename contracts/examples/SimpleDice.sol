@@ -32,6 +32,13 @@ contract SimpleDice is DOSOnChainSDK {
         _;
     }
 
+    constructor() public {
+        // @dev: setup() and then transfer DOS tokens into deployed contract
+        // as oracle fees.
+        // Unused fees can be reclaimed by calling refund() in the SDK.
+        super.setup();
+    }
+
     function min(uint a, uint b) internal pure returns(uint) {
         return a < b ? a : b;
     }

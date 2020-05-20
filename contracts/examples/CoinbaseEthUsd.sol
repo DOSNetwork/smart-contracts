@@ -18,6 +18,13 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
 
     event GetPrice(uint integral, uint fractional);
 
+    constructor() public {
+        // @dev: setup() and then transfer DOS tokens into deployed contract
+        // as oracle fees.
+        // Unused fees can be reclaimed by calling refund() in the SDK.
+        super.setup();
+    }
+
     function check() public {
         queryId = DOSQuery(30, "https://api.coinbase.com/v2/prices/ETH-USD/spot", "$.data.amount");
     }

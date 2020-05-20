@@ -31,6 +31,8 @@ module.exports = function(deployer, network, accounts) {
       await deployer.deploy(DOSPayment, DOSAddressBridge.address, RewardsVaultRinkeby, DOSTokenRinkeby);
       await bridgeInstance.setPaymentAddress(DOSPayment.address);
 
+      // TODO: guardianFundsAddr calls approve(DOSPayment.address) as part of initialization.
+
       await deployer.deploy(DOSProxy, DOSAddressBridge.address, RewardsVaultRinkeby, DOSTokenRinkeby);
       await bridgeInstance.setProxyAddress(DOSProxy.address);
 
@@ -45,6 +47,8 @@ module.exports = function(deployer, network, accounts) {
       StakingProxy = await Staking.at(StakingGateway.address);
       await StakingProxy.initialize(DOSTokenRinkeby, DBTokenRinkeby, RewardsVaultRinkeby, DOSAddressBridge.address);
 
+      // TODO: stakingRewardsValut calls approve(StakingProxy.address) as part of initialization.
+
       await bridgeInstance.setBootStrapUrl(BootstrapListRinkeby);
     } else if (network == 'live') {
       await deployer.deploy(CommitReveal, DOSAddressBridge.address);
@@ -52,6 +56,8 @@ module.exports = function(deployer, network, accounts) {
 
       await deployer.deploy(DOSPayment, DOSAddressBridge.address, RewardsVaultMainnet, DOSTokenMainnet);
       await bridgeInstance.setPaymentAddress(DOSPayment.address);
+
+      // TODO: guardianFundsAddr calls approve(DOSPayment.address) as part of initialization.
 
       await deployer.deploy(DOSProxy, DOSAddressBridge.address, RewardsVaultMainnet, DOSTokenMainnet);
       await bridgeInstance.setProxyAddress(DOSProxy.address);
@@ -66,6 +72,8 @@ module.exports = function(deployer, network, accounts) {
       // all the calls to the Staking impl.
       StakingProxy = await Staking.at(StakingGateway.address);
       await StakingProxy.initialize(DOSTokenMainnet, DBTokenMainnet, RewardsVaultMainnet, DOSAddressBridge.address);
+
+      // TODO: stakingRewardsValut calls approve(StakingProxy.address) as part of initialization.
 
       await bridgeInstance.setBootStrapUrl(BootstrapListMainnet);
     }

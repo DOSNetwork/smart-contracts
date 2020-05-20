@@ -1,10 +1,9 @@
 pragma solidity ^0.5.0;
 
-import "../Ownable.sol";
 import "../DOSOnChainSDK.sol";
 
 // A user contract asks anything from off-chain world through a url.
-contract AskMeAnything is Ownable, DOSOnChainSDK {
+contract AskMeAnything is DOSOnChainSDK {
     string public response;
     uint public random;
     // query_id -> valid_status
@@ -21,6 +20,13 @@ contract AskMeAnything is Ownable, DOSOnChainSDK {
     event QueryResponseReady(uint queryId, string result);
     event RequestSent(address indexed msgSender, uint8 internalSerial, bool succ, uint requestId);
     event RandomReady(uint requestId, uint generatedRandom);
+
+    constructor() public {
+        // @dev: setup() and then transfer DOS tokens into deployed contract
+        // as oracle fees.
+        // Unused fees can be reclaimed by calling refund() in the SDK.
+        super.setup();
+    }
 
     function setQueryMode(bool newMode) public onlyOwner {
         repeatedCall = newMode;
