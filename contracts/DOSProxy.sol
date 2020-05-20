@@ -335,7 +335,7 @@ contract DOSProxy is Ownable {
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId);
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr, lastRandomness, uint(TrafficType.SystemRandom));
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr, /*requestId=*/lastRandomness, uint(TrafficType.SystemRandom));
     }
 
     function insertToPendingGroupListTail(uint groupId) private {
@@ -613,9 +613,10 @@ contract DOSProxy is Ownable {
             return;
         }
 
+        uint id = lastRandomness;
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(lastRandomness, msg.sender, lastHandledGroup.members);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(id, msg.sender, lastHandledGroup.members);
     }
 
     function cleanUpPendingGroup(uint gid) private {
