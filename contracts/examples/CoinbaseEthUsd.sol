@@ -19,10 +19,10 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
     event GetPrice(uint integral, uint fractional);
 
     constructor() public {
-        // @dev: setup() and then transfer DOS tokens into deployed contract
+        // @dev: setup and then transfer DOS tokens into deployed contract
         // as oracle fees.
-        // Unused fees can be reclaimed by calling refund() in the SDK.
-        super.setup();
+        // Unused fees can be reclaimed by calling DOSRefund() in the SDK.
+        super.DOSSetup();
     }
 
     function check() public {

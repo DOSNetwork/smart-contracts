@@ -22,10 +22,10 @@ contract AskMeAnything is DOSOnChainSDK {
     event RandomReady(uint requestId, uint generatedRandom);
 
     constructor() public {
-        // @dev: setup() and then transfer DOS tokens into deployed contract
+        // @dev: setup and then transfer DOS tokens into deployed contract
         // as oracle fees.
-        // Unused fees can be reclaimed by calling refund() in the SDK.
-        super.setup();
+        // Unused fees can be reclaimed by calling DOSRefund() in the SDK.
+        super.DOSSetup();
     }
 
     function setQueryMode(bool newMode) public onlyOwner {
