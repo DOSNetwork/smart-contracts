@@ -3,7 +3,7 @@ pragma solidity ^0.5.0;
 import "../DOSOnChainSDK.sol";
 
 contract SimpleDice is DOSOnChainSDK {
-    address payable public devAddress = 0xe4E18A49c6F1210FFE9a60dBD38071c6ef78d982;
+    address payable public devAddress;
     uint public devContributed = 0;
     // 1% winning payout goes to developer account
     uint public developCut = 1;
@@ -37,6 +37,9 @@ contract SimpleDice is DOSOnChainSDK {
         // as oracle fees.
         // Unused fees can be reclaimed by calling DOSRefund() in the SDK.
         super.DOSSetup();
+
+        // Convert address to payable address.
+        devAddress = address(uint160(owner()));
     }
 
     function min(uint a, uint b) internal pure returns(uint) {
