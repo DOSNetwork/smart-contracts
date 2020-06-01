@@ -193,6 +193,8 @@ contract Staking {
         nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, false, _desc, nodeDelegators);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
+        // This would change interest rate
+        totalStakedTokens = totalStakedTokens.add(_tokenAmount);
         // Deposit tokens.
         ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _tokenAmount);
         if (_dropburnAmount > 0) {
@@ -213,8 +215,6 @@ contract Staking {
                 Delegation storage delegator = delegators[node.nodeDelegators[i]][_nodeAddr];
                 delegator.accumulatedRewardIndex = accumulatedRewardIndex;
             }
-            // This would change interest rate
-            totalStakedTokens = totalStakedTokens.add(node.selfStakedAmount).add(node.totalOtherDelegatedAmount);
         }
     }
 
@@ -235,8 +235,6 @@ contract Staking {
                 delegator.accumulatedRewardIndex = accumulatedRewardIndex;
             }
             node.running = false;
-            // This would change interest rate
-            totalStakedTokens = totalStakedTokens.sub(node.selfStakedAmount).sub(node.totalOtherDelegatedAmount);
         }
     }
 
@@ -262,9 +260,9 @@ contract Staking {
                 updateGlobalRewardIndex();
                 node.accumulatedRewards = getNodeRewardTokens(_nodeAddr);
                 node.accumulatedRewardIndex = accumulatedRewardIndex;
-                // This would change interest rate
-                totalStakedTokens = totalStakedTokens.add(_newTokenAmount);
             }
+            // This would change interest rate
+            totalStakedTokens = totalStakedTokens.add(_newTokenAmount);
             ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _newTokenAmount);
         }
     }
@@ -288,8 +286,6 @@ contract Staking {
             node.accumulatedRewardIndex = accumulatedRewardIndex;
             delegator.accumulatedRewards = getDelegatorRewardTokens(msg.sender, _nodeAddr);
             delegator.accumulatedRewardIndex = accumulatedRewardIndex;
-            // This would change interest rate
-            totalStakedTokens = totalStakedTokens.add(_tokenAmount);
         }
         delegator.delegatedAmount = delegator.delegatedAmount.add(_tokenAmount);
         if (delegator.delegatedNode == address(0)) {
@@ -297,7 +293,8 @@ contract Staking {
             delegator.delegatedNode = _nodeAddr;
             delegator.releaseTime[LISTHEAD] = LISTHEAD;
         }
-
+        // This would change interest rate
+        totalStakedTokens = totalStakedTokens.add(_tokenAmount);
         ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _tokenAmount);
         emit Delegate(msg.sender, _nodeAddr, _tokenAmount);
     }
@@ -352,9 +349,9 @@ contract Staking {
             updateGlobalRewardIndex();
             node.accumulatedRewards = getNodeRewardTokens(_nodeAddr);
             node.accumulatedRewardIndex = accumulatedRewardIndex;
-            // This would change interest rate
-            totalStakedTokens = totalStakedTokens.sub(_tokenAmount);
         }
+        // This would change interest rate
+        totalStakedTokens = totalStakedTokens.sub(_tokenAmount);
         node.selfStakedAmount = node.selfStakedAmount.sub(_tokenAmount);
         node.pendingWithdrawToken = node.pendingWithdrawToken.add(_tokenAmount);
         node.stakedDB = node.stakedDB.sub(_dropburnAmount);
@@ -383,9 +380,9 @@ contract Staking {
             delegator.accumulatedRewardIndex = accumulatedRewardIndex;
             nodes[_nodeAddr].accumulatedRewards = getNodeRewardTokens(_nodeAddr);
             nodes[_nodeAddr].accumulatedRewardIndex = accumulatedRewardIndex;
-            // This would change interest rate
-            totalStakedTokens = totalStakedTokens.sub(_tokenAmount);
         }
+        // This would change interest rate
+        totalStakedTokens = totalStakedTokens.sub(_tokenAmount);
         delegator.delegatedAmount = delegator.delegatedAmount.sub(_tokenAmount);
         delegator.pendingWithdraw = delegator.pendingWithdraw.add(_tokenAmount);
         nodes[_nodeAddr].totalOtherDelegatedAmount = nodes[_nodeAddr].totalOtherDelegatedAmount.sub(_tokenAmount);

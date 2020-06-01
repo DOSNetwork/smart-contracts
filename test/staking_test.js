@@ -41,14 +41,13 @@ contract("Staking", async accounts => {
       from: nodeStakingAddr
     });
     let apr = await staking.getCurrentAPR();
-    assert.equal(apr, 8000, "After 1 year, delegator balance should be 7200 ");
+    assert.equal(apr, 8000, "After 1 year, delegator balance should be 8000 ");
 
     let total = await staking.totalStakedTokens.call();
-    assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
-
-    await staking.nodeStart(nodeAddr, {
-      from: proxyAddr
-    });
+    assert.equal(
+      total.toString(),
+      100000000000000000000000,
+      "totalStakedTokens should be 100000000000000000000000");
 
     await staking.nodeStart(nodeAddr, {
       from: proxyAddr
@@ -67,15 +66,12 @@ contract("Staking", async accounts => {
     await staking.nodeStop(nodeAddr, {
       from: proxyAddr
     });
-    await staking.nodeStop(nodeAddr, {
-      from: proxyAddr
-    });
-
     total = await staking.totalStakedTokens.call();
-    assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
-    await staking.nodeStart(nodeAddr, {
-      from: proxyAddr
-    });
+    assert.equal(
+      total.toString(),
+      100000000000000000000000,
+      "totalStakedTokens should be 100000000000000000000000 ");
+
     await staking.nodeStart(nodeAddr, {
       from: proxyAddr
     });
@@ -259,7 +255,10 @@ contract("Staking", async accounts => {
       });
     }
     let total = await staking.totalStakedTokens.call();
-    assert.equal(total.toString(), 0, "totalStakedTokens should be 0 ");
+    assert.equal(
+      total.toString(),
+      1000000000000000000000000,
+      "totalStakedTokens should be 1000000000000000000000000");
 
     await staking.nodeStart(nodeAddr, {
       from: proxyAddr
