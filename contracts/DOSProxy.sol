@@ -169,7 +169,7 @@ contract DOSProxy is Ownable {
     event UpdateBootstrapGroups(uint oldSize, uint newSize);
     event UpdateSystemRandomHardLimit(uint oldLimit, uint newLimit);
     event UpdateProxyFund(address oldFundAddr, address newFundAddr, address oldTokenAddr, address newTokenAddr);
-    event GuardianReward(uint indexed blkNum, address indexed guardian);
+    event GuardianReward(uint blkNum, address guardian);
 
     modifier fromValidStakingNode {
         if (enableStaking) {
