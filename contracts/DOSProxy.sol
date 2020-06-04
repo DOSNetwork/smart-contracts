@@ -5,10 +5,6 @@ pragma solidity ^0.5.0;
 import "./lib/BN256.sol";
 import "./Ownable.sol";
 
-contract ERC20I {
-    function approve(address spender, uint value) public returns (bool);
-}
-
 contract UserContractInterface {
     // Query callback.
     function __callback__(uint, bytes calldata) external;
@@ -28,6 +24,7 @@ contract DOSAddressBridgeInterface {
 }
 
 contract DOSPaymentInterface {
+    function hasServiceFee(address, uint) public view returns (bool);
     function chargeServiceFee(address, uint, uint) public;
     function recordServiceFee(uint, address, address[] memory) public;
     function claimGuardianReward(address) public;
@@ -81,13 +78,11 @@ contract DOSProxy is Ownable {
     // avoid looping in a big loop that causing over gas.
     uint public checkExpireLimit = 50;
 
-    // When regrouping, picking @gropToPick working groups, plus one group from pending nodes.
-    uint public bootstrapGroups = 4;
+    // When regrouping, picking @groupToPick working groups, plus one group from pending nodes.
+    uint public bootstrapGroups = 3;
     uint public groupToPick = 2;
-    uint public groupSize = 21;
+    uint public groupSize = 3;
 
-    // decimal 2.
-    uint public groupingThreshold = 130;
     // Bootstrapping related arguments, in blocks.
     uint public bootstrapCommitDuration = 40;
     uint public bootstrapRevealDuration = 40;
@@ -160,7 +155,7 @@ contract DOSProxy is Ownable {
     event LogGroupDissolve(uint groupId);
     event LogRegisteredNewPendingNode(address node);
     event LogUnRegisteredNewPendingNode(address node, uint8 unregisterFrom);
-    event LogGroupingInitiated(uint pendingNodePool, uint groupsize, uint groupingthreshold);
+    event LogGroupingInitiated(uint pendingNodePool, uint groupsize);
     event LogNoPendingGroup(uint groupId);
     event LogPendingGroupRemoved(uint groupId);
     event LogMessage(string info);
@@ -181,6 +176,13 @@ contract DOSProxy is Ownable {
             require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
                     "Invalid staking node");
         }
+        _;
+    }
+
+    modifier hasOracleFee(address from, uint serviceType) {
+        require(
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).hasServiceFee(from, serviceType),
+            "Not enough fee to request oracle");
         _;
     }
 
@@ -449,6 +451,7 @@ contract DOSProxy is Ownable {
         string calldata selector
     )
         external
+        hasOracleFee(from, uint(TrafficType.UserQuery))
         returns (uint)
     {
         if (getCodeSize(from) > 0) {
@@ -490,6 +493,7 @@ contract DOSProxy is Ownable {
     // Request a new user-level random number.
     function requestRandom(address from, uint userSeed)
         public
+        hasOracleFee(from, uint(TrafficType.UserRandom))
         returns (uint)
     {
         uint requestId = uint(keccak256(abi.encode(++requestIdSeed, from, userSeed)));
@@ -702,7 +706,7 @@ contract DOSProxy is Ownable {
         address[] memory candidates = new address[](arrSize);
 
         pick(arrSize, 0, candidates);
-        shuffle(candidates, rndSeed);
+        shuffle(candidates, lastRandomness);
         regroup(candidates, arrSize / groupSize);
         emit GuardianReward(block.number, msg.sender);
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
@@ -821,7 +825,7 @@ contract DOSProxy is Ownable {
         // Clean up oldest expiredWorkingGroup and push back nodes to pendingNodeList if:
         // 1. There's not enough pending nodes to form a group;
         // 2. There's no working group and not enough pending nodes to restart bootstrap.
-        if (numPendingNodes < groupSize * groupingThreshold / 100 ||
+        if (numPendingNodes < groupSize ||
             (workingGroupIds.length == 0 && numPendingNodes < bootstrapStartThreshold)) {
             if (expiredWorkingGroupIds.length > 0) {
                 dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
@@ -830,7 +834,7 @@ contract DOSProxy is Ownable {
             }
         }
 
-        if (numPendingNodes < groupSize * groupingThreshold / 100) {
+        if (numPendingNodes < groupSize) {
             emit LogInsufficientPendingNode(numPendingNodes);
             return false;
         }
@@ -838,7 +842,7 @@ contract DOSProxy is Ownable {
         if (workingGroupIds.length > 0) {
             if (expiredWorkingGroupIds.length >= groupToPick) {
                 requestRandom(address(this), block.number);
-                emit LogGroupingInitiated(numPendingNodes, groupSize, groupingThreshold);
+                emit LogGroupingInitiated(numPendingNodes, groupSize);
                 return true;
             } else {
                 // TODO: Do small bootstrap in this condition?
@@ -864,10 +868,8 @@ contract DOSProxy is Ownable {
     // callback to handle re-grouping using generated random number as random seed.
     function __callback__(uint requestId, uint rndSeed) external {
         require(msg.sender == address(this), "Unauthenticated response");
-        require(expiredWorkingGroupIds.length >= groupToPick,
-                "No enough expired working group");
-        require(numPendingNodes >= groupSize * groupingThreshold / 100,
-                "Not enough newly registered nodes");
+        require(expiredWorkingGroupIds.length >= groupToPick, "No enough expired working group");
+        require(numPendingNodes >= groupSize, "Not enough newly registered nodes");
 
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);

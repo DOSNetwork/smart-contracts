@@ -122,6 +122,14 @@ contract DOSPayment is Ownable {
         guardianFundsTokenAddr = tokenAddr;
     }
 
+    function hasServiceFee(address payer, uint serviceType) public view returns (bool) {
+        if (payer == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress()) return true;
+        address tokenAddr = paymentMethods[payer];
+        // Get fee by tokenAddr and serviceType
+        uint fee = feeLists[tokenAddr].serviceFee[serviceType];
+        return ERC20I(tokenAddr).balanceOf(payer) >= fee;
+    }
+
     function chargeServiceFee(address payer, uint requestID, uint serviceType) public onlyFromProxy {
         address tokenAddr = paymentMethods[payer];
         // Get fee by tokenAddr and serviceType
