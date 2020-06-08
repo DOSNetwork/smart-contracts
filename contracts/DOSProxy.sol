@@ -118,7 +118,7 @@ contract DOSProxy is Ownable {
 
     // groupId => PendingGroup
     mapping(uint => PendingGroup) public pendingGroups;
-    uint public pendingGroupMaxLife = 10;  // in blocks
+    uint public pendingGroupMaxLife = 20;  // in blocks
 
     // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
     mapping(uint => uint) public pendingGroupList;
