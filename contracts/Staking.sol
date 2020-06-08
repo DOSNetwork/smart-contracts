@@ -103,7 +103,7 @@ contract Staking {
     }
 
     function initialize(address _dostoken, address _dbtoken, address _vault, address _bridgeAddr) public {
-        require(initBlkN == 0, "Already initialized");
+        require(initBlkN == 0, "already-initialized");
 
         initBlkN = block.number;
         admin = msg.sender;
@@ -130,7 +130,7 @@ contract Staking {
 
     /// @dev used when drop burn max quota duration is changed
     function setDropBurnMaxQuota(uint _quota) public onlyAdmin {
-        require(_quota != dropburnMaxQuota && _quota < 10, "Valid dropburnMaxQuota within 0 to 9");
+        require(_quota != dropburnMaxQuota && _quota < 10, "valid-dropburnMaxQuota-0-to-9");
         emit UpdateDropBurnMaxQuota(dropburnMaxQuota, _quota);
         dropburnMaxQuota = _quota;
     }
@@ -143,7 +143,7 @@ contract Staking {
 
     /// @dev used when locked token is unlocked
     function setCirculatingSupply(uint _newSupply) public onlyAdmin {
-        require(circulatingSupply >= totalStakedTokens,"CirculatingSupply is less than totalStakedTokens");
+        require(circulatingSupply >= totalStakedTokens,"CirculatingSupply < totalStakedTokens");
 
         updateGlobalRewardIndex();
         emit UpdateCirculatingSupply(circulatingSupply, _newSupply);
@@ -161,14 +161,14 @@ contract Staking {
     }
 
     modifier checkStakingValidity(uint _tokenAmount, uint _dropburnAmount, uint _rewardCut) {
-        require(0 <= _rewardCut && _rewardCut < 100, "Not valid reward cut percentage");
+        require(0 <= _rewardCut && _rewardCut < 100, "not-valid-rewardCut-in-0-to-99");
         require(_tokenAmount >= minStakePerNode.mul(10.sub(DSMath.min(_dropburnAmount, dropburnMaxQuota))).div(10),
-                "Not enough dos token to start a node");
+                "not-enough-dos-token-to-start-node");
         _;
     }
 
     modifier onlyFromProxy() {
-        require(msg.sender == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress(), "Not from proxy contract");
+        require(msg.sender == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress(), "not-from-dos-proxy");
         _;
     }
 
@@ -185,8 +185,8 @@ contract Staking {
     function newNode(address _nodeAddr, uint _tokenAmount, uint _dropburnAmount, uint _rewardCut, string memory _desc)
         public checkStakingValidity(_tokenAmount, _dropburnAmount, _rewardCut)
     {
-        require(!nodeRunners[msg.sender][_nodeAddr], "Node is already registered");
-        require(nodes[_nodeAddr].ownerAddr == address(0),"Node is already registered");
+        require(!nodeRunners[msg.sender][_nodeAddr], "node-already-registered");
+        require(nodes[_nodeAddr].ownerAddr == address(0), "node-already-registered");
 
         nodeRunners[msg.sender][_nodeAddr] = true;
         address[] memory nodeDelegators;
@@ -204,7 +204,7 @@ contract Staking {
     }
 
     function nodeStart(address _nodeAddr) public onlyFromProxy {
-        require(nodes[_nodeAddr].ownerAddr != address(0), "Node is not registered");
+        require(nodes[_nodeAddr].ownerAddr != address(0), "node-not-registered");
         Node storage node = nodes[_nodeAddr];
         if (!node.running) {
             node.running = true;
@@ -219,7 +219,7 @@ contract Staking {
     }
 
     function nodeStop(address _nodeAddr) public onlyFromProxy {
-        require(nodes[_nodeAddr].ownerAddr != address(0),"Node is not registered");
+        require(nodes[_nodeAddr].ownerAddr != address(0), "node-not-registered");
         nodeStopInternal(_nodeAddr);
     }
 
@@ -240,12 +240,12 @@ contract Staking {
 
     // For node runners to configure new staking settings.
     function updateNodeStaking(address _nodeAddr, uint _newTokenAmount, uint _newDropburnAmount, uint _newCut) public {
-        require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
+        require(nodeRunners[msg.sender][_nodeAddr], "node-not-owned-by-msgSender");
 
         Node storage node = nodes[_nodeAddr];
         // _newCut with value uint(-1) means skipping this config.
         if (_newCut != uint(-1)) {
-            require(_newCut >= 0 && _newCut < 100, "Not valid reward cut percentage");
+            require(_newCut >= 0 && _newCut < 100, "not-valid-rewardCut-in-0-to-99");
             // TODO: Update rewardCut affects delegators' reward calculation.
             node.rewardCut = _newCut;
         }
@@ -271,11 +271,11 @@ contract Staking {
     // Note: Re-delegate is not supported.
     function delegate(uint _tokenAmount, address _nodeAddr) public {
         Node storage node = nodes[_nodeAddr];
-        require(node.ownerAddr != address(0), "Node doesn't exist");
-        require(msg.sender != node.ownerAddr, "Node owner cannot self-delegate");
+        require(node.ownerAddr != address(0), "node-not-exist");
+        require(msg.sender != node.ownerAddr, "node-owner-cannot-self-delegate");
 
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
-        require(delegator.delegatedNode == address(0) || delegator.delegatedNode == _nodeAddr, "Invalid delegated node address");
+        require(delegator.delegatedNode == address(0) || delegator.delegatedNode == _nodeAddr, "invalid-delegated-node-addr");
 
         node.nodeDelegators.push(msg.sender);
         node.totalOtherDelegatedAmount = node.totalOtherDelegatedAmount.add(_tokenAmount);
@@ -300,7 +300,7 @@ contract Staking {
     }
 
     function nodeUnregister(address _nodeAddr) public {
-        require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
+        require(nodeRunners[msg.sender][_nodeAddr], "node-not-owned-by-msgSender");
         Node storage node = nodes[_nodeAddr];
         nodeStopInternal(_nodeAddr);
         nodeUnbondInternal(node.selfStakedAmount, node.stakedDB, _nodeAddr);
@@ -330,20 +330,20 @@ contract Staking {
     // Used by node runners to unbond their stakes.
     // Unbonded tokens are locked for 7 days, during the unbonding period they're not eligible for staking rewards.
     function nodeUnbond(uint _tokenAmount, uint _dropburnAmount, address _nodeAddr) public {
-        require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
+        require(nodeRunners[msg.sender][_nodeAddr], "node-not-owned-by-msgSender");
         Node storage node = nodes[_nodeAddr];
 
-        require(_tokenAmount <= node.selfStakedAmount, "Invalid request to unbond more than staked token");
-        require(_dropburnAmount <= node.stakedDB, "Invalid request to unbond more than staked DropBurn token");
+        require(_tokenAmount <= node.selfStakedAmount, "invalid-to-unbond-more-than-staked-amount");
+        require(_dropburnAmount <= node.stakedDB, "invalid-to-unbond-more-than-staked-DropBurn-amount");
         require(node.selfStakedAmount.sub(_tokenAmount) >=
                 minStakePerNode.mul(10.sub(DSMath.min(node.stakedDB.sub(_dropburnAmount), dropburnMaxQuota))).div(10),
-                "Invalid unbond request to maintain node staking requirement");
+                "invalid-unbond-to-maintain-staking-requirement");
         nodeUnbondInternal(_tokenAmount, _dropburnAmount, _nodeAddr);
     }
     // Used by node runners to unbond their stakes.
     // Unbonded tokens are locked for 7 days, during the unbonding period they're not eligible for staking rewards.
     function nodeUnbondInternal(uint _tokenAmount, uint _dropburnAmount, address _nodeAddr) internal {
-        require(nodeRunners[msg.sender][_nodeAddr], "Node is not owned by msg.sender");
+        require(nodeRunners[msg.sender][_nodeAddr], "node-not-owned-by-msgSender");
         Node storage node = nodes[_nodeAddr];
         if (node.running) {
             updateGlobalRewardIndex();
@@ -371,9 +371,9 @@ contract Staking {
     // Used by token holders (delegators) to unbond their delegations.
     function delegatorUnbond(uint _tokenAmount, address _nodeAddr) public {
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
-        require(nodes[_nodeAddr].ownerAddr != address(0), "Node doesn't exist");
-        require(delegator.delegatedNode == _nodeAddr, "Cannot unbond from non-delegated node");
-        require(_tokenAmount <= delegator.delegatedAmount, "Cannot unbond more than delegated token");
+        require(nodes[_nodeAddr].ownerAddr != address(0), "node-not-exist");
+        require(delegator.delegatedNode == _nodeAddr, "invalid-unbond-from-non-delegated-node");
+        require(_tokenAmount <= delegator.delegatedAmount, "invalid-unbond-more-than-delegated-amount");
         if (nodes[_nodeAddr].running) {
             updateGlobalRewardIndex();
             delegator.accumulatedRewards = getDelegatorRewardTokens(msg.sender, _nodeAddr);
@@ -453,7 +453,7 @@ contract Staking {
     // Node runners call this function to withdraw available unbonded tokens after unbond period.
     function nodeWithdraw(address _nodeAddr) public {
         Node storage node = nodes[_nodeAddr];
-        require(node.ownerAddr == msg.sender, "msg.sender is not authorized to withdraw from node");
+        require(node.ownerAddr == msg.sender, "non-owner-not-authorized-to-withdraw");
 
         (uint tokenAmount, uint dropburnAmount) = withdrawAll(node.releaseTime, node.unbondRequests);
         node.pendingWithdrawToken = node.pendingWithdrawToken.sub(tokenAmount);
@@ -473,8 +473,8 @@ contract Staking {
     // Delegators call this function to withdraw available unbonded tokens from a specific node after unbond period.
     function delegatorWithdraw(address _nodeAddr) public {
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
-        require(nodes[_nodeAddr].ownerAddr != address(0), "Node doesn't exist");
-        require(delegator.delegatedNode == _nodeAddr, "Cannot withdraw from non-delegated node");
+        require(nodes[_nodeAddr].ownerAddr != address(0), "node-not-exist");
+        require(delegator.delegatedNode == _nodeAddr, "cannot-withdraw-from-non-delegated-node");
 
         (uint tokenAmount, ) = withdrawAll(delegator.releaseTime, delegator.unbondRequests);
         if (tokenAmount > 0) {
@@ -515,7 +515,7 @@ contract Staking {
 
     function nodeClaimReward(address _nodeAddr) public {
         Node storage node = nodes[_nodeAddr];
-        require(node.ownerAddr == msg.sender, "msg.sender is not authorized to claim from node");
+        require(node.ownerAddr == msg.sender, "non-owner-not-authorized-to-claim");
         updateGlobalRewardIndex();
         uint claimedReward = getNodeRewardTokens(_nodeAddr);
         node.accumulatedRewards = 0;
@@ -528,8 +528,8 @@ contract Staking {
 
     function delegatorClaimReward(address _nodeAddr) public {
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
-        require(nodes[_nodeAddr].ownerAddr != address(0), "Node doesn't exist");
-        require(delegator.delegatedNode == _nodeAddr, "Cannot claim from non-delegated node");
+        require(nodes[_nodeAddr].ownerAddr != address(0), "node-not-exist");
+        require(delegator.delegatedNode == _nodeAddr, "cannot-claim-from-non-delegated-node");
         updateGlobalRewardIndex();
         uint claimedReward = getDelegatorRewardTokens(msg.sender, _nodeAddr);
 

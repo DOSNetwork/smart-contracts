@@ -87,8 +87,8 @@ contract DOSProxy is Ownable {
     uint public bootstrapCommitDuration = 40;
     uint public bootstrapRevealDuration = 40;
     uint public bootstrapStartThreshold = groupSize * bootstrapGroups;
-    uint public bootstrapRound = 0;
-    uint public bootstrapEndBlk = 0;
+    uint public bootstrapRound;
+    uint public bootstrapEndBlk;
 
     DOSAddressBridgeInterface public addressBridge;
     address public proxyFundsAddr;
@@ -123,7 +123,7 @@ contract DOSProxy is Ownable {
     // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
     mapping(uint => uint) public pendingGroupList;
     uint public pendingGroupTail;
-    uint public numPendingGroups = 0;
+    uint public numPendingGroups;
 
     uint public lastUpdatedBlock;
     uint public lastRandomness;
@@ -172,19 +172,19 @@ contract DOSProxy is Ownable {
 
     modifier fromValidStakingNode {
         require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
-                "Invalid staking node");
+                "invalid-staking-node");
         _;
     }
 
     modifier hasOracleFee(address from, uint serviceType) {
         require(
             DOSPaymentInterface(addressBridge.getPaymentAddress()).hasServiceFee(from, serviceType),
-            "Not enough fee to request oracle");
+            "not-enough-fee-to-oracle");
         _;
     }
 
     modifier onlyGuardianListed {
-        require(guardianListed[msg.sender], "Not whitelisted guardian!");
+        require(guardianListed[msg.sender], "not-guardian");
         _;
     }
 
@@ -237,8 +237,8 @@ contract DOSProxy is Ownable {
     }
 
     function setProxyFund(address newFund, address newFundToken) public onlyOwner {
-        require(newFund != proxyFundsAddr && newFund != address(0x0), "Not a valid parameter");
-        require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0), "Not a valid parameter");
+        require(newFund != proxyFundsAddr && newFund != address(0x0), "not-valid-parameter");
+        require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0), "not-valid-parameter");
         emit UpdateProxyFund(proxyFundsAddr, newFund, proxyFundsTokenAddr, newFundToken);
         proxyFundsAddr = newFund;
         proxyFundsTokenAddr = newFundToken;
@@ -247,37 +247,37 @@ contract DOSProxy is Ownable {
 
     // groupSize must be an odd number.
     function setGroupSize(uint newSize) public onlyOwner {
-        require(newSize != groupSize && newSize % 2 != 0,"Not a valid parameter");
+        require(newSize != groupSize && newSize % 2 != 0, "not-valid-parameter");
         emit UpdateGroupSize(groupSize, newSize);
         groupSize = newSize;
     }
 
     function setBootstrapStartThreshold(uint newThreshold) public onlyOwner {
-        require(newThreshold != bootstrapStartThreshold,"Not a valid parameter");
+        require(newThreshold != bootstrapStartThreshold, "not-valid-parameter");
         emit UpdatebootstrapStartThreshold(bootstrapStartThreshold, newThreshold);
         bootstrapStartThreshold = newThreshold;
     }
 
     function setGroupMaturityPeriod(uint newPeriod) public onlyOwner {
-        require(newPeriod != groupMaturityPeriod && newPeriod != 0,"Not a valid parameter");
+        require(newPeriod != groupMaturityPeriod && newPeriod != 0, "not-valid-parameter");
         emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
         groupMaturityPeriod = newPeriod;
     }
 
     function setLifeDiversity(uint newDiversity) public onlyOwner {
-        require(newDiversity != lifeDiversity && newDiversity != 0,"Not a valid parameter");
+        require(newDiversity != lifeDiversity && newDiversity != 0, "not-valid-parameter");
         emit UpdateLifeDiversity(lifeDiversity, newDiversity);
         lifeDiversity = newDiversity;
     }
 
     function setPendingGroupMaxLife(uint newLife) public onlyOwner {
-        require(newLife != pendingGroupMaxLife && newLife != 0,"Not a valid parameter");
+        require(newLife != pendingGroupMaxLife && newLife != 0, "not-valid-parameter");
         emit UpdatePendingGroupMaxLife(pendingGroupMaxLife, newLife);
         pendingGroupMaxLife = newLife;
     }
 
     function setSystemRandomHardLimit(uint newLimit) public onlyOwner {
-        require(newLimit != refreshSystemRandomHardLimit && newLimit != 0,"Not a valid parameter");
+        require(newLimit != refreshSystemRandomHardLimit && newLimit != 0, "not-valid-parameter");
         emit UpdateSystemRandomHardLimit(refreshSystemRandomHardLimit, newLimit);
         refreshSystemRandomHardLimit = newLimit;
     }
@@ -321,7 +321,7 @@ contract DOSProxy is Ownable {
         uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
-            emit LogMessage("No live working group, trigger bootstrap");
+            emit LogMessage("no-live-wgrp,try-bootstrap");
             return;
         }
 
@@ -456,7 +456,7 @@ contract DOSProxy is Ownable {
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 // TODO: keep id receipt and handle later in v2.0.
                 if (idx == UINTMAX) {
-                    emit LogMessage("No live working group, skipped query");
+                    emit LogMessage("skipped-user-query-no-live-wgrp");
                     return 0;
                 }
                 Group storage grp = workingGroups[workingGroupIds[idx]];
@@ -492,7 +492,7 @@ contract DOSProxy is Ownable {
         uint idx = dispatchJob(TrafficType.UserRandom, requestId);
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
-            emit LogMessage("No live working group, skipped random request");
+            emit LogMessage("skipped-user-rnd-no-live-wgrp");
             return 0;
         }
         Group storage grp = workingGroups[workingGroupIds[idx]];
@@ -524,10 +524,7 @@ contract DOSProxy is Ownable {
         private
         returns (bool)
     {
-        // Validation
-        // TODO
-        // 1. Check msg.sender is a member in Group(grpPubKey).
-        // Clients actually signs (data || addr(selected_submitter)).
+        // Validation. Clients actually signs (data || addr(selected_submitter)).
         bytes memory message = abi.encodePacked(data, msg.sender);
 
         // Verification
@@ -586,7 +583,7 @@ contract DOSProxy is Ownable {
             UserContractInterface(ucAddr).__callback__(
                 requestId, uint(keccak256(abi.encodePacked(sig[0], sig[1]))));
         } else {
-            revert("Unsupported traffic type");
+            revert("unsupported-traffic-type");
         }
         Group memory grp = workingGroups[PendingRequests[requestId].groupId];
         DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(requestId, msg.sender, grp.members);
@@ -644,7 +641,7 @@ contract DOSProxy is Ownable {
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
     function signalRandom() public {
         if (lastUpdatedBlock + refreshSystemRandomHardLimit > block.number) {
-            emit LogMessage("SystemRandom not expired yet");
+            emit LogMessage("sys-random-not-expired");
             return;
         }
 
@@ -662,7 +659,7 @@ contract DOSProxy is Ownable {
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
-            emit LogMessage("No expired pending group to clean up");
+            emit LogMessage("no-expired-pgrp-to-clean");
         }
     }
     /// @dev Guardian signals to trigger group formation when there're enough pending nodes.
@@ -672,18 +669,18 @@ contract DOSProxy is Ownable {
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
-            emit LogMessage("No group formation");
+            emit LogMessage("no-grp-formation");
         }
     }
     function signalBootstrap(uint _cid) public {
-        require(bootstrapRound == _cid, "Not in bootstrap phase");
+        require(bootstrapRound == _cid, "not-in-bootstrap");
 
         if (block.number <= bootstrapEndBlk) {
-            emit LogMessage("Waiting to collect more entropy");
+            emit LogMessage("wait-to-collect-more-entropy");
             return;
         }
         if (numPendingNodes < bootstrapStartThreshold) {
-            emit LogMessage("Not enough nodes to bootstrap");
+            emit LogMessage("not-enough-p-node-to-bootstrap");
             return;
         }
         // Reset.
@@ -691,7 +688,7 @@ contract DOSProxy is Ownable {
         bootstrapEndBlk = 0;
         uint rndSeed = CommitRevealInterface(addressBridge.getCommitRevealAddress()).getRandom(_cid);
         if (rndSeed == 0) {
-            emit LogMessage("CommitReveal failure, bootstrapRound reset");
+            emit LogMessage("bootstrap-commit-reveal-failure");
             return;
         }
         lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, rndSeed)));
@@ -713,7 +710,7 @@ contract DOSProxy is Ownable {
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
-            emit LogMessage("Nothing to unregister");
+            emit LogMessage("nothing-to-unregister");
         }
     }
     /// End of Guardian functions
@@ -838,7 +835,7 @@ contract DOSProxy is Ownable {
                 return true;
             } else {
                 // TODO: Do small bootstrap in this condition?
-                emit LogMessage("Skipped group formation, not enough expired working group.");
+                emit LogMessage("skipped-formation-not-enough-expired-wgrp");
             }
         } else if (numPendingNodes >= bootstrapStartThreshold) { // No working group alive and satisfies system re-bootstrap condition.
             if (bootstrapRound == 0) {
@@ -851,7 +848,7 @@ contract DOSProxy is Ownable {
                 bootstrapEndBlk = block.number + bootstrapCommitDuration + bootstrapRevealDuration;
                 return true;
             } else {
-                emit LogMessage("Already in bootstrap phase");
+                emit LogMessage("already-in-bootstrap");
             }
         }
         return false;
@@ -859,9 +856,9 @@ contract DOSProxy is Ownable {
 
     // callback to handle re-grouping using generated random number as random seed.
     function __callback__(uint requestId, uint rndSeed) external {
-        require(msg.sender == address(this), "Unauthenticated response");
-        require(expiredWorkingGroupIds.length >= groupToPick, "No enough expired working group");
-        require(numPendingNodes >= groupSize, "Not enough newly registered nodes");
+        require(msg.sender == address(this), "unauthenticated-resp");
+        require(expiredWorkingGroupIds.length >= groupToPick, "regroup-not-enough-expired-wgrp");
+        require(numPendingNodes >= groupSize, "regroup-not-enough-p-node");
 
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);
@@ -908,7 +905,7 @@ contract DOSProxy is Ownable {
 
     // Regroup a shuffled node array.
     function regroup(address[] memory candidates, uint num) private {
-        require(candidates.length == groupSize * num, "candidates.length is wrong");
+        require(candidates.length == groupSize * num, "candidate-length-mismatch");
 
         address[] memory members = new address[](groupSize);
         uint groupId;
@@ -941,7 +938,7 @@ contract DOSProxy is Ownable {
             return;
         }
 
-        require(pgrp.memberList[msg.sender] != address(0), "Not from authorized group member");
+        require(pgrp.memberList[msg.sender] != address(0), "not-from-authorized-grp-member");
 
         bytes32 hashedPubKey = keccak256(abi.encodePacked(
             suggestedPubKey[0], suggestedPubKey[1], suggestedPubKey[2], suggestedPubKey[3]));

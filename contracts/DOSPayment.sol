@@ -60,19 +60,19 @@ contract DOSPayment is Ownable {
     event LogClaimGuardianFee(address nodeAddr, address tokenAddr, uint feeForSubmitter, address sender);
 
     modifier onlyFromProxy {
-        require(msg.sender == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress(), "Not from DOS proxy!");
+        require(msg.sender == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress(), "not-from-dos-proxy");
         _;
     }
 
     modifier onlySupportedToken(address tokenAddr) {
-        require(isSupportedToken(tokenAddr), "Not a supported token address!");
+        require(isSupportedToken(tokenAddr), "not-supported-token-addr");
         _;
     }
 
     modifier hasPayment(uint requestID) {
-        require(payments[requestID].amount != 0, "No fee infomation!");
-        require(payments[requestID].payer != address(0x0), "No payer infomation!");
-        require(payments[requestID].tokenAddr != address(0x0), "No tokenAddr infomation!");
+        require(payments[requestID].amount != 0, "no-fee-amount");
+        require(payments[requestID].payer != address(0x0), "no-payer-info");
+        require(payments[requestID].tokenAddr != address(0x0), "no-fee-token-info");
         _;
     }
 
@@ -103,17 +103,17 @@ contract DOSPayment is Ownable {
     }
 
     function setServiceFee(address tokenAddr, uint serviceType, uint fee) public onlyOwner {
-        require(tokenAddr != address(0x0), "Not a valid token address!");
+        require(tokenAddr != address(0x0), "not-valid-token-addr");
         feeLists[tokenAddr].serviceFee[serviceType] = fee;
     }
 
     function setGuardianFee(address tokenAddr, uint fee) public onlyOwner {
-        require(tokenAddr != address(0x0), "Not a valid address!");
+        require(tokenAddr != address(0x0), "not-valid-token-addr");
         feeLists[tokenAddr].guardianFee = fee;
     }
 
     function setFeeDividend(address tokenAddr, uint submitterCut) public onlyOwner {
-        require(tokenAddr != address(0x0), "Not a valid address!");
+        require(tokenAddr != address(0x0), "not-valid-token-addr");
         feeLists[tokenAddr].submitterCut = submitterCut;
     }
 
@@ -169,8 +169,8 @@ contract DOSPayment is Ownable {
     }
 
     function claimGuardianReward(address guardianAddr) public onlyFromProxy {
-        require(guardianFundsAddr != address(0x0), "Not a valid guardian funds address!");
-        require(guardianFundsTokenAddr != address(0x0), "Not a valid token address!");
+        require(guardianFundsAddr != address(0x0), "not-valid-guardian-fund-addr");
+        require(guardianFundsTokenAddr != address(0x0), "not-valid-guardian-token-addr");
         uint fee = feeLists[guardianFundsTokenAddr].guardianFee;
         emit LogClaimGuardianFee(guardianAddr, guardianFundsTokenAddr, fee, msg.sender);
         ERC20I(guardianFundsTokenAddr).transferFrom(guardianFundsAddr, guardianAddr,fee);

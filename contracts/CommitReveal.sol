@@ -34,9 +34,9 @@ contract CommitReveal {
         require(_cid != 0 &&
                 block.number >= c.startBlock &&
                 block.number < c.startBlock + c.commitDuration,
-                "Not in commit phase");
-        require(_commitment != "", "Empty commitment");
-        require(!c.commitments[_commitment], "Duplicated commitment");
+                "not-in-commit");
+        require(_commitment != "", "empty-commitment");
+        require(!c.commitments[_commitment], "duplicate-commitment");
         _;
     }
     modifier checkReveal(uint _cid) {
@@ -44,18 +44,18 @@ contract CommitReveal {
         require(_cid != 0 &&
                 block.number >= c.startBlock + c.commitDuration &&
                 block.number < c.startBlock + c.commitDuration + c.revealDuration,
-                "Not in reveal phase");
+                "not-in-reveal");
         _;
     }
     modifier checkFinish(uint _cid) {
         Campaign storage c = campaigns[_cid];
         require(_cid != 0 &&
                 block.number >= c.startBlock + c.commitDuration + c.revealDuration,
-                "Commit Reveal not finished yet");
+                "commit-reveal-not-finished");
         _;
     }
     modifier onlyFromProxy() {
-        require(msg.sender == addressBridge.getProxyAddress(), "Not from proxy contract");
+        require(msg.sender == addressBridge.getProxyAddress(), "not-from-dos-proxy");
         _;
     }
 
@@ -101,7 +101,7 @@ contract CommitReveal {
         Campaign storage c = campaigns[_cid];
         Participant storage p = c.participants[msg.sender];
         require(!p.revealed && keccak256(abi.encodePacked(_secret)) == p.commitment,
-                "Revealed secret doesn't match with commitment");
+                "revealed-secret-not-match-commitment");
         p.secret = _secret;
         p.revealed = true;
         c.revealNum++;
