@@ -677,11 +677,15 @@ contract DOSProxy is Ownable {
     }
     function signalBootstrap(uint _cid) public {
         require(bootstrapRound == _cid, "Not in bootstrap phase");
+
+        if (block.number <= bootstrapEndBlk) {
+            emit LogMessage("Waiting to collect more entropy");
+            return;
+        }
         if (numPendingNodes < bootstrapStartThreshold) {
             emit LogMessage("Not enough nodes to bootstrap");
             return;
         }
-
         // Reset.
         bootstrapRound = 0;
         bootstrapEndBlk = 0;
