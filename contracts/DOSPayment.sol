@@ -44,10 +44,10 @@ contract DOSPayment is Ownable {
     mapping(address => mapping(address => uint)) private _balances;
 
     uint constant public defaultSubmitterCut = 4;
-    uint constant public defaultSystemRandomFee = 10 * 1e18;  // 10 tokens
-    uint constant public defaultUserRandomFee = 10 * 1e18;    // 10 tokens
-    uint constant public defaultUserQueryFee = 10 * 1e18;     // 10 tokens
-    uint constant public defaultGuardianFee = 10 * 1e18;      // 10 tokens
+    uint constant public defaultSystemRandomFee = 50 * 1e18;
+    uint constant public defaultUserRandomFee = 50 * 1e18;
+    uint constant public defaultUserQueryFee = 50 * 1e18;
+    uint constant public defaultGuardianFee = 50 * 1e18;
 
     address public guardianFundsAddr;
     address public guardianFundsTokenAddr;

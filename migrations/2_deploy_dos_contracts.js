@@ -43,7 +43,7 @@ module.exports = function(deployer, network, accounts) {
       await PaymentGateway.initialize(DOSAddressBridge.address, RewardsVaultRinkeby, DOSTokenRinkeby);
 
 
-      // Note: guardianFundsAddr to call approve(DOSPayment.address) as part of initialization.
+      // Note: guardianFundsAddr to call approve(PaymentGateway.address) as part of initialization.
 
       // Deploying DOSProxy contract.
       await deployer.deploy(DOSProxy, DOSAddressBridge.address, RewardsVaultRinkeby, DOSTokenRinkeby);
@@ -82,7 +82,7 @@ module.exports = function(deployer, network, accounts) {
       await PaymentGateway.initialize(DOSAddressBridge.address, RewardsVaultMainnet, DOSTokenMainnet);
 
 
-      // Note: guardianFundsAddr to call approve(DOSPayment.address) as part of initialization.
+      // Note: guardianFundsAddr to call approve(PaymentGateway.address) as part of initialization.
 
 
       // Deploying DOSProxy contract.

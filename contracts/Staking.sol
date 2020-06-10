@@ -111,7 +111,7 @@ contract Staking {
         DBTOKEN = _dbtoken;
         stakingRewardsVault = _vault;
         bridgeAddr = _bridgeAddr;
-        minStakePerNode = 1000000 * (10 ** DOSDECIMAL);
+        minStakePerNode = 800000 * (10 ** DOSDECIMAL);
         dropburnMaxQuota = 3;
         circulatingSupply = 345000000 * (10 ** DOSDECIMAL);
         unbondDuration = 7 days;

@@ -78,8 +78,9 @@ contract DOSProxy is Ownable {
     // avoid looping in a big loop that causing over gas.
     uint public checkExpireLimit = 50;
 
+    // Minimum 4 groups to bootstrap
+    uint public bootstrapGroups = 4;
     // When regrouping, picking @groupToPick working groups, plus one group from pending nodes.
-    uint public bootstrapGroups = 3;
     uint public groupToPick = 2;
     uint public groupSize = 3;
 
@@ -694,7 +695,6 @@ contract DOSProxy is Ownable {
         lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, rndSeed)));
         lastUpdatedBlock = block.number;
 
-        // TODO: Refine bootstrap algorithm to allow group overlapping.
         uint arrSize = bootstrapStartThreshold / groupSize * groupSize;
         address[] memory candidates = new address[](arrSize);
 
@@ -959,7 +959,7 @@ contract DOSProxy is Ownable {
             workingGroups[groupId] = Group(
                 groupId,
                 BN256.G2Point([suggestedPubKey[0], suggestedPubKey[1]], [suggestedPubKey[2], suggestedPubKey[3]]),
-                numPendingGroups*lifeDiversity,
+                numPendingGroups * lifeDiversity,
                 block.number,
                 memberArray
             );
