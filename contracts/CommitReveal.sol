@@ -24,10 +24,7 @@ contract CommitReveal {
     }
 
     Campaign[] public campaigns;
-
-    // DOSAddressBridge
     DOSAddressBridgeInterface public addressBridge;
-    address public bridgeAddr;
 
     modifier checkCommit(uint _cid, bytes32 _commitment) {
         Campaign storage c = campaigns[_cid];
@@ -68,8 +65,7 @@ contract CommitReveal {
     constructor(address _bridgeAddr) public {
         // campaigns[0] is not used.
         campaigns.length++;
-        bridgeAddr = _bridgeAddr;
-        addressBridge = DOSAddressBridgeInterface(bridgeAddr);
+        addressBridge = DOSAddressBridgeInterface(_bridgeAddr);
     }
 
     // Returns new campaignId.

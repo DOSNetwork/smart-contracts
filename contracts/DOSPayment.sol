@@ -77,9 +77,15 @@ contract DOSPayment is Ownable {
     }
 
     constructor(address _bridgeAddr, address _guardianFundsAddr, address _tokenAddr) public {
+        initialize(_bridgeAddr, _guardianFundsAddr, _tokenAddr);
+    }
+
+    function initialize(address _bridgeAddr, address _guardianFundsAddr, address _tokenAddr) public {
+        require(bridgeAddr == address(0x0) && defaultTokenAddr == address(0x0), "already-initialized");
+
+        bridgeAddr = _bridgeAddr;
         guardianFundsAddr = _guardianFundsAddr;
         guardianFundsTokenAddr = _tokenAddr;
-        bridgeAddr = _bridgeAddr;
         defaultTokenAddr = _tokenAddr;
 
         FeeList storage feeList = feeLists[_tokenAddr];

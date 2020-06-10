@@ -269,7 +269,7 @@ contract AdminUpgradeabilityProxy is UpgradeabilityProxy {
 }
 
 
-contract StakingGateway is AdminUpgradeabilityProxy {
+contract ContractGateway is AdminUpgradeabilityProxy {
   constructor(address _implementation) public AdminUpgradeabilityProxy(_implementation) {
   }
 }
