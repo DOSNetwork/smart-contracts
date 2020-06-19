@@ -128,6 +128,7 @@ contract DOSProxy is Ownable {
 
     uint public lastUpdatedBlock;
     uint public lastRandomness;
+    uint public lastFormGrpReqId;
     Group lastHandledGroup;
 
     // Only whitelised guardian are permitted to kick off signalUnregister process
@@ -637,7 +638,6 @@ contract DOSProxy is Ownable {
     }
 
     /// Guardian node functions
-    /// TODO: Tune guardian signal algorithm.
     /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
     function signalRandom() public {
@@ -704,7 +704,7 @@ contract DOSProxy is Ownable {
         emit GuardianReward(block.number, msg.sender);
         DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
-    // TODO: Chose a random group to check and has a consensus about which nodes should be unregister
+    // TODO: Chose a random group to check and has a consensus about which nodes should be unregister in v2.0
     function signalUnregister(address member) public onlyGuardianListed {
         if (unregister(member)) {
             emit GuardianReward(block.number, msg.sender);
@@ -830,11 +830,16 @@ contract DOSProxy is Ownable {
 
         if (workingGroupIds.length > 0) {
             if (expiredWorkingGroupIds.length >= groupToPick) {
-                requestRandom(address(this), block.number);
-                emit LogGroupingInitiated(numPendingNodes, groupSize);
-                return true;
+                if (lastFormGrpReqId == 0) {
+                    lastFormGrpReqId = requestRandom(address(this), block.number);
+                    if (lastFormGrpReqId == 0) return false;
+                    emit LogGroupingInitiated(numPendingNodes, groupSize);
+                    return true;
+                } else {
+                    emit LogMessage("already-in-formation");
+                    return false;
+                }
             } else {
-                // TODO: Do small bootstrap in this condition?
                 emit LogMessage("skipped-formation-not-enough-expired-wgrp");
             }
         } else if (numPendingNodes >= bootstrapStartThreshold) { // No working group alive and satisfies system re-bootstrap condition.
@@ -860,6 +865,7 @@ contract DOSProxy is Ownable {
         require(expiredWorkingGroupIds.length >= groupToPick, "regroup-not-enough-expired-wgrp");
         require(numPendingNodes >= groupSize, "regroup-not-enough-p-node");
 
+        lastFormGrpReqId = 0;
         uint arrSize = groupSize * (groupToPick + 1);
         address[] memory candidates = new address[](arrSize);
         for (uint i = 0; i < groupToPick; i++) {

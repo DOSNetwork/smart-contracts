@@ -13,7 +13,7 @@ const {
 
 contract("Staking", async accounts => {
   it("test totalStakedTokens", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -46,8 +46,8 @@ contract("Staking", async accounts => {
     let total = await staking.totalStakedTokens.call();
     assert.equal(
       total.toString(),
-      100000000000000000000000,
-      "totalStakedTokens should be 100000000000000000000000");
+      value,
+      "totalStakedTokens should be equal");
 
     await staking.nodeStart(nodeAddr, {
       from: proxyAddr
@@ -56,8 +56,8 @@ contract("Staking", async accounts => {
     total = await staking.totalStakedTokens.call();
     assert.equal(
       total.toString(),
-      100000000000000000000000,
-      "totalStakedTokens should be 100000000000000000000000 "
+      value,
+      "totalStakedTokens should be equal"
     );
 
     let advancement = 86400 * 1; // 1 Days
@@ -69,8 +69,8 @@ contract("Staking", async accounts => {
     total = await staking.totalStakedTokens.call();
     assert.equal(
       total.toString(),
-      100000000000000000000000,
-      "totalStakedTokens should be 100000000000000000000000 ");
+      value,
+      "totalStakedTokens should be equal");
 
     await staking.nodeStart(nodeAddr, {
       from: proxyAddr
@@ -78,8 +78,8 @@ contract("Staking", async accounts => {
     total = await staking.totalStakedTokens.call();
     assert.equal(
       total.toString(),
-      100000000000000000000000,
-      "totalStakedTokens should be 100000000000000000000000 "
+      value,
+      "totalStakedTokens should be equal"
     );
     await staking.nodeUnregister(nodeAddr, {
       from: nodeStakingAddr
@@ -118,7 +118,7 @@ contract("Staking", async accounts => {
 
 
   it("test newNode - node should only be registered once", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -161,7 +161,7 @@ contract("Staking", async accounts => {
 
 
   it("test unregister-newNode - node should be able to register after unregister", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -218,7 +218,7 @@ contract("Staking", async accounts => {
 
 
   it("test updateNodeStaking", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -246,7 +246,7 @@ contract("Staking", async accounts => {
       from: nodeStakingAddr
     });
     let apr = await staking.getCurrentAPR();
-    assert.equal(apr, 8000, "After 1 year, delegator balance should be 7200 ");
+    assert.equal(apr, 8000, "After 1 year, apr should be 80.00%");
 
     for (var i = 1; i <= 9; i++) {
       await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
@@ -257,8 +257,8 @@ contract("Staking", async accounts => {
     let total = await staking.totalStakedTokens.call();
     assert.equal(
       total.toString(),
-      1000000000000000000000000,
-      "totalStakedTokens should be 1000000000000000000000000");
+      web3.utils.toBN(value).mul(web3.utils.toBN(10)),
+      "totalStakedTokens should be equal");
 
     await staking.nodeStart(nodeAddr, {
       from: proxyAddr
@@ -266,14 +266,14 @@ contract("Staking", async accounts => {
     total = await staking.totalStakedTokens.call();
     assert.equal(
       total.toString(),
-      1000000000000000000000000,
-      "totalStakedTokens should be 1000000000000000000000000 "
+      web3.utils.toBN(value).mul(web3.utils.toBN(10)),
+      "totalStakedTokens should be equal"
     );
   });
 
 
   it("test uptime", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let proxyAddr = accounts[14];
     let stakingRewardsVault = accounts[0];
     let tokenPool = accounts[0];
@@ -459,7 +459,7 @@ contract("Staking", async accounts => {
 
 
   it("test withdrawable", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let circulatingSupply = 263900000;
     let proxyAddr = accounts[11];
     let stakingRewardsVault = accounts[0];
@@ -581,7 +581,7 @@ contract("Staking", async accounts => {
 
 
   it("test delegatorClaimReward", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let circulatingSupply = 263900000;
 
     let proxyAddr = accounts[11];
@@ -641,8 +641,8 @@ contract("Staking", async accounts => {
     nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
-      152000,
-      "After 1 year, node balance should be 152000 "
+      1520000,
+      "After 1 year, node balance should be 1520000"
     );
     let delegatorBalance = 0;
     for (var i = 1; i <= delegater; i++) {
@@ -654,8 +654,8 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
-        72000,
-        "After 1 year, delegator balance should be 72000 "
+        720000,
+        "After 1 year, delegator balance should be 720000"
       );
     }
     const options = {
@@ -670,7 +670,7 @@ contract("Staking", async accounts => {
 
 
   it("test delegatorClaimReward - node only runs 73 days during a year", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let circulatingSupply = 263900000;
 
     let proxyAddr = accounts[11];
@@ -744,8 +744,8 @@ contract("Staking", async accounts => {
     nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
-      30400,
-      "After 1 year, node balance should be 30400 "
+      304000,
+      "After 1 year, node balance should be 304000"
     );
     let delegatorBalance = 0;
     for (var i = 1; i <= delegater; i++) {
@@ -757,15 +757,15 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
-        14400,
-        "After 1 year, delegator balance should be 14400 "
+        144000,
+        "After 1 year, delegator balance should be 144000"
       );
     }
   });
 
 
   it("test nodeUnregister - node only runs 73 days during a year", async () => {
-    let stakedTokenPerNode = 100000;
+    let stakedTokenPerNode = 1000000;
     let circulatingSupply = 263900000;
 
     let proxyAddr = accounts[11];
@@ -850,8 +850,8 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
-        14400,
-        "After 1 year, delegator balance should be 14400 "
+        144000,
+        "After 1 year, delegator balance should be 144000"
       );
 
       await staking.delegatorWithdraw(nodeAddr, {
@@ -861,8 +861,8 @@ contract("Staking", async accounts => {
       delegatorBalance = Math.round(balance.valueOf() / 1e18);
       assert.equal(
         delegatorBalance,
-        114400,
-        "After 1 year, delegator balance should be 114400 "
+        1144000,
+        "After 1 year, delegator balance should be 1144000"
       );
     }
 
@@ -871,16 +871,16 @@ contract("Staking", async accounts => {
     nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
-      30400,
-      "After 1 year, node balance should be 30400 "
+      304000,
+      "After 1 year, node balance should be 304000"
     );
     await staking.nodeWithdraw(nodeAddr, { from: nodeStakingAddr });
     balance = await ttk.balanceOf(nodeStakingAddr);
     nodeBalance = Math.round(balance.valueOf() / 1e18);
     assert.equal(
       nodeBalance,
-      130400,
-      "After 1 year, node balance should be 130400 "
+      1304000,
+      "After 1 year, node balance should be 1304000"
     );
     nodeAddrs = await staking.getNodeAddrs();
     assert.equal(
