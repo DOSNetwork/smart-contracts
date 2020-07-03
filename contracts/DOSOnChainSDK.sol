@@ -31,7 +31,7 @@ contract DOSOnChainSDK is Ownable {
 
     DOSProxyInterface dosProxy;
     DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x72840b59CeE8f0ce40f33219DDf9Ca73B6B29ab2);
+        DOSAddressBridgeInterface(0x98a0e7026778840aacd28b9c03137d32e06f5ff1);
 
     modifier resolveAddress {
         dosProxy = DOSProxyInterface(dosAddrBridge.getProxyAddress());
