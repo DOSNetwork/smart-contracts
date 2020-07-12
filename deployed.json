@@ -1,0 +1,11 @@
+{
+   "mainnet":{
+      "DOSAddressBridge":"0x98a0e7026778840aacd28b9c03137d32e06f5ff1",
+      "Commit Reveal":"0x144ed0555269628049f76da2adbdcdf3aa488e0e",
+      "DOSProxy":"0x4dd79f907f4D5d8952FEf1eFA0B5d0467c612Cb3",
+      "DOSPayment Gateway":"0xCa316AFC8453598dC3627FD46aE915F9F9407B51",
+      "DOSPayment Implementation":"0x5C94E305998e4be76Ba7A1e2d6Cf08c84aFD3Ce8",
+      "Staking Gateway":"0x6D6E2E36367B7175aCaCb75b184bB8DbE9aFE863",
+      "Staking Implementation":"0x2F61457Fb685AEae17fCCF3941f74783384f3524"
+   }
+}
