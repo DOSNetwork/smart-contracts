@@ -250,7 +250,7 @@ contract("Staking", async accounts => {
 
     for (var i = 1; i <= 9; i++) {
       await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-      await staking.updateNodeStaking(nodeAddr, value, 0, 10, {
+      await staking.updateNodeStaking(nodeAddr, value, 0, 10, 'new-desc', {
         from: nodeStakingAddr
       });
     }
