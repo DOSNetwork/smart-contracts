@@ -12,11 +12,11 @@ const RewardsVaultRinkeby = '0xE222f441cb42bCFE8E46Fdecad0e633C70246BD3';
 const GatewayAdminRinkeby = '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6';
 const BootstrapListRinkeby = 'https://testnet.dos.network/api/bootStrap';
 // Mainnet configs
-const DOSTokenMainnet = '0x70861e862e1ac0c96f853c8231826e469ead37b1';
-const DBTokenMainnet = '0x68423B3B0769c739D1fe4C398C3d91F0d646424f';
-const RewardsVaultMainnet = '0x70861e862e1ac0c96f853c8231826e469ead37b1';
-const GatewayAdminMainnet = '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6'; // TODO: Replace
-const BootstrapListMainnet = 'to-be-filled';
+const DOSTokenMainnet = '0x0A913beaD80F321E7Ac35285Ee10d9d922659cB7';
+const DBTokenMainnet = '0x9456d6a22c8bdFF613366d51e3d60402cB8cFd8F';
+const RewardsVaultMainnet = '0x76cEc0b88FD0F109C04F0475EBdF1648DF1c60B4';
+const GatewayAdminMainnet = '0x250f871e3ccafde7b5053f321241fd8bb67a54f8';
+const BootstrapListMainnet = 'https://dashboard.dos.network/api/bootStrap';
 
 
 module.exports = function(deployer, network, accounts) {

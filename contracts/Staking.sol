@@ -113,7 +113,7 @@ contract Staking {
         bridgeAddr = _bridgeAddr;
         minStakePerNode = 800000 * (10 ** DOSDECIMAL);
         dropburnMaxQuota = 3;
-        circulatingSupply = 345000000 * (10 ** DOSDECIMAL);
+        circulatingSupply = 160000000 * (10 ** DOSDECIMAL);
         unbondDuration = 7 days;
     }
 
@@ -239,7 +239,7 @@ contract Staking {
     }
 
     // For node runners to configure new staking settings.
-    function updateNodeStaking(address _nodeAddr, uint _newTokenAmount, uint _newDropburnAmount, uint _newCut) public {
+    function updateNodeStaking(address _nodeAddr, uint _newTokenAmount, uint _newDropburnAmount, uint _newCut, string memory _newDesc) public {
         require(nodeRunners[msg.sender][_nodeAddr], "node-not-owned-by-msgSender");
 
         Node storage node = nodes[_nodeAddr];
@@ -264,6 +264,9 @@ contract Staking {
             // This would change interest rate
             totalStakedTokens = totalStakedTokens.add(_newTokenAmount);
             ERC20I(DOSTOKEN).transferFrom(msg.sender, address(this), _newTokenAmount);
+        }
+        if (bytes(_newDesc).length > 0 && bytes(_newDesc).length <= 32) {
+            node.description = _newDesc;
         }
     }
 
