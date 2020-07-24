@@ -5,8 +5,8 @@
       "DOSAddressBridge":"0x98a0e7026778840aacd28b9c03137d32e06f5ff1",
       "Commit Reveal":"0x144ed0555269628049f76da2adbdcdf3aa488e0e",
       "DOSProxy":"0xcB56383Ce19adFE53dBD93A7bEBCc242bD3de47e",
-      "DOSPayment Gateway":"0x07e166308CCFB9b70594383c1BB948E8CecE0595",
-      "DOSPayment Implementation":"0x97559dA69198ef6B6Ab7852699df3Ba1bb004146",
+      "DOSPayment Gateway":"0x7B8D5a37008382B2C7e8e15EcF3C2727e38A6aC6",
+      "DOSPayment Implementation":"0x24286C5a340bF99EDB2d7e7D114477987d34816F",
       "Staking Gateway":"0x5DBeF8E9e83A17D4D1D4c65a1E26133EDAE851Dc",
       "Staking Implementation":"0x33997032a8d97638b0a5C5985E467344CBADB3a7"
    }

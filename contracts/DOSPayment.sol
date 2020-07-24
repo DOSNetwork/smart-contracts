@@ -1,7 +1,5 @@
 pragma solidity ^0.5.0;
 
-import "./Ownable.sol";
-
 contract ERC20I {
     function balanceOf(address who) public view returns (uint);
     function decimals() public view returns (uint);
@@ -13,7 +11,7 @@ contract DOSAddressBridgeInterface {
     function getProxyAddress() public view returns (address);
 }
 
-contract DOSPayment is Ownable {
+contract DOSPayment {
     enum ServiceType {
         SystemRandom,
         UserRandom,
@@ -34,6 +32,7 @@ contract DOSPayment is Ownable {
         uint amount;
     }
 
+    address public admin;
     // payer addr => payment token addr
     mapping(address => address) public paymentMethods;
     // tokenAddr => feeList
@@ -44,16 +43,17 @@ contract DOSPayment is Ownable {
     mapping(address => mapping(address => uint)) private _balances;
 
     uint constant public defaultSubmitterCut = 4;
-    uint constant public defaultSystemRandomFee = 50 * 1e18;
-    uint constant public defaultUserRandomFee = 50 * 1e18;
-    uint constant public defaultUserQueryFee = 50 * 1e18;
-    uint constant public defaultGuardianFee = 50 * 1e18;
+    uint constant public defaultSystemRandomFee = 50 * 1e18;  // 50 tokens
+    uint constant public defaultUserRandomFee = 50 * 1e18;    // 50 tokens
+    uint constant public defaultUserQueryFee = 50 * 1e18;     // 50 tokens
+    uint constant public defaultGuardianFee = 50 * 1e18;      // 50 tokens
 
     address public guardianFundsAddr;
     address public guardianFundsTokenAddr;
     address public bridgeAddr;
     address public defaultTokenAddr;
 
+    event UpdatePaymentAdmin(address oldAdmin, address newAdmin);
     event LogChargeServiceFee(address payer, address tokenAddr, uint requestID, uint serviceType, uint fee);
     event LogRefundServiceFee(address payer, address tokenAddr, uint requestID, uint serviceType, uint fee);
     event LogRecordServiceFee(address nodeAddr, address tokenAddr, uint requestID, uint serviceType, uint fee, bool isSubmitter);
@@ -83,6 +83,7 @@ contract DOSPayment is Ownable {
     function initialize(address _bridgeAddr, address _guardianFundsAddr, address _tokenAddr) public {
         require(bridgeAddr == address(0x0) && defaultTokenAddr == address(0x0), "already-initialized");
 
+        admin = msg.sender;
         bridgeAddr = _bridgeAddr;
         guardianFundsAddr = _guardianFundsAddr;
         guardianFundsTokenAddr = _tokenAddr;
@@ -104,26 +105,37 @@ contract DOSPayment is Ownable {
        return true;
     }
 
+    modifier onlyAdmin {
+        require(msg.sender == admin, "onlyAdmin");
+        _;
+    }
+
+    function setAdmin(address newAdmin) public onlyAdmin {
+        require(newAdmin != address(0));
+        emit UpdatePaymentAdmin(admin, newAdmin);
+        admin = newAdmin;
+    }
+
     function setPaymentMethod(address payer, address tokenAddr) public onlySupportedToken(tokenAddr) {
         paymentMethods[payer] = tokenAddr;
     }
 
-    function setServiceFee(address tokenAddr, uint serviceType, uint fee) public onlyOwner {
+    function setServiceFee(address tokenAddr, uint serviceType, uint fee) public onlyAdmin {
         require(tokenAddr != address(0x0), "not-valid-token-addr");
         feeLists[tokenAddr].serviceFee[serviceType] = fee;
     }
 
-    function setGuardianFee(address tokenAddr, uint fee) public onlyOwner {
+    function setGuardianFee(address tokenAddr, uint fee) public onlyAdmin {
         require(tokenAddr != address(0x0), "not-valid-token-addr");
         feeLists[tokenAddr].guardianFee = fee;
     }
 
-    function setFeeDividend(address tokenAddr, uint submitterCut) public onlyOwner {
+    function setFeeDividend(address tokenAddr, uint submitterCut) public onlyAdmin {
         require(tokenAddr != address(0x0), "not-valid-token-addr");
         feeLists[tokenAddr].submitterCut = submitterCut;
     }
 
-    function setGuardianFunds(address fundsAddr, address tokenAddr) public onlyOwner onlySupportedToken(tokenAddr) {
+    function setGuardianFunds(address fundsAddr, address tokenAddr) public onlyAdmin onlySupportedToken(tokenAddr) {
         guardianFundsAddr = fundsAddr;
         guardianFundsTokenAddr = tokenAddr;
     }
@@ -145,7 +157,7 @@ contract DOSPayment is Ownable {
         ERC20I(tokenAddr).transferFrom(payer, address(this), fee);
     }
 
-    function refundServiceFee(uint requestID) public onlyOwner hasPayment(requestID) {
+    function refundServiceFee(uint requestID) public onlyAdmin hasPayment(requestID) {
         uint fee = payments[requestID].amount;
         uint serviceType = payments[requestID].serviceType;
         address tokenAddr = payments[requestID].tokenAddr;
