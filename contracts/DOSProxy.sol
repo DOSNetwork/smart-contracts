@@ -260,6 +260,18 @@ contract DOSProxy is Ownable {
         bootstrapStartThreshold = newThreshold;
     }
 
+    function setBootstrapCommitDuration(uint newDuration) public onlyOwner {
+        require(newDuration != bootstrapCommitDuration && newDuration != 0, "not-valid-parameter");
+        emit UpdateBootstrapCommitDuration(bootstrapCommitDuration, newDuration);
+        bootstrapCommitDuration = newDuration;
+    }
+
+    function setBootstrapRevealDuration(uint newDuration) public onlyOwner {
+        require(newDuration != bootstrapRevealDuration && newDuration != 0, "not-valid-parameter");
+        emit UpdateBootstrapRevealDuration(bootstrapRevealDuration, newDuration);
+        bootstrapRevealDuration = newDuration;
+    }
+
     function setGroupMaturityPeriod(uint newPeriod) public onlyOwner {
         require(newPeriod != groupMaturityPeriod && newPeriod != 0, "not-valid-parameter");
         emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
