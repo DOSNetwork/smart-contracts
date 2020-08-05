@@ -140,6 +140,12 @@ contract DOSPayment {
         guardianFundsTokenAddr = tokenAddr;
     }
 
+    function getServiceTypeFee(address tokenAddr, uint serviceType) public view returns(uint) {
+        require(tokenAddr != address(0x0) && feeLists[tokenAddr].guardianFee != 0 && feeLists[tokenAddr].submitterCut != 0,
+                "not-valid-token-addr");
+        return feeLists[tokenAddr].serviceFee[serviceType];
+    }
+
     function hasServiceFee(address payer, uint serviceType) public view returns (bool) {
         if (payer == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress()) return true;
         address tokenAddr = paymentMethods[payer];
