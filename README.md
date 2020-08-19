@@ -26,3 +26,6 @@
 ### Test:
 - `$ ganache-cli -a 20`; // Config more than 10 test accounts 
 - `$ truffle test`
+
+### Deployed:
+See `deployed.json`.
