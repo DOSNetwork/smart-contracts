@@ -2,12 +2,11 @@
   "name": "contracts",
   "version": "1.0.0",
   "dependencies": {
-    "@truffle/hdwallet-provider": "^1.0.30",
+    "@truffle/hdwallet-provider": "^1.0.42",
     "truffle-assertions": "^0.9.2"
   },
   "devDependencies": {
     "@openzeppelin/test-helpers": "^0.5.3",
-    "npm": ">=6.14.6",
     "lodash": ">=4.17.19",
     "minimist": ">=1.2.2",
     "elliptic": ">=6.5.3"

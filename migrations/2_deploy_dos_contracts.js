@@ -10,7 +10,7 @@ const DOSTokenRinkeby = '0x214e79c85744cd2ebbc64ddc0047131496871bee';
 const DBTokenRinkeby = '0x9bfe8f5749d90eb4049ad94cc4de9b6c4c31f822';
 const RewardsVaultRinkeby = '0xE222f441cb42bCFE8E46Fdecad0e633C70246BD3';
 const GatewayAdminRinkeby = '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6';
-const BootstrapListRinkeby = 'https://testnet.dos.network/api/bootStrap';
+const BootstrapListRinkeby = 'https://dashboard.dos.network/api/bootStrapRinkeby';
 // Mainnet configs
 const DOSTokenMainnet = '0x0A913beaD80F321E7Ac35285Ee10d9d922659cB7';
 const DBTokenMainnet = '0x9456d6a22c8bdFF613366d51e3d60402cB8cFd8F';
