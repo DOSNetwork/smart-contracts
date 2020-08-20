@@ -13,14 +13,14 @@
 - `$ truffle migrate --reset`
 
 
-### Deploy to rinkeby testnet:
+### Deploy to rinkeby testnet without dryrun:
 - `$ truffle compile --all`
-- `$ truffle migrate --reset --network rinkeby`
+- `$ truffle migrate --reset --network rinkeby --skip-dry-run`
 
 
-### Deploy to mainnet:
+### Deploy to mainnet without dryrun:
 - `$ truffle compile --all`
-- `$ truffle migrate --reset --network live`
+- `$ truffle migrate --reset --network live --skip-dry-run`
 
 
 ### Test:
