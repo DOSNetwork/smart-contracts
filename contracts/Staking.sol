@@ -4,7 +4,7 @@ import "./lib/math.sol";
 
 /**
  * @title Staking and delegation contract
- * @author Dos Network
+ * @author DOS Network
  */
 
 contract ERC20I {
@@ -58,6 +58,7 @@ contract Staking {
         mapping (uint => UnbondRequest) unbondRequests;
         // LISTHEAD => release time 1 => ... => release time m => LISTHEAD
         mapping (uint => uint) releaseTime;
+        string logoUrl;
     }
 
     struct UnbondRequest {
@@ -182,7 +183,13 @@ contract Staking {
         return false;
     }
 
-    function newNode(address _nodeAddr, uint _tokenAmount, uint _dropburnAmount, uint _rewardCut, string memory _desc)
+    function newNode(
+        address _nodeAddr,
+        uint _tokenAmount,
+        uint _dropburnAmount,
+        uint _rewardCut,
+        string memory _desc,
+        string memory _logoUrl)
         public checkStakingValidity(_tokenAmount, _dropburnAmount, _rewardCut)
     {
         require(!nodeRunners[msg.sender][_nodeAddr], "node-already-registered");
@@ -190,7 +197,7 @@ contract Staking {
 
         nodeRunners[msg.sender][_nodeAddr] = true;
         address[] memory nodeDelegators;
-        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, false, _desc, nodeDelegators);
+        nodes[_nodeAddr] = Node(msg.sender, _rewardCut, _dropburnAmount, _tokenAmount, 0, 0, 0, 0, 0, 0, false, _desc, nodeDelegators, _logoUrl);
         nodes[_nodeAddr].releaseTime[LISTHEAD] = LISTHEAD;
         nodeAddrs.push(_nodeAddr);
         // This would change interest rate
@@ -239,7 +246,15 @@ contract Staking {
     }
 
     // For node runners to configure new staking settings.
-    function updateNodeStaking(address _nodeAddr, uint _newTokenAmount, uint _newDropburnAmount, uint _newCut, string memory _newDesc) public {
+    function updateNodeStaking(
+        address _nodeAddr,
+        uint _newTokenAmount,
+        uint _newDropburnAmount,
+        uint _newCut,
+        string memory _newDesc,
+        string memory _newLogoUrl)
+        public
+    {
         require(nodeRunners[msg.sender][_nodeAddr], "node-not-owned-by-msgSender");
 
         Node storage node = nodes[_nodeAddr];
@@ -267,6 +282,9 @@ contract Staking {
         }
         if (bytes(_newDesc).length > 0 && bytes(_newDesc).length <= 32) {
             node.description = _newDesc;
+        }
+        if (bytes(_newLogoUrl).length > 0) {
+            node.logoUrl = _newLogoUrl;
         }
     }
 
