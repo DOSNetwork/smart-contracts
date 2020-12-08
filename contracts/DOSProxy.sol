@@ -72,6 +72,7 @@ contract DOSProxy is Ownable {
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
+    uint public relayRespondLimit = 100; // in blocks
     uint public refreshSystemRandomHardLimit = 1440; // in blocks, ~6 hour
     uint public groupMaturityPeriod = refreshSystemRandomHardLimit * 28; // in blocks, ~7days
     uint public lifeDiversity = refreshSystemRandomHardLimit * 12; // in blocks, ~3days
@@ -126,6 +127,7 @@ contract DOSProxy is Ownable {
     uint public pendingGroupTail;
     uint public numPendingGroups;
 
+    uint public cachedUpdatedBlock;
     uint public lastUpdatedBlock;
     uint public lastRandomness;
     uint public lastFormGrpReqId;
@@ -160,16 +162,6 @@ contract DOSProxy is Ownable {
     event LogNoPendingGroup(uint groupId);
     event LogPendingGroupRemoved(uint groupId);
     event LogMessage(string info);
-    event UpdateGroupSize(uint oldSize, uint newSize);
-    event UpdateGroupMaturityPeriod(uint oldPeriod, uint newPeriod);
-    event UpdateLifeDiversity(uint lifeDiversity, uint newDiversity);
-    event UpdateBootstrapCommitDuration(uint oldDuration, uint newDuration);
-    event UpdateBootstrapRevealDuration(uint oldDuration, uint newDuration);
-    event UpdatebootstrapStartThreshold(uint oldThreshold, uint newThreshold);
-    event UpdatePendingGroupMaxLife(uint oldLifeBlocks, uint newLifeBlocks);
-    event UpdateBootstrapGroups(uint oldSize, uint newSize);
-    event UpdateSystemRandomHardLimit(uint oldLimit, uint newLimit);
-    event UpdateProxyFund(address oldFundAddr, address newFundAddr, address oldTokenAddr, address newTokenAddr);
     event GuardianReward(uint blkNum, address guardian);
 
     modifier fromValidStakingNode {
@@ -239,9 +231,8 @@ contract DOSProxy is Ownable {
     }
 
     function setProxyFund(address newFund, address newFundToken) public onlyOwner {
-        require(newFund != proxyFundsAddr && newFund != address(0x0), "not-valid-parameter");
-        require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0), "not-valid-parameter");
-        emit UpdateProxyFund(proxyFundsAddr, newFund, proxyFundsTokenAddr, newFundToken);
+        require(newFund != proxyFundsAddr && newFund != address(0x0), "invalid-parameter");
+        require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0), "invalid-parameter");
         proxyFundsAddr = newFund;
         proxyFundsTokenAddr = newFundToken;
         DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr, proxyFundsTokenAddr);
@@ -249,50 +240,47 @@ contract DOSProxy is Ownable {
 
     // groupSize must be an odd number.
     function setGroupSize(uint newSize) public onlyOwner {
-        require(newSize != groupSize && newSize % 2 != 0, "not-valid-parameter");
-        emit UpdateGroupSize(groupSize, newSize);
+        require(newSize != groupSize && newSize % 2 != 0, "invalid-parameter");
         groupSize = newSize;
     }
 
     function setBootstrapStartThreshold(uint newThreshold) public onlyOwner {
-        require(newThreshold != bootstrapStartThreshold, "not-valid-parameter");
-        emit UpdatebootstrapStartThreshold(bootstrapStartThreshold, newThreshold);
+        require(newThreshold != bootstrapStartThreshold, "invalid-parameter");
         bootstrapStartThreshold = newThreshold;
     }
 
     function setBootstrapCommitDuration(uint newDuration) public onlyOwner {
-        require(newDuration != bootstrapCommitDuration && newDuration != 0, "not-valid-parameter");
-        emit UpdateBootstrapCommitDuration(bootstrapCommitDuration, newDuration);
+        require(newDuration != bootstrapCommitDuration && newDuration != 0, "invalid-parameter");
         bootstrapCommitDuration = newDuration;
     }
 
     function setBootstrapRevealDuration(uint newDuration) public onlyOwner {
-        require(newDuration != bootstrapRevealDuration && newDuration != 0, "not-valid-parameter");
-        emit UpdateBootstrapRevealDuration(bootstrapRevealDuration, newDuration);
+        require(newDuration != bootstrapRevealDuration && newDuration != 0, "invalid-parameter");
         bootstrapRevealDuration = newDuration;
     }
 
     function setGroupMaturityPeriod(uint newPeriod) public onlyOwner {
-        require(newPeriod != groupMaturityPeriod && newPeriod != 0, "not-valid-parameter");
-        emit UpdateGroupMaturityPeriod(groupMaturityPeriod, newPeriod);
+        require(newPeriod != groupMaturityPeriod && newPeriod != 0, "invalid-parameter");
         groupMaturityPeriod = newPeriod;
     }
 
     function setLifeDiversity(uint newDiversity) public onlyOwner {
-        require(newDiversity != lifeDiversity && newDiversity != 0, "not-valid-parameter");
-        emit UpdateLifeDiversity(lifeDiversity, newDiversity);
+        require(newDiversity != lifeDiversity && newDiversity != 0, "invalid-parameter");
         lifeDiversity = newDiversity;
     }
 
     function setPendingGroupMaxLife(uint newLife) public onlyOwner {
-        require(newLife != pendingGroupMaxLife && newLife != 0, "not-valid-parameter");
-        emit UpdatePendingGroupMaxLife(pendingGroupMaxLife, newLife);
+        require(newLife != pendingGroupMaxLife && newLife != 0, "invalid-parameter");
         pendingGroupMaxLife = newLife;
     }
 
+    function setRelayRespondLimit(uint newLimit) public onlyOwner {
+        require(newLimit != relayRespondLimit, "invalid-parameter");
+        relayRespondLimit = newLimit;
+    }
+
     function setSystemRandomHardLimit(uint newLimit) public onlyOwner {
-        require(newLimit != refreshSystemRandomHardLimit && newLimit != 0, "not-valid-parameter");
-        emit UpdateSystemRandomHardLimit(refreshSystemRandomHardLimit, newLimit);
+        require(newLimit != refreshSystemRandomHardLimit && newLimit != 0, "invalid-parameter");
         refreshSystemRandomHardLimit = newLimit;
     }
 
@@ -325,25 +313,28 @@ contract DOSProxy is Ownable {
     }
 
     function dispatchJob(TrafficType trafficType, uint pseudoSeed) private returns(uint) {
-        if (refreshSystemRandomHardLimit + lastUpdatedBlock <= block.number) {
-            kickoffRandom();
-        }
+        kickoffRandomOnCondition();
         return dispatchJobCore(trafficType, pseudoSeed);
     }
 
-    function kickoffRandom() private {
+    function kickoffRandomOnCondition() private returns (bool) {
+        if (lastUpdatedBlock + refreshSystemRandomHardLimit > block.number || cachedUpdatedBlock + relayRespondLimit > block.number) {
+            return false;
+        }
+
         uint idx = dispatchJobCore(TrafficType.SystemRandom, uint(blockhash(block.number - 1)));
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
             emit LogMessage("no-live-wgrp,try-bootstrap");
-            return;
+            return false;
         }
 
-        lastUpdatedBlock = block.number;
+        cachedUpdatedBlock = block.number;
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId);
         DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr, /*requestId=*/lastRandomness, uint(TrafficType.SystemRandom));
+        return true;
     }
 
     function insertToPendingGroupListTail(uint groupId) private {
@@ -620,9 +611,11 @@ contract DOSProxy is Ownable {
             return;
         }
 
-        uint id = lastRandomness;
+        cachedUpdatedBlock = 0;
+        lastUpdatedBlock = block.number;
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
+        uint id = lastRandomness;
         DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(id, msg.sender, lastHandledGroup.members);
     }
 
@@ -653,14 +646,12 @@ contract DOSProxy is Ownable {
     /// @dev Guardian signals expiring system randomness and kicks off distributed random engine again.
     ///  Anyone including but not limited to DOS client node can be a guardian and claim rewards.
     function signalRandom() public {
-        if (lastUpdatedBlock + refreshSystemRandomHardLimit > block.number) {
+        if (kickoffRandomOnCondition()) {
+            emit GuardianReward(block.number, msg.sender);
+            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+        } else {
             emit LogMessage("sys-random-not-expired");
-            return;
         }
-
-        kickoffRandom();
-        emit GuardianReward(block.number, msg.sender);
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
 
     /// @dev Guardian signals to dissolve expired (workingGroup + pendingGroup) and claim guardian rewards.
@@ -704,8 +695,9 @@ contract DOSProxy is Ownable {
             emit LogMessage("bootstrap-commit-reveal-failure");
             return;
         }
-        lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, rndSeed)));
+        cachedUpdatedBlock = 0;
         lastUpdatedBlock = block.number;
+        lastRandomness = uint(keccak256(abi.encodePacked(lastRandomness, rndSeed)));
 
         uint arrSize = bootstrapStartThreshold / groupSize * groupSize;
         address[] memory candidates = new address[](arrSize);
