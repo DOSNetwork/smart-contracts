@@ -613,10 +613,10 @@ contract DOSProxy is Ownable {
 
         cachedUpdatedBlock = 0;
         lastUpdatedBlock = block.number;
+        uint claimFeeId = lastRandomness;
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
-        uint id = lastRandomness;
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(id, msg.sender, lastHandledGroup.members);
+        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(claimFeeId, msg.sender, lastHandledGroup.members);
     }
 
     function cleanUpPendingGroup(uint gid) private {
