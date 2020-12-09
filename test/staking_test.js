@@ -10,6 +10,8 @@ const {
   expectEvent,
   expectRevert
 } = require("@openzeppelin/test-helpers");
+const BigNumber = require('bignumber.js');
+const maxAllowance = ((new BigNumber(2)).pow(256).minus(1)).toString(10);
 
 contract("Staking", async accounts => {
   it("test totalStakedTokens", async () => {
@@ -29,15 +31,15 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
 
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
     let apr = await staking.getCurrentAPR();
@@ -105,9 +107,9 @@ contract("Staking", async accounts => {
     await ttk.transfer(accounts[1], 30000, { from: accounts[0] });
     let balance = await ttk.balanceOf(accounts[1]);
     assert.equal(balance.valueOf(), 30000);
-    ttk.approve(staking.address, -1, { from: accounts[1] });
+    ttk.approve(staking.address, maxAllowance, { from: accounts[1] });
     try {
-      let tx = await staking.newNode(accounts[1], 50000, 0, 1, "test", {
+      let tx = await staking.newNode(accounts[1], 50000, 0, 1, "test", "", {
         from: accounts[1]
       });
       assert.fail(true, false, "The function should throw error");
@@ -134,23 +136,23 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
 
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
     await ttk.transfer(accounts[2], value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: accounts[2] });
+    await ttk.approve(staking.address, maxAllowance, { from: accounts[2] });
 
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
 
     try {
-      await staking.newNode(nodeAddr, value, 0, 10, "test", {
+      await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
         from: accounts[2]
       });
       assert.fail(true, false, "The function should throw error");
@@ -177,18 +179,18 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
 
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
     await ttk.transfer(accounts[2], value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: accounts[2] });
+    await ttk.approve(staking.address, maxAllowance, { from: accounts[2] });
 
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
     let nodeAddrs = await staking.getNodeAddrs();
@@ -211,7 +213,7 @@ contract("Staking", async accounts => {
       0,
       "After nodeWithdraw, length of nodeAddrs should be 0 "
     );
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
   });
@@ -234,15 +236,15 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
 
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
     let apr = await staking.getCurrentAPR();
@@ -250,7 +252,7 @@ contract("Staking", async accounts => {
 
     for (var i = 1; i <= 9; i++) {
       await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-      await staking.updateNodeStaking(nodeAddr, value, 0, 10, 'new-desc', {
+      await staking.updateNodeStaking(nodeAddr, value, 0, 10, 'new-desc', "", {
         from: nodeStakingAddr
       });
     }
@@ -287,15 +289,15 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
     let value = amount.mul(web3.utils.toBN(10).pow(decimals));
 
     await ttk.transfer(accounts[1], value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: accounts[1] });
-    await staking.newNode(accounts[1], value, 0, 1, "test", {
+    await ttk.approve(staking.address, maxAllowance, { from: accounts[1] });
+    await staking.newNode(accounts[1], value, 0, 1, "test", "", {
       from: accounts[1]
     });
     await staking.nodeStart(accounts[1], { from: proxyAddr });
@@ -332,7 +334,7 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
@@ -346,8 +348,8 @@ contract("Staking", async accounts => {
 
     for (var i = 1; i <= nodes; i++) {
       await ttk.transfer(accounts[i], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[i] });
-      await staking.newNode(accounts[i], value, 0, 1, "test", {
+      await ttk.approve(staking.address, maxAllowance, { from: accounts[i] });
+      await staking.newNode(accounts[i], value, 0, 1, "test", "", {
         from: accounts[i]
       });
     }
@@ -390,7 +392,7 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
@@ -406,8 +408,8 @@ contract("Staking", async accounts => {
 
     for (var i = 1; i <= nodes; i++) {
       await ttk.transfer(accounts[i], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[i] });
-      let tx = await staking.newNode(accounts[i], value, 0, 1, "test", {
+      await ttk.approve(staking.address, maxAllowance, { from: accounts[i] });
+      let tx = await staking.newNode(accounts[i], value, 0, 1, "test", "", {
         from: accounts[i]
       });
     }
@@ -477,7 +479,7 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode * 2);
@@ -489,8 +491,8 @@ contract("Staking", async accounts => {
     });
 
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
 
@@ -503,7 +505,7 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
       await ttk.transfer(accounts[idx], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[idx] });
+      await ttk.approve(staking.address, maxAllowance, { from: accounts[idx] });
       let tx = await staking.delegate(value, nodeAddr, {
         from: accounts[idx]
       });
@@ -600,7 +602,7 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
@@ -611,8 +613,8 @@ contract("Staking", async accounts => {
       from: accounts[0]
     });
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
 
@@ -623,7 +625,7 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
       await ttk.transfer(accounts[idx], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[idx] });
+      await ttk.approve(staking.address, maxAllowance, { from: accounts[idx] });
       let tx = await staking.delegate(value, nodeAddr, {
         from: accounts[idx]
       });
@@ -689,7 +691,7 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
@@ -700,15 +702,15 @@ contract("Staking", async accounts => {
       from: accounts[0]
     });
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
 
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
       await ttk.transfer(accounts[idx], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[idx] });
+      await ttk.approve(staking.address, maxAllowance, { from: accounts[idx] });
       let tx = await staking.delegate(value, nodeAddr, {
         from: accounts[idx]
       });
@@ -784,7 +786,7 @@ contract("Staking", async accounts => {
       stakingRewardsVault,
       bridge.address
     );
-    await ttk.approve(staking.address, -1, { from: stakingRewardsVault });
+    await ttk.approve(staking.address, maxAllowance, { from: stakingRewardsVault });
 
     let decimals = web3.utils.toBN(18);
     let amount = web3.utils.toBN(stakedTokenPerNode);
@@ -795,8 +797,8 @@ contract("Staking", async accounts => {
       from: accounts[0]
     });
     await ttk.transfer(nodeStakingAddr, value, { from: tokenPool });
-    await ttk.approve(staking.address, -1, { from: nodeStakingAddr });
-    await staking.newNode(nodeAddr, value, 0, 10, "test", {
+    await ttk.approve(staking.address, maxAllowance, { from: nodeStakingAddr });
+    await staking.newNode(nodeAddr, value, 0, 10, "test", "", {
       from: nodeStakingAddr
     });
     let nodeAddrs = await staking.getNodeAddrs();
@@ -809,7 +811,7 @@ contract("Staking", async accounts => {
     for (var i = 1; i <= delegater; i++) {
       let idx = i + 1;
       await ttk.transfer(accounts[idx], value, { from: tokenPool });
-      await ttk.approve(staking.address, -1, { from: accounts[idx] });
+      await ttk.approve(staking.address, maxAllowance, { from: accounts[idx] });
       await staking.delegate(value, nodeAddr, {
         from: accounts[idx]
       });
