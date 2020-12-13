@@ -284,6 +284,53 @@ contract DOSProxy is Ownable {
         refreshSystemRandomHardLimit = newLimit;
     }
 
+    function resetOnRecovery() public onlyOwner {
+        address n = pendingNodeList[HEAD_A];
+        while (pendingNodeList[HEAD_A] != HEAD_A) {
+            nodeToGroupIdList[n][HEAD_I] = 0;
+            n = pendingNodeList[n];
+        }
+
+        uint gid = pendingGroupList[HEAD_I];
+        while (gid != HEAD_I) {
+            PendingGroup storage pgrp = pendingGroups[gid];
+            address m = pgrp.memberList[HEAD_A];
+            while (m != HEAD_A) {
+                nodeToGroupIdList[m][HEAD_I] = 0;
+                m = pgrp.memberList[m];
+            }
+            gid = pendingGroupList[gid];
+        }
+
+        for (uint i = 0; i < workingGroupIds.length; i++) {
+            address[] storage members = workingGroups[workingGroupIds[i]].members;
+            for (uint j = 0; j < members.length; j++) {
+                nodeToGroupIdList[members[j]][HEAD_I] = 0;
+            }
+        }
+        for (uint i = 0; i < expiredWorkingGroupIds.length; i++) {
+            address[] storage members = workingGroups[expiredWorkingGroupIds[i]].members;
+            for (uint j = 0; j < members.length; j++) {
+                nodeToGroupIdList[members[j]][HEAD_I] = 0;
+            }
+        }
+
+        // No need to clear residual group map states on reset because of unique groupId.
+        workingGroupIds.length = 0;
+        expiredWorkingGroupIds.length = 0;
+        pendingNodeList[HEAD_A] = HEAD_A;
+        pendingNodeTail = HEAD_A;
+        numPendingNodes = 0;
+        pendingGroupList[HEAD_I] = HEAD_I;
+        pendingGroupTail = HEAD_I;
+        numPendingGroups = 0;
+        bootstrapRound = 0;
+        cachedUpdatedBlock = 0;
+        lastUpdatedBlock = 0;
+        lastRandomness = 0;
+        lastFormGrpReqId = 0;
+    }
+
     function getCodeSize(address addr) private view returns (uint size) {
         assembly {
             size := extcodesize(addr)
@@ -762,7 +809,7 @@ contract DOSProxy is Ownable {
             unregisteredFrom |= 0x4;
         }
 
-		// Check if node is in pendingNodeList
+        // Check if node is in pendingNodeList
         if (pendingNodeList[node] != address(0)) {
             // Update pendingNodeList
             address prev;
@@ -921,11 +968,13 @@ contract DOSProxy is Ownable {
         uint groupId;
         for (uint i = 0; i < num; i++) {
             groupId = 0;
-            // Generated groupId = sha3(...(sha3(sha3(member 1), member 2), ...), member n)
             for (uint j = 0; j < groupSize; j++) {
                 members[j] = candidates[i * groupSize + j];
                 groupId = uint(keccak256(abi.encodePacked(groupId, members[j])));
             }
+            // groupId = sha3{ sha3(...(sha3(sha3(member 1), member 2), ...), member n), timestamp}
+            // This ensures unique groupId even for the same members.
+            groupId = uint(keccak256(abi.encodePacked(groupId, block.timestamp)));
             pendingGroups[groupId] = PendingGroup(groupId, block.number);
             mapping(address => address) storage memberList = pendingGroups[groupId].memberList;
             memberList[HEAD_A] = HEAD_A;
