@@ -315,7 +315,7 @@ contract DOSProxy is Ownable {
             }
         }
 
-        // No need to clear residual group map states on reset because of unique groupId.
+        // No need to clear other residual group map states on reset because of unique groupId.
         workingGroupIds.length = 0;
         expiredWorkingGroupIds.length = 0;
         pendingNodeList[HEAD_A] = HEAD_A;
