@@ -284,51 +284,67 @@ contract DOSProxy is Ownable {
         refreshSystemRandomHardLimit = newLimit;
     }
 
-    function resetOnRecovery() public onlyOwner {
+    function resetOnRecovery(uint cap) public onlyOwner {
+        uint len = numPendingNodes + groupSize * (numPendingGroups + workingGroupIds.length + expiredWorkingGroupIds.length);
+        cap = cap < len ? cap : len;
+
         address n = pendingNodeList[HEAD_A];
-        while (pendingNodeList[HEAD_A] != HEAD_A) {
+        uint prevCap = cap;
+        while (cap > 0 && pendingNodeList[HEAD_A] != HEAD_A) {
             nodeToGroupIdList[n][HEAD_I] = 0;
             n = pendingNodeList[n];
+            cap--;
         }
-
-        uint gid = pendingGroupList[HEAD_I];
-        while (gid != HEAD_I) {
-            PendingGroup storage pgrp = pendingGroups[gid];
-            address m = pgrp.memberList[HEAD_A];
-            while (m != HEAD_A) {
-                nodeToGroupIdList[m][HEAD_I] = 0;
-                m = pgrp.memberList[m];
-            }
-            gid = pendingGroupList[gid];
-        }
-
-        for (uint i = 0; i < workingGroupIds.length; i++) {
-            address[] storage members = workingGroups[workingGroupIds[i]].members;
-            for (uint j = 0; j < members.length; j++) {
-                nodeToGroupIdList[members[j]][HEAD_I] = 0;
-            }
-        }
-        for (uint i = 0; i < expiredWorkingGroupIds.length; i++) {
-            address[] storage members = workingGroups[expiredWorkingGroupIds[i]].members;
-            for (uint j = 0; j < members.length; j++) {
-                nodeToGroupIdList[members[j]][HEAD_I] = 0;
-            }
-        }
-
-        // No need to clear other residual group map states on reset because of unique groupId.
-        workingGroupIds.length = 0;
-        expiredWorkingGroupIds.length = 0;
+        if (prevCap - cap < numPendingNodes) return;
+        prevCap = cap;
         pendingNodeList[HEAD_A] = HEAD_A;
         pendingNodeTail = HEAD_A;
         numPendingNodes = 0;
+
+        uint gid = pendingGroupList[HEAD_I];
+        while (cap > 0 && gid != HEAD_I) {
+            PendingGroup storage pgrp = pendingGroups[gid];
+            address m = pgrp.memberList[HEAD_A];
+            while (cap > 0 && m != HEAD_A) {
+                nodeToGroupIdList[m][HEAD_I] = 0;
+                m = pgrp.memberList[m];
+                cap--;
+            }
+            gid = pendingGroupList[gid];
+        }
+        if (prevCap - cap < groupSize * numPendingGroups) return;
+        prevCap = cap;
         pendingGroupList[HEAD_I] = HEAD_I;
         pendingGroupTail = HEAD_I;
         numPendingGroups = 0;
+
+        for (uint i = 0; cap > 0 && i < workingGroupIds.length; i++) {
+            address[] storage members = workingGroups[workingGroupIds[i]].members;
+            for (uint j = 0; cap > 0 && j < members.length; j++) {
+                nodeToGroupIdList[members[j]][HEAD_I] = 0;
+                cap--;
+            }
+        }
+        if (prevCap - cap < groupSize * workingGroupIds.length) return;
+        prevCap = cap;
+        workingGroupIds.length = 0;
+        for (uint i = 0; cap > 0 && i < expiredWorkingGroupIds.length; i++) {
+            address[] storage members = workingGroups[expiredWorkingGroupIds[i]].members;
+            for (uint j = 0; cap > 0 && j < members.length; j++) {
+                nodeToGroupIdList[members[j]][HEAD_I] = 0;
+                cap--;
+            }
+        }
+        if (prevCap - cap < groupSize * expiredWorkingGroupIds.length) return;
+        expiredWorkingGroupIds.length = 0;
+
         bootstrapRound = 0;
         cachedUpdatedBlock = 0;
         lastUpdatedBlock = 0;
         lastRandomness = 0;
         lastFormGrpReqId = 0;
+
+        // No need to clear other residual group map states on reset because of unique groupId.
     }
 
     function getCodeSize(address addr) private view returns (uint size) {
