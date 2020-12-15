@@ -116,7 +116,7 @@ contract DOSProxy {
     uint[] public expiredWorkingGroupIds;
 
     // groupId => PendingGroup
-    mapping(uint => PendingGroup) pendingGroups;
+    mapping(uint => PendingGroup) public pendingGroups;
     uint public pendingGroupMaxLife = 20;  // in blocks
 
     // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
@@ -204,11 +204,11 @@ contract DOSProxy {
         delete guardianListed[_addr];
     }
 
-    function workingGroupIdsLength() public view returns(uint256) {
+    function workingGroupIdsLength() public view returns(uint) {
         return workingGroupIds.length;
     }
 
-    function expiredWorkingGroupIdsLength() public view returns(uint256) {
+    function expiredWorkingGroupIdsLength() public view returns(uint) {
         return expiredWorkingGroupIds.length;
     }
 
