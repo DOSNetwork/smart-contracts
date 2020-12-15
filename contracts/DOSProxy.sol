@@ -457,7 +457,7 @@ contract DOSProxy {
             PendingGroup storage pgrp = pendingGroups[curr];
             (, bool found) = findNodeFromList(pgrp.memberList, node);
             if (found) {
-                cleanUpPendingGroup(curr);
+                cleanUpPendingGroup(curr, node);
                 return true;
             }
             prev = curr;
@@ -466,8 +466,9 @@ contract DOSProxy {
         return false;
     }
 
-    /// @notice Caller ensures no index overflow.
-    function dissolveWorkingGroup(uint groupId, bool backToPendingPool) private {
+    /// @notice Caller ensures no index overflow. Put members back to pendingNodeList's tail if necessary.
+    /// Skip pushing member into pendingNodeList if that_member == skipNode, even when backToPendingPool is set.
+    function dissolveWorkingGroup(uint groupId, bool backToPendingPool, address skipNode) private {
         /// Deregister expired working group and remove metadata.
         Group storage grp = workingGroups[groupId];
         for (uint i = 0; i < grp.members.length; i++) {
@@ -476,7 +477,7 @@ contract DOSProxy {
             // Notice: Guardian may need to signal group formation.
             (uint prev, bool removed) = removeIdFromList(nodeToGroupIdList[member], grp.groupId);
             if (removed && prev == HEAD_I) {
-                if (backToPendingPool && pendingNodeList[member] == address(0)) {
+                if (backToPendingPool && member != skipNode && pendingNodeList[member] == address(0)) {
                     insertToPendingNodeListTail(member);
                 }
             }
@@ -664,13 +665,14 @@ contract DOSProxy {
         DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(claimFeeId, msg.sender, lastHandledGroup.members);
     }
 
-    function cleanUpPendingGroup(uint gid) private {
+    function cleanUpPendingGroup(uint gid, address skipNode) private {
         PendingGroup storage pgrp = pendingGroups[gid];
         address member = pgrp.memberList[HEAD_A];
         while (member != HEAD_A) {
-            // 1. Put member back to pendingNodeList's tail if it's not in any workingGroup.
-            if (nodeToGroupIdList[member][HEAD_I] == HEAD_I && pendingNodeList[member] == address(0)) {
-                insertToPendingNodeListTail(member);
+            // 1. Put member that shouldn't be skipped back to pendingNodeList's head if it's not in any workingGroup.
+            // Dissolved endingGroup members have priority to form into a workingGroup.
+            if (nodeToGroupIdList[member][HEAD_I] == HEAD_I && member != skipNode && pendingNodeList[member] == address(0)) {
+                insertToPendingNodeListHead(member);
             }
             member = pgrp.memberList[member];
         }
@@ -704,7 +706,7 @@ contract DOSProxy {
         // Clean up oldest expired PendingGroup and related metadata. Might be due to failed DKG.
         uint gid = pendingGroupList[HEAD_I];
         if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
-            cleanUpPendingGroup(gid);
+            cleanUpPendingGroup(gid, HEAD_A);
             emit GuardianReward(block.number, msg.sender);
             DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
@@ -775,7 +777,7 @@ contract DOSProxy {
         uint8 unregisteredFrom = 0;
         // Check if node is in workingGroups or expiredWorkingGroup
         if (groupId != 0 && groupId != HEAD_I) {
-            dissolveWorkingGroup(groupId, true);
+            dissolveWorkingGroup(groupId, true, node);
             for (uint idx = 0; idx < workingGroupIds.length; idx++) {
                 if (workingGroupIds[idx] == groupId) {
                     if (idx != (workingGroupIds.length - 1)) {
@@ -860,7 +862,7 @@ contract DOSProxy {
         if (numPendingNodes < groupSize ||
             (workingGroupIds.length == 0 && numPendingNodes < bootstrapStartThreshold)) {
             if (expiredWorkingGroupIds.length > 0) {
-                dissolveWorkingGroup(expiredWorkingGroupIds[0], true);
+                dissolveWorkingGroup(expiredWorkingGroupIds[0], true, HEAD_A);
                 expiredWorkingGroupIds[0] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
                 expiredWorkingGroupIds.length--;
             }
@@ -917,7 +919,8 @@ contract DOSProxy {
             for (uint j = 0; j < groupSize; j++) {
                 candidates[i * groupSize + j] = grpToDissolve.members[j];
             }
-            dissolveWorkingGroup(grpToDissolve.groupId, false);
+            // Do not put selected to-be-dissolved expired working group back to pending node pool.
+            dissolveWorkingGroup(grpToDissolve.groupId, false, HEAD_A);
             expiredWorkingGroupIds[idx] = expiredWorkingGroupIds[expiredWorkingGroupIds.length - 1];
             expiredWorkingGroupIds.length--;
         }
