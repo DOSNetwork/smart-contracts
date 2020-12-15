@@ -1,9 +1,6 @@
 pragma solidity ^0.5.0;
-// Do not use in production
-// pragma experimental ABIEncoderV2;
 
 import "./lib/BN256.sol";
-import "./Ownable.sol";
 
 contract UserContractInterface {
     // Query callback.
@@ -37,7 +34,7 @@ contract DOSStakingInterface {
     function isValidStakingNode(address _nodeAddr) public view returns(bool);
 }
 
-contract DOSProxy is Ownable {
+contract DOSProxy {
     using BN256 for *;
 
     // Metadata of pending request.
@@ -67,8 +64,8 @@ contract DOSProxy is Ownable {
         mapping(address => address) memberList;
     }
 
+    address private owner;
     uint public initBlkN;
-    uint private requestIdSeed;
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
@@ -77,7 +74,7 @@ contract DOSProxy is Ownable {
     uint public groupMaturityPeriod = refreshSystemRandomHardLimit * 28; // in blocks, ~7days
     uint public lifeDiversity = refreshSystemRandomHardLimit * 12; // in blocks, ~3days
     // avoid looping in a big loop that causing over gas.
-    uint public checkExpireLimit = 50;
+    uint public loopLimit = 50;
 
     // Minimum 4 groups to bootstrap
     uint public bootstrapGroups = 4;
@@ -119,7 +116,7 @@ contract DOSProxy is Ownable {
     uint[] public expiredWorkingGroupIds;
 
     // groupId => PendingGroup
-    mapping(uint => PendingGroup) public pendingGroups;
+    mapping(uint => PendingGroup) pendingGroups;
     uint public pendingGroupMaxLife = 20;  // in blocks
 
     // Initial state: pendingGroupList[HEAD_I] == HEAD_I && pendingGroupTail == HEAD_I
@@ -164,6 +161,11 @@ contract DOSProxy is Ownable {
     event LogMessage(string info);
     event GuardianReward(uint blkNum, address guardian);
 
+    modifier onlyOwner {
+        require(msg.sender == owner);
+        _;
+    }
+
     modifier fromValidStakingNode {
         require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
                 "invalid-staking-node");
@@ -200,26 +202,6 @@ contract DOSProxy is Ownable {
 
     function removeFromGuardianList(address _addr) public onlyOwner {
         delete guardianListed[_addr];
-    }
-
-    function getLastHandledGroup() public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
-        return (
-            lastHandledGroup.groupId,
-            getGroupPubKey(lastHandledGroup.groupId),
-            lastHandledGroup.life,
-            lastHandledGroup.birthBlkN,
-            lastHandledGroup.members
-        );
-    }
-
-    function getWorkingGroupById(uint groupId) public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
-        return (
-            workingGroups[groupId].groupId,
-            getGroupPubKey(groupId),
-            workingGroups[groupId].life,
-            workingGroups[groupId].birthBlkN,
-            workingGroups[groupId].members
-        );
     }
 
     function workingGroupIdsLength() public view returns(uint256) {
@@ -360,7 +342,7 @@ contract DOSProxy is Ownable {
                 return UINTMAX;
             }
             if (dissolveIdx >= workingGroupIds.length ||
-                dissolveIdx >= checkExpireLimit) {
+                dissolveIdx >= loopLimit) {
                 uint rnd = uint(keccak256(abi.encodePacked(trafficType, pseudoSeed, lastRandomness, block.number)));
                 return rnd % workingGroupIds.length;
             }
@@ -520,7 +502,7 @@ contract DOSProxy is Ownable {
             // Starts with '$': response format is parsed as json.
             // Starts with '/': response format is parsed as xml/html.
             if (bs.length == 0 || bs[0] == '$' || bs[0] == '/') {
-                uint queryId = uint(keccak256(abi.encode(++requestIdSeed, from, timeout, dataSource, selector)));
+                uint queryId = uint(keccak256(abi.encode(block.timestamp, from, timeout, dataSource, selector)));
                 uint idx = dispatchJob(TrafficType.UserQuery, queryId);
                 // TODO: keep id receipt and handle later in v2.0.
                 if (idx == UINTMAX) {
@@ -556,7 +538,7 @@ contract DOSProxy is Ownable {
         hasOracleFee(from, uint(TrafficType.UserRandom))
         returns (uint)
     {
-        uint requestId = uint(keccak256(abi.encode(++requestIdSeed, from, userSeed)));
+        uint requestId = uint(keccak256(abi.encode(block.timestamp, from, userSeed)));
         uint idx = dispatchJob(TrafficType.UserRandom, requestId);
         // TODO: keep id receipt and handle later in v2.0.
         if (idx == UINTMAX) {
@@ -843,12 +825,6 @@ contract DOSProxy is Ownable {
         emit LogUnRegisteredNewPendingNode(node, unregisteredFrom);
         DOSStakingInterface(addressBridge.getStakingAddress()).nodeStop(node);
         return (unregisteredFrom != 0);
-    }
-
-    // Caller ensures no index overflow.
-    function getGroupPubKey(uint idx) public view returns (uint[4] memory) {
-        BN256.G2Point storage pubKey = workingGroups[workingGroupIds[idx]].groupPubKey;
-        return [pubKey.x[0], pubKey.x[1], pubKey.y[0], pubKey.y[1]];
     }
 
     function getWorkingGroupSize() public view returns (uint) {
