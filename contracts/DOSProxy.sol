@@ -185,6 +185,7 @@ contract DOSProxy {
     }
 
     constructor(address _bridgeAddr, address _proxyFundsAddr, address _proxyFundsTokenAddr) public {
+        owner = msg.sender;
         initBlkN = block.number;
         pendingNodeList[HEAD_A] = HEAD_A;
         pendingNodeTail = HEAD_A;
