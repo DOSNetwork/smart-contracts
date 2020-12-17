@@ -205,14 +205,6 @@ contract DOSProxy {
         delete guardianListed[_addr];
     }
 
-    function workingGroupIdsLength() public view returns(uint) {
-        return workingGroupIds.length;
-    }
-
-    function expiredWorkingGroupIdsLength() public view returns(uint) {
-        return expiredWorkingGroupIds.length;
-    }
-
     function setProxyFund(address newFund, address newFundToken) public onlyOwner {
         require(newFund != proxyFundsAddr && newFund != address(0x0), "invalid-parameter");
         require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0), "invalid-parameter");
