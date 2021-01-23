@@ -95,6 +95,7 @@ contract Staking {
     event UpdateMinStakePerNode(uint oldMinStakePerNode, uint newMinStakePerNode);
     event NewNode(address indexed owner, address indexed nodeAddress, uint selfStakedAmount, uint stakedDB, uint rewardCut);
     event Delegate(address indexed from, address indexed to, uint amount);
+    event ReDelegate(address indexed from, address indexed to, uint amount);
     event Withdraw(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dbAmount);
     event Unbond(address indexed from, address indexed to, bool nodeRunner, uint tokenAmount, uint dropburnAmount);
     event ClaimReward(address indexed to, bool nodeRunner, uint amount);
@@ -298,7 +299,6 @@ contract Staking {
         Delegation storage delegator = delegators[msg.sender][_nodeAddr];
         require(delegator.delegatedNode == address(0) || delegator.delegatedNode == _nodeAddr, "invalid-delegated-node-addr");
 
-        node.nodeDelegators.push(msg.sender);
         node.totalOtherDelegatedAmount = node.totalOtherDelegatedAmount.add(_tokenAmount);
         if (node.running) {
             // Update global accumulated interest index.
@@ -313,6 +313,7 @@ contract Staking {
             // New delegation
             delegator.delegatedNode = _nodeAddr;
             delegator.releaseTime[LISTHEAD] = LISTHEAD;
+            node.nodeDelegators.push(msg.sender);
         }
         // This would change interest rate
         totalStakedTokens = totalStakedTokens.add(_tokenAmount);
@@ -518,6 +519,74 @@ contract Staking {
             ERC20I(DOSTOKEN).transfer(msg.sender, tokenAmount);
         }
         emit Withdraw(_nodeAddr, msg.sender, false, tokenAmount, 0);
+    }
+
+    // re-delegate from nodeA to nodeB with no need of unbonding; collecting staking rewards if any.
+    function reDelegate(address _fromNode, address _toNode, uint _tokenAmount) public {
+        if (_tokenAmount == 0) return;
+        require(_fromNode != _toNode, "duplicate-nodes");
+        Node storage from = nodes[_fromNode];
+        Node storage to = nodes[_toNode];
+        require(from.ownerAddr != address(0), "fromNode-not-exist");
+        require(to.ownerAddr != address(0), "toNode-not-exist");
+        Delegation storage delegatorFrom = delegators[msg.sender][_fromNode];
+        require(delegatorFrom.delegatedNode == _fromNode, "reDelegate-from-non-delegated");
+        require(_tokenAmount <= delegatorFrom.delegatedAmount, "reDelegate-exceeded-stake-amount");
+        Delegation storage delegatorTo = delegators[msg.sender][_toNode];
+        require(delegatorTo.delegatedNode == address(0) || delegatorTo.delegatedNode == _toNode, "reDelegate-to-invalid-node");
+
+        uint claimReward = 0;
+        updateGlobalRewardIndex();
+        if (from.running) {
+            claimReward += getDelegatorRewardTokens(msg.sender, _fromNode);
+            delegatorFrom.accumulatedRewards = 0;
+            delegatorFrom.accumulatedRewardIndex = accumulatedRewardIndex;
+            from.accumulatedRewards = getNodeRewardTokens(_fromNode);
+            from.accumulatedRewardIndex = accumulatedRewardIndex;
+        }
+        if (to.running) {
+            to.accumulatedRewards = getNodeRewardTokens(_toNode);
+            to.accumulatedRewardIndex = accumulatedRewardIndex;
+            claimReward += getDelegatorRewardTokens(msg.sender, _toNode);
+            delegatorTo.accumulatedRewards = 0;
+            delegatorTo.accumulatedRewardIndex = accumulatedRewardIndex;
+        }
+        delegatorFrom.delegatedAmount = delegatorFrom.delegatedAmount.sub(_tokenAmount);
+        delegatorTo.delegatedAmount = delegatorTo.delegatedAmount.add(_tokenAmount);
+        from.totalOtherDelegatedAmount = from.totalOtherDelegatedAmount.sub(_tokenAmount);
+        to.totalOtherDelegatedAmount = to.totalOtherDelegatedAmount.add(_tokenAmount);
+
+        if (_tokenAmount == delegatorFrom.delegatedAmount) {
+            // Remove from _fromNode's nodeDelegators list if fully re-delegated to another node
+            if (delegatorFrom.pendingWithdraw == 0) {
+                delete delegators[msg.sender][_fromNode];
+                uint idx = 0;
+                for (; idx < from.nodeDelegators.length; idx++) {
+                    if (from.nodeDelegators[idx] == msg.sender) {
+                        break;
+                    }
+                }
+                if (idx < from.nodeDelegators.length) {
+                    from.nodeDelegators[idx] = from.nodeDelegators[from.nodeDelegators.length - 1];
+                    from.nodeDelegators.length--;
+                }
+                nodeTryDelete(_fromNode);
+            }
+        }
+
+        if (delegatorTo.delegatedNode == address(0)) {
+            // reDelegated to previously non-delegated node
+            delegatorTo.delegatedNode = _toNode;
+            delegatorTo.releaseTime[LISTHEAD] = LISTHEAD;
+            to.nodeDelegators.push(msg.sender);
+        }
+
+        emit ReDelegate(_fromNode, _toNode, _tokenAmount);
+
+        if (claimReward > 0) {
+            ERC20I(DOSTOKEN).transferFrom(stakingRewardsVault, msg.sender, claimReward);
+            emit ClaimReward(msg.sender, false, claimReward);
+        }
     }
 
     function nodeWithdrawable(address _owner, address _nodeAddr) public view returns(uint, uint) {

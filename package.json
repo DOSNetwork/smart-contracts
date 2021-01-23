@@ -8,11 +8,11 @@
   },
   "devDependencies": {
     "@openzeppelin/test-helpers": "^0.5.3",
+    "bl": ">=1.2.3",
+    "elliptic": ">=6.5.3",
     "lodash": ">=4.17.19",
     "minimist": ">=1.2.2",
-    "elliptic": ">=6.5.3",
     "node-fetch": ">=2.6.1",
-    "bl": ">=1.2.3",
     "yargs-parser": ">=13.1.2"
   }
 }
