@@ -527,8 +527,9 @@ contract Staking {
         require(_fromNode != _toNode, "duplicate-nodes");
         Node storage from = nodes[_fromNode];
         Node storage to = nodes[_toNode];
-        require(from.ownerAddr != address(0), "fromNode-not-exist");
-        require(to.ownerAddr != address(0), "toNode-not-exist");
+        require(from.ownerAddr != address(0), "fromNode-no-exist");
+        require(to.ownerAddr != address(0), "toNode-no-exist");
+        require(msg.sender != to.ownerAddr, "node-owner-cannot-reDelegate-to-self");
         Delegation storage delegatorFrom = delegators[msg.sender][_fromNode];
         require(delegatorFrom.delegatedNode == _fromNode, "reDelegate-from-non-delegated");
         require(_tokenAmount <= delegatorFrom.delegatedAmount, "reDelegate-exceeded-stake-amount");
@@ -556,22 +557,20 @@ contract Staking {
         from.totalOtherDelegatedAmount = from.totalOtherDelegatedAmount.sub(_tokenAmount);
         to.totalOtherDelegatedAmount = to.totalOtherDelegatedAmount.add(_tokenAmount);
 
-        if (_tokenAmount == delegatorFrom.delegatedAmount) {
-            // Remove from _fromNode's nodeDelegators list if fully re-delegated to another node
-            if (delegatorFrom.pendingWithdraw == 0) {
-                delete delegators[msg.sender][_fromNode];
-                uint idx = 0;
-                for (; idx < from.nodeDelegators.length; idx++) {
-                    if (from.nodeDelegators[idx] == msg.sender) {
-                        break;
-                    }
+        // Remove from _fromNode's nodeDelegators list if fully re-delegat & no pending withdrawable tokens
+        if (delegatorFrom.delegatedAmount == 0 && delegatorFrom.pendingWithdraw == 0) {
+            delete delegators[msg.sender][_fromNode];
+            uint idx = 0;
+            for (; idx < from.nodeDelegators.length; idx++) {
+                if (from.nodeDelegators[idx] == msg.sender) {
+                    break;
                 }
-                if (idx < from.nodeDelegators.length) {
-                    from.nodeDelegators[idx] = from.nodeDelegators[from.nodeDelegators.length - 1];
-                    from.nodeDelegators.length--;
-                }
-                nodeTryDelete(_fromNode);
             }
+            if (idx < from.nodeDelegators.length) {
+                from.nodeDelegators[idx] = from.nodeDelegators[from.nodeDelegators.length - 1];
+                from.nodeDelegators.length--;
+            }
+            nodeTryDelete(_fromNode);
         }
 
         if (delegatorTo.delegatedNode == address(0)) {
