@@ -69,10 +69,10 @@ contract DOSProxy {
     // calling requestId => PendingQuery metadata
     mapping(uint => PendingRequest) PendingRequests;
 
-    uint public relayRespondLimit = 100; // in blocks
-    uint public refreshSystemRandomHardLimit = 1440; // in blocks, ~6 hour
-    uint public groupMaturityPeriod = refreshSystemRandomHardLimit * 28; // in blocks, ~7days
-    uint public lifeDiversity = refreshSystemRandomHardLimit * 12; // in blocks, ~3days
+    uint public relayRespondLimit = 128; // in blocks
+    uint public refreshSystemRandomHardLimit = 2048; // in blocks
+    uint public groupMaturityPeriod = refreshSystemRandomHardLimit * 32; // in blocks
+    uint public lifeDiversity = refreshSystemRandomHardLimit * 4; // in blocks
     // avoid looping in a big loop that causing over gas.
     uint public loopLimit = 50;
 
