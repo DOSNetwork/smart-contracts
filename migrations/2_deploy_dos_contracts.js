@@ -25,7 +25,7 @@ const configs = {
     DBToken: '0x84c6be700f2db040ed1455ac980538003cda90dd',
     RewardsVault: '0xE222f441cb42bCFE8E46Fdecad0e633C70246BD3',
     GatewayAdmin: '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6',
-    BootstrapList: 'https://dashboard.dos.network/api/bootStrapHecoTestnet',
+    BootstrapList: 'https://dashboard.dos.network/api/bootStrapHeco',
   },
 }
 
