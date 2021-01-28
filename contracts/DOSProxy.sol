@@ -104,10 +104,10 @@ contract DOSProxy {
     address public pendingNodeTail;
     uint public numPendingNodes;
 
-    // node => a linkedlist of working groupIds the node is in:
-    // node => (0x1 -> workingGroupId1 -> workingGroupId2 -> ... -> workingGroupIdm -> 0x1)
-    // Initial state: { nodeAddr : { HEAD_I : HEAD_I } }
-    mapping(address => mapping(uint => uint)) public nodeToGroupIdList;
+    // node => working/pending GroupId
+    // Unregisted node: { nodeAddr : 0 }
+    // { nodeAddr : HEAD_I } -> registered node but not in any group
+    mapping(address => uint) public nodeToGroupId;
 
     // groupId => Group
     mapping(uint => Group) workingGroups;
@@ -259,67 +259,15 @@ contract DOSProxy {
         refreshSystemRandomHardLimit = newLimit;
     }
 
-    function resetOnRecovery(uint cap) public onlyOwner {
-        uint len = numPendingNodes + groupSize * (numPendingGroups + workingGroupIds.length + expiredWorkingGroupIds.length);
-        cap = cap < len ? cap : len;
-
-        address n = pendingNodeList[HEAD_A];
-        uint prevCap = cap;
-        while (cap > 0 && pendingNodeList[HEAD_A] != HEAD_A) {
-            nodeToGroupIdList[n][HEAD_I] = 0;
-            n = pendingNodeList[n];
-            cap--;
-        }
-        if (prevCap - cap < numPendingNodes) return;
-        prevCap = cap;
-        pendingNodeList[HEAD_A] = HEAD_A;
-        pendingNodeTail = HEAD_A;
-        numPendingNodes = 0;
-
-        uint gid = pendingGroupList[HEAD_I];
-        while (cap > 0 && gid != HEAD_I) {
-            PendingGroup storage pgrp = pendingGroups[gid];
-            address m = pgrp.memberList[HEAD_A];
-            while (cap > 0 && m != HEAD_A) {
-                nodeToGroupIdList[m][HEAD_I] = 0;
-                m = pgrp.memberList[m];
-                cap--;
-            }
-            gid = pendingGroupList[gid];
-        }
-        if (prevCap - cap < groupSize * numPendingGroups) return;
-        prevCap = cap;
-        pendingGroupList[HEAD_I] = HEAD_I;
-        pendingGroupTail = HEAD_I;
-        numPendingGroups = 0;
-
-        for (uint i = 0; cap > 0 && i < workingGroupIds.length; i++) {
-            address[] storage members = workingGroups[workingGroupIds[i]].members;
-            for (uint j = 0; cap > 0 && j < members.length; j++) {
-                nodeToGroupIdList[members[j]][HEAD_I] = 0;
-                cap--;
-            }
-        }
-        if (prevCap - cap < groupSize * workingGroupIds.length) return;
-        prevCap = cap;
-        workingGroupIds.length = 0;
-        for (uint i = 0; cap > 0 && i < expiredWorkingGroupIds.length; i++) {
-            address[] storage members = workingGroups[expiredWorkingGroupIds[i]].members;
-            for (uint j = 0; cap > 0 && j < members.length; j++) {
-                nodeToGroupIdList[members[j]][HEAD_I] = 0;
-                cap--;
-            }
-        }
-        if (prevCap - cap < groupSize * expiredWorkingGroupIds.length) return;
-        expiredWorkingGroupIds.length = 0;
-
-        bootstrapRound = 0;
-        cachedUpdatedBlock = 0;
-        lastUpdatedBlock = 0;
-        lastRandomness = 0;
-        lastFormGrpReqId = 0;
-
-        // No need to clear other residual group map states on reset because of unique groupId.
+    function getWorkingGroupById(uint groupId) public view returns(uint, uint[4] memory, uint, uint, address[] memory) {
+        BN256.G2Point storage pubKey = workingGroups[groupId].groupPubKey;
+        return (
+            workingGroups[groupId].groupId,
+            [pubKey.x[0], pubKey.x[1], pubKey.y[0], pubKey.y[1]],
+            workingGroups[groupId].life,
+            workingGroups[groupId].birthBlkN,
+            workingGroups[groupId].members
+        );
     }
 
     function getCodeSize(address addr) private view returns (uint size) {
@@ -466,10 +414,10 @@ contract DOSProxy {
         Group storage grp = workingGroups[groupId];
         for (uint i = 0; i < grp.members.length; i++) {
             address member = grp.members[i];
-            // Update nodeToGroupIdList[member] and put members back to pendingNodeList's tail if necessary.
+            // Update nodeToGroupId[member] and put members back to pendingNodeList's tail if necessary.
             // Notice: Guardian may need to signal group formation.
-            (uint prev, bool removed) = removeIdFromList(nodeToGroupIdList[member], grp.groupId);
-            if (removed && prev == HEAD_I) {
+            if (nodeToGroupId[member] == groupId) {
+                nodeToGroupId[member] = HEAD_I;
                 if (backToPendingPool && member != skipNode && pendingNodeList[member] == address(0)) {
                     insertToPendingNodeListTail(member);
                 }
@@ -663,8 +611,8 @@ contract DOSProxy {
         address member = pgrp.memberList[HEAD_A];
         while (member != HEAD_A) {
             // 1. Put member that shouldn't be skipped back to pendingNodeList's head if it's not in any workingGroup.
-            // Dissolved endingGroup members have priority to form into a workingGroup.
-            if (nodeToGroupIdList[member][HEAD_I] == HEAD_I && member != skipNode && pendingNodeList[member] == address(0)) {
+            // Dissolved pendingGroup members have priority to form into a workingGroup.
+            if (nodeToGroupId[member] == HEAD_I && member != skipNode && pendingNodeList[member] == address(0)) {
                 insertToPendingNodeListHead(member);
             }
             member = pgrp.memberList[member];
@@ -765,7 +713,7 @@ contract DOSProxy {
 
     // Returns true if successfully unregistered node.
     function unregister(address node) private returns (bool) {
-        uint groupId = nodeToGroupIdList[node][HEAD_I];
+        uint groupId = nodeToGroupId[node];
         bool removed = false;
         uint8 unregisteredFrom = 0;
         // Check if node is in workingGroups or expiredWorkingGroup
@@ -809,7 +757,6 @@ contract DOSProxy {
             (prev, removed) = removeNodeFromList(pendingNodeList, node);
             if (removed) {
                 numPendingNodes--;
-                nodeToGroupIdList[node][HEAD_I] = 0;
                 // Reset pendingNodeTail if necessary.
                 if (pendingNodeTail == node) {
                     pendingNodeTail = prev;
@@ -817,8 +764,9 @@ contract DOSProxy {
                 unregisteredFrom |= 0x8;
             }
         }
-        emit LogUnRegisteredNewPendingNode(node, unregisteredFrom);
+        delete nodeToGroupId[node];
         DOSStakingInterface(addressBridge.getStakingAddress()).nodeStop(node);
+        emit LogUnRegisteredNewPendingNode(node, unregisteredFrom);
         return (unregisteredFrom != 0);
     }
 
@@ -835,11 +783,11 @@ contract DOSProxy {
         if (pendingNodeList[msg.sender] != address(0)) {
             return;
         }
-        //Already registered in pending or working groups
-        if (nodeToGroupIdList[msg.sender][HEAD_I] != 0) {
+        // Already registered in pending or working groups
+        if (nodeToGroupId[msg.sender] != 0) {
             return;
         }
-        nodeToGroupIdList[msg.sender][HEAD_I] = HEAD_I;
+        nodeToGroupId[msg.sender] = HEAD_I;
         insertToPendingNodeListTail(msg.sender);
         emit LogRegisteredNewPendingNode(msg.sender);
         DOSStakingInterface(addressBridge.getStakingAddress()).nodeStart(msg.sender);
@@ -997,8 +945,7 @@ contract DOSProxy {
             address member = pgrp.memberList[HEAD_A];
             while (member != HEAD_A) {
                 memberArray[idx++] = member;
-                // Update nodeToGroupIdList[member] with new group id.
-                insertToListHead(nodeToGroupIdList[member], groupId);
+                nodeToGroupId[member] = groupId;
                 member = pgrp.memberList[member];
             }
 
