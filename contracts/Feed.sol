@@ -179,24 +179,28 @@ import "./DOSOnChainSDK.sol";
 contract Feed is DOSOnChainSDK {
     using SafeMath for uint;
 
-    uint public constant ONEHOUR = 1 hours;
-    uint public constant ONEDAY = 1 days;
-    uint private UINT_MAX = uint(-1);  // overflow flag
+    uint private constant ONEHOUR = 1 hours;
+    uint private constant ONEDAY = 1 days;
+    // overflow flag
+    uint private constant UINT_MAX = uint(-1);
     uint public windowSize = 1200;     // 20 minutes
+    string private source;
+    string private selector;
+    // Absolute price deviation percentage * 1000, i.e. 1 represents 1/1000 price change.
+    uint private deviation;
+    // Reader whitelist
+    mapping(address => bool) private whitelist;
     
     struct Observation {
         uint timestamp;
         uint price;
     }
-    
-    string private source;
-    string private selector;
-    // Reader whitelist
-    mapping(address => bool) private whitelist;
     Observation[] private observations;
     
     event QueryUpdated(string oldSource, string newSource, string oldSelector, string newSelector);
     event WindowUpdated(uint oldWindow, uint newWindow);
+    event DeviationUpdated(uint oldDeviation, uint newDeviation);
+    event DataUpdated(uint timestamp, uint price);
     event AddAccess(address reader);
     event RemoveAccess(address reader);
     
@@ -212,7 +216,7 @@ contract Feed is DOSOnChainSDK {
         super.DOSSetup();
         source = _source;
         selector = _selector;
-        emit QueryUpdated('', _source, '', _selector);
+        emit QueryUpdated("", _source, "", _selector);
     }
     
     function updateQuery(string memory _source, string memory _selector) public onlyOwner {
@@ -226,6 +230,11 @@ contract Feed is DOSOnChainSDK {
         windowSize = newWindow;
         delete observations;
     }
+    function updateDeviation(uint newDeviation) public onlyOwner {
+        require(newDeviation >= 0 && newDeviation <= 1000, "should-be-in-0-1000");
+        emit DeviationUpdated(deviation, newDeviation);
+        deviation = newDeviation;
+    }
     function addToList(address reader) public onlyOwner {
         if (!whitelist[reader]) {
             whitelist[reader] = true;
@@ -238,17 +247,19 @@ contract Feed is DOSOnChainSDK {
             emit RemoveAccess(reader);
         }
     }
-    
+
     function __callback__(uint id, bytes calldata result) external auth {
         // update();
     }
     
     function update(uint price) private returns (bool) {
         uint lastTime = observations.length > 0 ? observations[observations.length - 1].timestamp : 0;
+        uint lastPrice = observations.length > 0 ? observations[observations.length - 1].price : 0;
         uint timeElapsed = block.timestamp.sub(lastTime);
-//        uint delta = 
-        if (timeElapsed >= windowSize) {
+        uint delta = price > lastPrice ? (price - lastPrice) : (lastPrice - price);
+        if (timeElapsed >= windowSize || (deviation > 0 && delta >= lastPrice.mul(deviation).div(1000))) {
             observations.push(Observation(block.timestamp, price));
+            emit DataUpdated(block.timestamp, price);
             return true;
         }
         return false;
@@ -261,7 +272,7 @@ contract Feed is DOSOnChainSDK {
         return (last.price, last.timestamp);
     }
     
-    // Given sample size return time-weighted average price (TWAP) between (observations[start] : observations[end])
+    // Given sample size return time-weighted average price (TWAP) of (observations[start] : observations[end])
     function twapResult(uint start) public view accessible returns (uint) {
         require(start < observations.length, "index-overflow");
         
@@ -322,7 +333,7 @@ contract Feed is DOSOnChainSDK {
         return twapResult(idx);
     }
 
-    function averageResult8Hour() public view accessible returns (uint) {
+    function TWAP8Hour() public view accessible returns (uint) {
         // require();
         uint idx = binarySearch(ONEHOUR * 8);
         require(idx != UINT_MAX, "not-enough-observation-data-for-8h");
