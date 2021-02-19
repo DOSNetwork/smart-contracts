@@ -2,25 +2,25 @@ pragma solidity ^0.5.0;
 
 import "./lib/BN256.sol";
 
-contract UserContractInterface {
+contract IUserContract {
     // Query callback.
     function __callback__(uint, bytes calldata) external;
     // Random number callback.
     function __callback__(uint, uint) external;
 }
 
-contract CommitRevealInterface {
+contract ICommitReveal {
     function startCommitReveal(uint, uint, uint, uint) public returns(uint);
     function getRandom(uint) public returns(uint);
 }
 
-contract DOSAddressBridgeInterface {
+contract IDOSAddressBridge {
     function getCommitRevealAddress() public view returns(address);
     function getPaymentAddress() public view returns(address);
     function getStakingAddress() public view returns(address);
 }
 
-contract DOSPaymentInterface {
+contract IDOSPayment {
     function hasServiceFee(address, uint) public view returns (bool);
     function chargeServiceFee(address, uint, uint) public;
     function recordServiceFee(uint, address, address[] memory) public;
@@ -28,7 +28,7 @@ contract DOSPaymentInterface {
     function setPaymentMethod(address, address) public;
 }
 
-contract DOSStakingInterface {
+contract IDOSStaking {
     function nodeStart(address _nodeAddr) public;
     function nodeStop(address _nodeAddr) public;
     function isValidStakingNode(address _nodeAddr) public view returns(bool);
@@ -89,7 +89,7 @@ contract DOSProxy {
     uint public bootstrapRound;
     uint public bootstrapEndBlk;
 
-    DOSAddressBridgeInterface public addressBridge;
+    IDOSAddressBridge public addressBridge;
     address public proxyFundsAddr;
     address public proxyFundsTokenAddr;
 
@@ -167,14 +167,14 @@ contract DOSProxy {
     }
 
     modifier fromValidStakingNode {
-        require(DOSStakingInterface(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
+        require(IDOSStaking(addressBridge.getStakingAddress()).isValidStakingNode(msg.sender),
                 "invalid-staking-node");
         _;
     }
 
     modifier hasOracleFee(address from, uint serviceType) {
         require(
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).hasServiceFee(from, serviceType),
+            IDOSPayment(addressBridge.getPaymentAddress()).hasServiceFee(from, serviceType),
             "not-enough-fee-to-oracle");
         _;
     }
@@ -191,10 +191,10 @@ contract DOSProxy {
         pendingNodeTail = HEAD_A;
         pendingGroupList[HEAD_I] = HEAD_I;
         pendingGroupTail = HEAD_I;
-        addressBridge = DOSAddressBridgeInterface(_bridgeAddr);
+        addressBridge = IDOSAddressBridge(_bridgeAddr);
         proxyFundsAddr = _proxyFundsAddr;
         proxyFundsTokenAddr = _proxyFundsTokenAddr;
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr, proxyFundsTokenAddr);
+        IDOSPayment(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr, proxyFundsTokenAddr);
     }
 
     function addToGuardianList(address _addr) public onlyOwner {
@@ -210,7 +210,7 @@ contract DOSProxy {
         require(newFundToken != proxyFundsTokenAddr && newFundToken != address(0x0), "invalid-parameter");
         proxyFundsAddr = newFund;
         proxyFundsTokenAddr = newFundToken;
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr, proxyFundsTokenAddr);
+        IDOSPayment(addressBridge.getPaymentAddress()).setPaymentMethod(proxyFundsAddr, proxyFundsTokenAddr);
     }
 
     // groupSize must be an odd number.
@@ -319,7 +319,7 @@ contract DOSProxy {
         lastHandledGroup = workingGroups[workingGroupIds[idx]];
         // Signal off-chain clients
         emit LogUpdateRandom(lastRandomness, lastHandledGroup.groupId);
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr, /*requestId=*/lastRandomness, uint(TrafficType.SystemRandom));
+        IDOSPayment(addressBridge.getPaymentAddress()).chargeServiceFee(proxyFundsAddr, /*requestId=*/lastRandomness, uint(TrafficType.SystemRandom));
         return true;
     }
 
@@ -461,7 +461,7 @@ contract DOSProxy {
                     lastRandomness,
                     grp.groupId
                 );
-                DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(from, queryId, uint(TrafficType.UserQuery));
+                IDOSPayment(addressBridge.getPaymentAddress()).chargeServiceFee(from, queryId, uint(TrafficType.UserQuery));
                 return queryId;
             } else {
                 emit LogNonSupportedType(selector);
@@ -497,7 +497,7 @@ contract DOSProxy {
             userSeed,
             grp.groupId
         );
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).chargeServiceFee(
+        IDOSPayment(addressBridge.getPaymentAddress()).chargeServiceFee(
             from == address(this) ? proxyFundsAddr : from,
             requestId,
             uint(TrafficType.UserRandom)
@@ -566,19 +566,19 @@ contract DOSProxy {
         emit LogCallbackTriggeredFor(ucAddr);
         delete PendingRequests[requestId];
         if (trafficType == uint8(TrafficType.UserQuery)) {
-            UserContractInterface(ucAddr).__callback__(requestId, result);
+            IUserContract(ucAddr).__callback__(requestId, result);
         } else if (trafficType == uint8(TrafficType.UserRandom)) {
             // Safe random number is the collectively signed threshold signature
             // of the message (requestId || lastRandomness || userSeed ||
             // selected sender in group).
             emit LogMessage("UserRandom");
-            UserContractInterface(ucAddr).__callback__(
+            IUserContract(ucAddr).__callback__(
                 requestId, uint(keccak256(abi.encodePacked(sig[0], sig[1]))));
         } else {
             revert("unsupported-traffic-type");
         }
         Group memory grp = workingGroups[PendingRequests[requestId].groupId];
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(requestId, msg.sender, grp.members);
+        IDOSPayment(addressBridge.getPaymentAddress()).recordServiceFee(requestId, msg.sender, grp.members);
     }
 
     function toBytes(uint x) private pure returns (bytes memory b) {
@@ -603,7 +603,7 @@ contract DOSProxy {
         uint claimFeeId = lastRandomness;
         // Update new randomness = sha3(collectively signed group signature)
         lastRandomness = uint(keccak256(abi.encodePacked(sig[0], sig[1])));
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).recordServiceFee(claimFeeId, msg.sender, lastHandledGroup.members);
+        IDOSPayment(addressBridge.getPaymentAddress()).recordServiceFee(claimFeeId, msg.sender, lastHandledGroup.members);
     }
 
     function cleanUpPendingGroup(uint gid, address skipNode) private {
@@ -636,7 +636,7 @@ contract DOSProxy {
     function signalRandom() public {
         if (kickoffRandomOnCondition()) {
             emit GuardianReward(block.number, msg.sender);
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+            IDOSPayment(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
             emit LogMessage("sys-random-not-expired");
         }
@@ -649,7 +649,7 @@ contract DOSProxy {
         if (gid != HEAD_I && pendingGroups[gid].startBlkNum + pendingGroupMaxLife < block.number) {
             cleanUpPendingGroup(gid, HEAD_A);
             emit GuardianReward(block.number, msg.sender);
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+            IDOSPayment(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
             emit LogMessage("no-expired-pgrp-to-clean");
         }
@@ -659,7 +659,7 @@ contract DOSProxy {
     function signalGroupFormation() public {
         if (formGroup()) {
             emit GuardianReward(block.number, msg.sender);
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+            IDOSPayment(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
             emit LogMessage("no-grp-formation");
         }
@@ -678,7 +678,7 @@ contract DOSProxy {
         // Reset.
         bootstrapRound = 0;
         bootstrapEndBlk = 0;
-        uint rndSeed = CommitRevealInterface(addressBridge.getCommitRevealAddress()).getRandom(_cid);
+        uint rndSeed = ICommitReveal(addressBridge.getCommitRevealAddress()).getRandom(_cid);
         if (rndSeed == 0) {
             emit LogMessage("bootstrap-commit-reveal-failure");
             return;
@@ -694,13 +694,13 @@ contract DOSProxy {
         shuffle(candidates, lastRandomness);
         regroup(candidates, arrSize / groupSize);
         emit GuardianReward(block.number, msg.sender);
-        DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+        IDOSPayment(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
     }
     // TODO: Chose a random group to check and has a consensus about which nodes should be unregister in v2.0
     function signalUnregister(address member) public onlyGuardianListed {
         if (unregister(member)) {
             emit GuardianReward(block.number, msg.sender);
-            DOSPaymentInterface(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
+            IDOSPayment(addressBridge.getPaymentAddress()).claimGuardianReward(msg.sender);
         } else {
             emit LogMessage("nothing-to-unregister");
         }
@@ -765,7 +765,7 @@ contract DOSProxy {
             }
         }
         delete nodeToGroupId[node];
-        DOSStakingInterface(addressBridge.getStakingAddress()).nodeStop(node);
+        IDOSStaking(addressBridge.getStakingAddress()).nodeStop(node);
         emit LogUnRegisteredNewPendingNode(node, unregisteredFrom);
         return (unregisteredFrom != 0);
     }
@@ -790,7 +790,7 @@ contract DOSProxy {
         nodeToGroupId[msg.sender] = HEAD_I;
         insertToPendingNodeListTail(msg.sender);
         emit LogRegisteredNewPendingNode(msg.sender);
-        DOSStakingInterface(addressBridge.getStakingAddress()).nodeStart(msg.sender);
+        IDOSStaking(addressBridge.getStakingAddress()).nodeStart(msg.sender);
         formGroup();
     }
 
@@ -830,7 +830,7 @@ contract DOSProxy {
             }
         } else if (numPendingNodes >= bootstrapStartThreshold) { // No working group alive and satisfies system re-bootstrap condition.
             if (bootstrapRound == 0) {
-                bootstrapRound = CommitRevealInterface(addressBridge.getCommitRevealAddress()).startCommitReveal(
+                bootstrapRound = ICommitReveal(addressBridge.getCommitRevealAddress()).startCommitReveal(
                     block.number,
                     bootstrapCommitDuration,
                     bootstrapRevealDuration,

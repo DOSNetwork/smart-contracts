@@ -1,6 +1,6 @@
 pragma solidity ^0.5.0;
 
-contract DOSAddressBridgeInterface {
+contract DOSAddressBridgeI {
     function getProxyAddress() public view returns(address);
 }
 
@@ -24,7 +24,7 @@ contract CommitReveal {
     }
 
     Campaign[] public campaigns;
-    DOSAddressBridgeInterface public addressBridge;
+    DOSAddressBridgeI public addressBridge;
 
     modifier checkCommit(uint _cid, bytes32 _commitment) {
         Campaign storage c = campaigns[_cid];
@@ -65,7 +65,7 @@ contract CommitReveal {
     constructor(address _bridgeAddr) public {
         // campaigns[0] is not used.
         campaigns.length++;
-        addressBridge = DOSAddressBridgeInterface(_bridgeAddr);
+        addressBridge = DOSAddressBridgeI(_bridgeAddr);
     }
 
     // Returns new campaignId.

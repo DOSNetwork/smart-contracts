@@ -1,42 +1,36 @@
 pragma solidity ^0.5.0;
 
-// Comment out utils library if you don't need it to save gas. (L4 and L30)
-// import "./lib/utils.sol";
 import "./Ownable.sol";
 
-contract DOSProxyInterface {
+contract IProxy {
     function query(address, uint, string memory, string memory) public returns (uint);
     function requestRandom(address, uint) public returns (uint);
 }
 
-contract DOSPaymentInterface {
+contract IPayment {
     function setPaymentMethod(address payer, address tokenAddr) public;
     function defaultTokenAddr() public returns(address);
 }
 
-contract DOSAddressBridgeInterface {
+contract IAddressBridge {
     function getProxyAddress() public view returns (address);
     function getPaymentAddress() public view returns (address);
 }
 
-contract ERC20I {
+contract IERC20 {
     function balanceOf(address who) public view returns (uint);
     function transfer(address to, uint value) public returns (bool);
     function approve(address spender, uint value) public returns (bool);
 }
 
 contract DOSOnChainSDK is Ownable {
-    // Comment out utils library if you don't need it to save gas. (L4 and L30)
-    // using utils for *;
-
-    DOSProxyInterface dosProxy;
-    DOSAddressBridgeInterface dosAddrBridge =
-        DOSAddressBridgeInterface(0x98A0E7026778840Aacd28B9c03137D32e06F5ff1);
+    IProxy dosProxy;
+    IAddressBridge dosAddrBridge = IAddressBridge(0x98A0E7026778840Aacd28B9c03137D32e06F5ff1);
 
     modifier resolveAddress {
         address proxyAddr = dosAddrBridge.getProxyAddress();
         if (address(dosProxy) != proxyAddr) {
-            dosProxy = DOSProxyInterface(proxyAddr);
+            dosProxy = IProxy(proxyAddr);
         }
         _;
     }
@@ -50,16 +44,16 @@ contract DOSOnChainSDK is Ownable {
     // @dev: call setup function first and transfer DOS tokens into deployed contract as oracle fees.
     function DOSSetup() public onlyOwner {
         address paymentAddr = dosAddrBridge.getPaymentAddress();
-        address defaultToken = DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
-        ERC20I(defaultToken).approve(paymentAddr, uint(-1));
-        DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).setPaymentMethod(address(this), defaultToken);
+        address defaultToken = IPayment(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
+        IERC20(defaultToken).approve(paymentAddr, uint(-1));
+        IPayment(dosAddrBridge.getPaymentAddress()).setPaymentMethod(address(this), defaultToken);
     }
 
     // @dev: refund all unused fees to caller.
     function DOSRefund() public onlyOwner {
-        address token = DOSPaymentInterface(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
-        uint amount = ERC20I(token).balanceOf(address(this));
-        ERC20I(token).transfer(msg.sender, amount);
+        address token = IPayment(dosAddrBridge.getPaymentAddress()).defaultTokenAddr();
+        uint amount = IERC20(token).balanceOf(address(this));
+        IERC20(token).transfer(msg.sender, amount);
     }
 
     // @dev: Call this function to get a unique queryId to differentiate

@@ -1,11 +1,11 @@
 pragma solidity ^0.5.0;
 
-import "../lib/utils.sol";
+import "../lib/StringUtils.sol";
 import "../DOSOnChainSDK.sol";
 
 // An example get latest ETH-USD price from Coinbase
 contract CoinbaseEthUsd is DOSOnChainSDK {
-    using utils for *;
+    using StringUtils for *;
 
     // Struct to hold parsed floating string "123.45"
     struct ethusd {

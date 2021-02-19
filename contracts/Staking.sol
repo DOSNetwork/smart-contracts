@@ -15,7 +15,7 @@ contract ERC20I {
     function approve(address spender, uint value) public returns (bool);
 }
 
-contract DOSAddressBridgeInterface {
+contract AddressBridgeI {
     function getProxyAddress() public view returns(address);
 }
 
@@ -170,7 +170,7 @@ contract Staking {
     }
 
     modifier onlyFromProxy() {
-        require(msg.sender == DOSAddressBridgeInterface(bridgeAddr).getProxyAddress(), "not-from-dos-proxy");
+        require(msg.sender == AddressBridgeI(bridgeAddr).getProxyAddress(), "not-from-dos-proxy");
         _;
     }
 
