@@ -262,11 +262,12 @@ library StringUtils {
         return -1;
     }
 
-    // subStr("1234567890", 2, 5) => "34567"
+    // subStr("123456789", 2, 5)   => "34567"
+    // subStr("123456789", 2, 100) => "3456789"
     // [start, start + len), index starting from 0.
     function subStr(bytes memory a, uint start, uint len) internal pure returns(bytes memory) {
-        require(start < a.length && start + len > start && start + len <= a.length,
-                "Invalid start index or length out of range");
+        require(start < a.length, "Invalid start index out of range");
+        if (a.length - start < len) len = a.length - start;
         bytes memory res = new bytes(len);
         for (uint i = 0; i < len; i++) {
             res[i] = a[start + i];
@@ -278,7 +279,7 @@ library StringUtils {
     // subStr(num, indexOf(num, '.') + 1) => "4567"
     function subStr(bytes memory a, uint start) internal pure returns(bytes memory) {
         require(start < a.length, "Invalid start index out of range");
-        return subStr(a, start, a.length - start);
+        return subStr(a, start, a.length);
     }
 
     function subStr(string memory a, uint start, uint len) internal pure returns(string memory) {

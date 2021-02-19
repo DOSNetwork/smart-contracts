@@ -167,4 +167,17 @@ library SafeMath {
         require(b != 0, errorMessage);
         return a % b;
     }
+
+    // @dev Returns x^n.
+    function pow(uint x, uint n) public pure returns (uint z) {
+        z = n % 2 != 0 ? x : 1;
+
+        for (n /= 2; n != 0; n /= 2) {
+            x = mul(x, x);
+
+            if (n % 2 != 0) {
+                z = mul(z, x);
+            }
+        }
+    }
 }
