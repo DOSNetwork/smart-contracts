@@ -15,10 +15,7 @@ contract Feed is DOSOnChainSDK {
     // overflow flag
     uint private constant UINT_MAX = uint(-1);
     uint public windowSize = 1200;     // 20 minutes
-    // e.g. For Coingecko data source: https://www.coingecko.com/en/api.
-    // e.g.: "https://api.coingecko.com/api/v3/simple/price?vs_currencies=usd&ids=ethereum,bitcoin,polkadot,huobi-token"
     string public source;
-    // e.g.: "$.ethereum.usd"
     string public selector;
     // Absolute price deviation percentage * 1000, i.e. 1 represents 1/1000 price change.
     uint public deviation;
