@@ -169,7 +169,7 @@ library SafeMath {
     }
 
     // @dev Returns x^n.
-    function pow(uint x, uint n) public pure returns (uint z) {
+    function pow(uint x, uint n) internal pure returns (uint z) {
         z = n % 2 != 0 ? x : 1;
 
         for (n /= 2; n != 0; n /= 2) {

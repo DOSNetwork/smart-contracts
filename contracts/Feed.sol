@@ -36,7 +36,12 @@ contract Feed is DOSOnChainSDK {
     }
     Observation[] private observations;
     
-    event QueryUpdated(string oldSource, string newSource, string oldSelector, string newSelector, uint oldDecmial, uint newDecimal);
+    event ParamsUpdated(
+        string oldSource, string newSource,
+        string oldSelector, string newSelector,
+        uint oldDecmial, uint newDecimal,
+        address oldParser, address newParser
+    );
     event WindowUpdated(uint oldWindow, uint newWindow);
     event DeviationUpdated(uint oldDeviation, uint newDeviation);
     event ParserUpdated(address oldParser, address newParser);
@@ -62,7 +67,7 @@ contract Feed is DOSOnChainSDK {
         _;
     }
 
-    constructor(string memory _source, string memory _selector, uint _decimal) public {
+    constructor(string memory _source, string memory _selector, uint _decimal, address _parser) public isContract(_parser) {
         // @dev: setup and then transfer DOS tokens into deployed contract
         // as oracle fees.
         // Unused fees can be reclaimed by calling DOSRefund() function of SDK contract.
@@ -70,14 +75,16 @@ contract Feed is DOSOnChainSDK {
         source = _source;
         selector = _selector;
         decimal = _decimal;
-        emit QueryUpdated("", _source, "", _selector, 0, _decimal);
+        parser = _parser;
+        emit ParamsUpdated("", _source, "", _selector, 0, _decimal, address(0), _parser);
     }
     
-    function updateQuery(string memory _source, string memory _selector, uint _decimal) public onlyOwner {
-        emit QueryUpdated(source, _source, selector, _selector, decimal, _decimal);
+    function updateParams(string memory _source, string memory _selector, uint _decimal, address _parser) public onlyOwner {
+        emit ParamsUpdated(source, _source, selector, _selector, decimal, _decimal, parser, _parser);
         source = _source;
         selector = _selector;
         decimal = _decimal;
+        parser = _parser;
     }
     // This will erase all observed data!
     function updateWindowSize(uint newWindow) public onlyOwner {
