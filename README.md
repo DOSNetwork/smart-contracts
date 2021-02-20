@@ -1,5 +1,5 @@
 ### Dev:
-- `$ git clone https://github.com/DOSNetwork/eth-contracts`
+- `$ git clone https://github.com/DOSNetwork/smart-contracts`
 - `$ npm install`
 - `$ npm -g install truffle`
 - `$ npm -g install ganache-cli` or installing its [graphic interface](https://truffleframework.com/ganache)

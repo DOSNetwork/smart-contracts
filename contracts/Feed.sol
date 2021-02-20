@@ -126,6 +126,30 @@ contract Feed is DOSOnChainSDK {
         }
     }
 
+    function numPoints() public view returns(uint) {
+        return observations.length;
+    }
+
+    // Observation[] is sorted by timestamp in ascending order. Return the maximum index {i}, satisfying that: observations[i].timestamp <= observations[end].timestamp.sub(timedelta)
+    // Return UINT_MAX if not enough data points.
+    function binarySearch(uint timedelta) public view returns (uint) {
+        int index = -1;
+        int l = 0;
+        int r = int(observations.length.sub(1));
+        uint key = observations[uint(r)].timestamp.sub(timedelta);
+        while (l <= r) {
+            int m = (l + r) / 2;
+            uint m_val = observations[uint(m)].timestamp;
+            if (m_val <= key) {
+                index = m;
+                l = m + 1;
+            } else {
+                r = m - 1;
+            }
+        }
+        return uint(index);
+    }
+
     function stale(uint age) public view returns(bool) {
         uint lastTime = observations.length > 0 ? observations[observations.length - 1].timestamp : 0;
         return block.timestamp > lastTime.add(age);
@@ -158,7 +182,16 @@ contract Feed is DOSOnChainSDK {
         }
         return false;
     }
+
+    // @dev Returns any specific historical data point.
+    // Accessible by whitelisted contracts or EOA user.
+    function result(uint idx) public view accessible returns (uint _price, uint _timestamp) {
+        require(idx < observations.length);
+        return (observations[idx].price, observations[idx].timestamp);
+    }
     
+    // @dev Returns the most freshed (latest reported) data point.
+    // Accessible by whitelisted contracts or EOA.
     // Return latest reported price & timestamp data.
     function latestResult() public view accessible returns (uint _lastPrice, uint _lastUpdatedTime) {
         require(observations.length > 0);
@@ -166,7 +199,8 @@ contract Feed is DOSOnChainSDK {
         return (last.price, last.timestamp);
     }
     
-    // Given sample size return time-weighted average price (TWAP) of (observations[start] : observations[end])
+    // @dev Returns time-weighted average price (TWAP) of (observations[start] : observations[end]).
+    // Accessible by whitelisted contracts or EOA.
     function twapResult(uint start) public view accessible returns (uint) {
         require(start < observations.length, "index-overflow");
         
@@ -179,26 +213,9 @@ contract Feed is DOSOnChainSDK {
         return cumulativePrice.div(timeElapsed);
     }
     
-    // Observation[] is sorted by timestamp in ascending order. Return the maximum index {i}, satisfying that: observations[i].timestamp <= observations[end].timestamp.sub(timedelta)
-    // Return UINT_MAX if not enough data points.
-    function binarySearch(uint timedelta) public view returns (uint) {
-        int index = -1;
-        int l = 0;
-        int r = int(observations.length.sub(1));
-        uint key = observations[uint(r)].timestamp.sub(timedelta);
-        while (l <= r) {
-            int m = (l + r) / 2;
-            uint m_val = observations[uint(m)].timestamp;
-            if (m_val <= key) {
-                index = m;
-                l = m + 1;
-            } else {
-                r = m - 1;
-            }
-        }
-        return uint(index);
-    }
-    
+    // @dev Below are a series of inhouse TWAP functions for the ease of developers.
+    // Accessible by whitelisted contracts or EOA user.
+    // More TWAP functions can be built by the above twapResult(startIdx) function.
     function TWAP1Hour() public view accessible returns (uint) {
         require(!stale(ONEHOUR), "1h-outdated-data");
         uint idx = binarySearch(ONEHOUR);
