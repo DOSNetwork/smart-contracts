@@ -7,5 +7,5 @@ module.exports = {
   feedAddr: deployed.hecoTestnet.FeedV1,
   feedABI: feed.abi,
   triggerMaxGas: 600000,
-  heartbeat: 60 * 1000,  // 60 seconds
+  heartbeat: 30 * 1000,  // 30 seconds
 };

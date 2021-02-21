@@ -51,9 +51,7 @@ async function query(timestamp, debug = false) {
 // Returns true if Bignumber p1 is beyond the upper/lower threshold of Bignumber p0.
 function deviated(p1, p0, threshold) {
   if (threshold == 0) return false;
-  return
-    p1.gt(BN(1000).plus(threshold).div(1000).times(p0)) ||
-    p1.lt(BN(1000).minus(threshold).div(1000).times(p0));
+  return p1.gt(BN(1000).plus(threshold).div(1000).times(p0)) || p1.lt(BN(1000).minus(threshold).div(1000).times(p0));
 }
 
 async function pullTriggerTx(debug) {
