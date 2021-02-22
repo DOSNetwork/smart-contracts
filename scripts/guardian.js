@@ -54,6 +54,14 @@ function deviated(p1, p0, threshold) {
   return p1.gt(BN(1000).plus(threshold).div(1000).times(p0)) || p1.lt(BN(1000).minus(threshold).div(1000).times(p0));
 }
 
+function sleep(ms) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      resolve(ms)
+    }, ms)
+  })
+}
+
 async function pullTriggerTx(debug) {
   let callData = Feed.methods.pullTrigger().encodeABI();
 //  let estimatedGas = await Feed.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
@@ -72,6 +80,11 @@ async function pullTriggerTx(debug) {
         }
         setTimeout(heartbeat, config.heartbeat);
       }
+    })
+    .on('error', async function(err) {
+      console.error(err);
+      await sleep(10000);
+      setTimeout(heartbeat, config.heartbeat);
     });
 }
 
