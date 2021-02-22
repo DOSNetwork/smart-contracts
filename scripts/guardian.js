@@ -65,22 +65,25 @@ async function pullTriggerTx(debug) {
   }, privateKey);
   await web3.eth.sendSignedTransaction(txObj.rawTransaction)
     .on('confirmation', async function(confirmationNumber, receipt) {
-      // Fired for every confirmation up to the 12th confirmation (0-indexed). We treat 12 confirmations as finalized state.
-      if (confirmationNumber == 11) {
+      // Fired for every confirmation up to the 12th confirmation (0-indexed). We treat 2 confirmations as finalized state.
+      if (confirmationNumber == 1) {
         if (debug) {
-          console.log(`+++++ tx ${receipt.transactionHash} 12 confirmations, gasUsed ${receipt.gasUsed}`);
+          console.log(`+++++ tx ${receipt.transactionHash} 2 confirmations, gasUsed ${receipt.gasUsed}`);
         }
-        let last = await Feed.methods.latestResult().call();
-        states.lastPrice = BN(last._lastPrice);
-        states.lastUpdated = parseInt(last._lastUpdatedTime);
         setTimeout(heartbeat, config.heartbeat);
       }
     });
 }
 
 async function heartbeat(debug = process.env.DEBUG) {
-  if (!states.inited) await init(debug);
-  
+  if (!states.inited) {
+    await init(debug);
+  } else {
+    let last = await Feed.methods.latestResult().call();
+    states.lastPrice = BN(last._lastPrice);
+    states.lastUpdated = parseInt(last._lastUpdatedTime);
+  }
+
   let now = parseInt((new Date()).getTime() / 1000);
   let data = await query(now);
   data = BN(data).times(BN(10).pow(states.decimal));
@@ -91,7 +94,7 @@ async function heartbeat(debug = process.env.DEBUG) {
     return setTimeout(heartbeat, config.heartbeat);
   }
   if (isDeviated) {
-    console.log(`+++++ Time ${now} data ${data}, beyond +/-${states.deviation}/1000 of last data ${states.lastPrice}, Deviation trigger`);
+    console.log(`+++++ Time ${now} data ${data}, beyond +/- ${states.deviation}/1000 of last data ${states.lastPrice}, Deviation trigger`);
   } else if (isExpired) {
     console.log(`+++++ Time ${now} data ${data}, last data ${states.lastPrice} outdated (${states.lastUpdated}), Timer trigger`);
   }
