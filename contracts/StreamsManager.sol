@@ -1,7 +1,7 @@
 pragma solidity ^0.5.0;
 
 contract IStream {
-    function decimals() public view returns (uint);
+    function decimal() public view returns (uint);
     function windowSize() public view returns (uint);
     function description() public view returns (string memory);
     function deviation() public view returns (uint);
@@ -19,7 +19,7 @@ contract IStream {
 }
 
 // StreamsManager manages group of data streams from the same meta data source (e.g. Coingecko, Coinbase, etc.)
-// Mostly used by Data Stream UI, not by dependant projects / devs.
+// Readable only by Data Stream UI or EOAs, not by dependant smart contracts / projects.
 contract StreamsManager {
     string public name;
     address public governance;
@@ -41,7 +41,7 @@ contract StreamsManager {
     }
     modifier accessible(address stream) {
         require(streamsIdx[stream] != 0 && stream == _streams[streamsIdx[stream]], "!exist");
-        require(IStream(stream).hasAccess(msg.sender), "!accessible");
+        require(msg.sender == tx.origin, "!accessible-by-non-eoa");
         _;
     }
 
@@ -92,7 +92,7 @@ contract StreamsManager {
     }
 
     function decimal(address stream) public view accessible(stream) returns(uint) {
-        return IStream(stream).decimals();
+        return IStream(stream).decimal();
     }
     function windowSize(address stream) public view accessible(stream) returns(uint) {
         return IStream(stream).windowSize();
