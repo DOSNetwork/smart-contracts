@@ -5,7 +5,7 @@ const jp = require('jsonpath');
 const Web3 = require('web3');
 const config = require('./config_heco');
 const web3 = new Web3(new Web3.providers.HttpProvider(config.httpProvider));
-const Feed = new web3.eth.Contract(config.feedABI, config.feedAddr);
+const Stream = new web3.eth.Contract(config.streamABI, config.ethusdStreamAddr);
 const states = {
   "inited": false,
   "source": "",
@@ -22,14 +22,14 @@ const privateKey = '0x' + process.env.PK;
 async function init(debug = false) {
   assert(privateKey.length == 66,
     "Please export hex-formatted private key into env without leading '0x'");
-  states.source = await Feed.methods.source().call();
-  states.selector = await Feed.methods.selector().call();
-  states.windowSize = parseInt(await Feed.methods.windowSize().call());
-  states.deviation = parseInt(await Feed.methods.deviation().call());
-  states.decimal = parseInt(await Feed.methods.decimal().call());
-  let len = parseInt(await Feed.methods.numPoints().call());
+  states.source = await Stream.methods.source().call();
+  states.selector = await Stream.methods.selector().call();
+  states.windowSize = parseInt(await Stream.methods.windowSize().call());
+  states.deviation = parseInt(await Stream.methods.deviation().call());
+  states.decimal = parseInt(await Stream.methods.decimal().call());
+  let len = parseInt(await Stream.methods.numPoints().call());
   if (len > 0) {
-    let last = await Feed.methods.latestResult().call();
+    let last = await Stream.methods.latestResult().call();
     states.lastPrice = BN(last._lastPrice);
     states.lastUpdated = parseInt(last._lastUpdatedTime);
   }
@@ -63,10 +63,10 @@ function sleep(ms) {
 }
 
 async function pullTriggerTx(debug) {
-  let callData = Feed.methods.pullTrigger().encodeABI();
-//  let estimatedGas = await Feed.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
+  let callData = Stream.methods.pullTrigger().encodeABI();
+//  let estimatedGas = await Stream.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
   let txObj = await web3.eth.accounts.signTransaction({
-    to: config.feedAddr,
+    to: config.ethusdStreamAddr,
     data: callData,
     value: '0',
     gas: config.triggerMaxGas
@@ -83,7 +83,6 @@ async function pullTriggerTx(debug) {
     })
     .on('error', async function(err) {
       console.error(err);
-      await sleep(10000);
       setTimeout(heartbeat, config.heartbeat);
     });
 }
@@ -92,7 +91,7 @@ async function heartbeat(debug = process.env.DEBUG) {
   if (!states.inited) {
     await init(debug);
   } else {
-    let last = await Feed.methods.latestResult().call();
+    let last = await Stream.methods.latestResult().call();
     states.lastPrice = BN(last._lastPrice);
     states.lastUpdated = parseInt(last._lastUpdatedTime);
   }

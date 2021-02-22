@@ -31,8 +31,9 @@
       "DOSPayment Implementation":"0x7e6a95eb1d5f2f9c89b3e6eb78afd08770cc18d8",
       "Staking Gateway":"0xFd9B8A33756A9De4E2bBd9cc066dB912bb5c5499",
       "Staking Implementation":"0xAA06934e959efa9F8E41B8c6D3CA49a8Da0Ca37e",
-      "FeedV1" : "0x54ed5ddba9eC24f7D31F75210aec315168b01494",
-      "CoingeckoParserV1" : "0xef846585ea20ae6e9cd346e15bb3a7edcf446321"
+      "CoingeckoParserV1" : "0xef846585ea20ae6e9cd346e15bb3a7edcf446321",
+      "CoingeckoETHUSDStream" : "0x038d3Ee0e97a47085b749a100F39d7ac658cCf90",
+      "CoingeckoStreamsManager": "0x34Cc56C40abA7c04B057d9F74b02edA71ea80022"
    }
 
 }

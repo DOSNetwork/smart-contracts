@@ -7,7 +7,7 @@ contract IParser {
     function parse(string memory raw, uint decimal) public view returns(uint);
 }
 
-contract Feed is DOSOnChainSDK {
+contract Stream is DOSOnChainSDK {
     using SafeMath for uint;
 
     uint private constant ONEHOUR = 1 hours;
@@ -15,17 +15,19 @@ contract Feed is DOSOnChainSDK {
     // overflow flag
     uint private constant UINT_MAX = uint(-1);
     uint public windowSize = 1200;     // 20 minutes
+    // e.g. ETH / USD
+    string public description;
     string public source;
     string public selector;
     // Absolute price deviation percentage * 1000, i.e. 1 represents 1/1000 price change.
-    uint public deviation;
+    uint public deviation = 3;
     // Number of decimals the reported price data use.
     uint public decimal;
     // Data parser, may be configured along with data source change
     address public parser;
     // Reader whitelist
     mapping(address => bool) private whitelist;
-    // Feed data is either updated once per windowSize or the deviation requirement is met, whichever comes first.
+    // Stream data is either updated once per windowSize or the deviation requirement is met, whichever comes first.
     // Anyone can trigger an update on windowSize expiration, but only governance approved ones can be deviation updater to get rid of sybil attacks.
     mapping(address => bool) private deviationGuardian;
     mapping(uint => bool) private _valid;
@@ -37,10 +39,10 @@ contract Feed is DOSOnChainSDK {
     Observation[] private observations;
     
     event ParamsUpdated(
+        string oldDescription, string newDescription,
         string oldSource, string newSource,
         string oldSelector, string newSelector,
-        uint oldDecmial, uint newDecimal,
-        address oldParser, address newParser
+        uint oldDecmial, uint newDecimal
     );
     event WindowUpdated(uint oldWindow, uint newWindow);
     event DeviationUpdated(uint oldDeviation, uint newDeviation);
@@ -52,9 +54,9 @@ contract Feed is DOSOnChainSDK {
     event RemoveAccess(address reader);
     event AddGuardian(address guardian);
     event RemoveGuardian(address guardian);
-    
+
     modifier accessible {
-        require(whitelist[msg.sender] || msg.sender == tx.origin, "not-accessible");
+        require(hasAccess(msg.sender), "!accessible");
         _;
     }
 
@@ -67,24 +69,35 @@ contract Feed is DOSOnChainSDK {
         _;
     }
 
-    constructor(string memory _source, string memory _selector, uint _decimal, address _parser) public isContract(_parser) {
+    constructor(string memory _description, string memory _source, string memory _selector, uint _decimal, address _parser) public isContract(_parser) {
         // @dev: setup and then transfer DOS tokens into deployed contract
         // as oracle fees.
         // Unused fees can be reclaimed by calling DOSRefund() function of SDK contract.
         super.DOSSetup();
+        description = _description;
         source = _source;
         selector = _selector;
         decimal = _decimal;
         parser = _parser;
-        emit ParamsUpdated("", _source, "", _selector, 0, _decimal, address(0), _parser);
+        emit ParamsUpdated("", _description, "", _source, "", _selector, 0, _decimal);
+        emit ParserUpdated(address(0), _parser);
     }
     
-    function updateParams(string memory _source, string memory _selector, uint _decimal, address _parser) public onlyOwner {
-        emit ParamsUpdated(source, _source, selector, _selector, decimal, _decimal, parser, _parser);
-        source = _source;
-        selector = _selector;
-        decimal = _decimal;
-        parser = _parser;
+    function strEqual(string memory a, string memory b) public pure returns (bool) {
+        return keccak256(abi.encodePacked(a)) == keccak256(abi.encodePacked(b));
+    }
+
+    function updateParams(string memory _description, string memory _source, string memory _selector, uint _decimal) public onlyOwner {
+        emit ParamsUpdated(
+            description, _description,
+            source, _source,
+            selector, _selector,
+            decimal, _decimal
+        );
+        if (!strEqual(description, _description))
+        if (!strEqual(source, _source)) source = _source;
+        if (!strEqual(selector, _selector)) selector = _selector;
+        if (decimal != _decimal) decimal = _decimal;
     }
     // This will erase all observed data!
     function updateWindowSize(uint newWindow) public onlyOwner {
@@ -124,6 +137,10 @@ contract Feed is DOSOnChainSDK {
             delete deviationGuardian[guardian];
             emit RemoveGuardian(guardian);
         }
+    }
+
+    function hasAccess(address reader) public view returns(bool) {
+        return whitelist[reader] || reader == tx.origin;
     }
 
     function numPoints() public view returns(uint) {
