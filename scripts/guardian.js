@@ -15,6 +15,7 @@ const states = {
   "decimal": 0,
   "lastUpdated": 0,
   "lastPrice": BN(0),
+  "timers": [],
 }
 const privateKey = '0x' + process.env.PK;
 
@@ -62,9 +63,17 @@ function sleep(ms) {
   })
 }
 
-async function pullTriggerTx(debug) {
+function reschedule() {
+  for (let i = 0; i < states.timers.length; i++) {
+    clearTimeout(states.timers[i]);
+  }
+  states.timers = [];
+  states.timers.push(setTimeout(heartbeat, config.heartbeat));
+}
+
+async function pullTriggerThenReschedule(debug) {
   let callData = Stream.methods.pullTrigger().encodeABI();
-//  let estimatedGas = await Stream.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
+  //  let estimatedGas = await Stream.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
   let txObj = await web3.eth.accounts.signTransaction({
     to: config.ethusdStreamAddr,
     data: callData,
@@ -78,12 +87,12 @@ async function pullTriggerTx(debug) {
         if (debug) {
           console.log(`+++++ tx ${receipt.transactionHash} 2 confirmations, gasUsed ${receipt.gasUsed}`);
         }
-        setTimeout(heartbeat, config.heartbeat);
+        reschedule();
       }
     })
     .on('error', async function(err) {
       console.error(err);
-      setTimeout(heartbeat, config.heartbeat);
+      reschedule();
     });
 }
 
@@ -103,14 +112,15 @@ async function heartbeat(debug = process.env.DEBUG) {
   let isExpired = now > states.lastUpdated + states.windowSize;
   if (!isDeviated && !isExpired) {
     if (debug) console.log(`----- heartbeat ${now}, ${data} ...`);
-    return setTimeout(heartbeat, config.heartbeat);
+    reschedule();
+  } else {
+    if (isDeviated) {
+      console.log(`+++++ Time ${now} data ${data}, beyond +/- ${states.deviation}/1000 of last data ${states.lastPrice}, Deviation trigger`);
+    } else if (isExpired) {
+      console.log(`+++++ Time ${now} data ${data}, last data ${states.lastPrice} outdated (${states.lastUpdated}), Timer trigger`);
+    }
+    await pullTriggerThenReschedule(debug);
   }
-  if (isDeviated) {
-    console.log(`+++++ Time ${now} data ${data}, beyond +/- ${states.deviation}/1000 of last data ${states.lastPrice}, Deviation trigger`);
-  } else if (isExpired) {
-    console.log(`+++++ Time ${now} data ${data}, last data ${states.lastPrice} outdated (${states.lastUpdated}), Timer trigger`);
-  }
-  await pullTriggerTx(debug);
 }
 
 heartbeat();
