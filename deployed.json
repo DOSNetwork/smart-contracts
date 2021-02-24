@@ -33,6 +33,7 @@
       "Staking Implementation":"0xAA06934e959efa9F8E41B8c6D3CA49a8Da0Ca37e",
       "CoingeckoParserV1" : "0xef846585ea20ae6e9cd346e15bb3a7edcf446321",
       "CoingeckoETHUSDStream" : "0x038d3Ee0e97a47085b749a100F39d7ac658cCf90",
+      "CoingeckoBTCUSDStream" : "0x72d4107d9345188f552950FD4b25a7119c71899E",
       "CoingeckoStreamsManager": "0xe828E09d2BDE3bdB9bDa2e2A76437A15E6E86690"
    }
 

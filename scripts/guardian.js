@@ -5,48 +5,59 @@ const jp = require('jsonpath');
 const Web3 = require('web3');
 const config = require('./config_heco');
 const web3 = new Web3(new Web3.providers.HttpProvider(config.httpProvider));
-const Stream = new web3.eth.Contract(config.streamABI, config.ethusdStreamAddr);
-const states = {
-  "inited": false,
-  "source": "",
-  "selector": "",
-  "windowSize": 0,
-  "deviation": 0,
-  "decimal": 0,
-  "lastUpdated": 0,
-  "lastPrice": BN(0),
-  "timers": [],
-}
 const privateKey = '0x' + process.env.PK;
+// streams' state
+const states = [];
 
-
-async function init(debug = false) {
+async function init(debug) {
   assert(privateKey.length == 66,
     "Please export hex-formatted private key into env without leading '0x'");
-  states.source = await Stream.methods.source().call();
-  states.selector = await Stream.methods.selector().call();
-  states.windowSize = parseInt(await Stream.methods.windowSize().call());
-  states.deviation = parseInt(await Stream.methods.deviation().call());
-  states.decimal = parseInt(await Stream.methods.decimal().call());
-  let len = parseInt(await Stream.methods.numPoints().call());
-  if (len > 0) {
-    let last = await Stream.methods.latestResult().call();
-    states.lastPrice = BN(last._lastPrice);
-    states.lastUpdated = parseInt(last._lastUpdatedTime);
-  }
-  states.inited = true
 
-  if (debug) console.log(states);
+  for (let i = 0; i < config.streams.length; i++) {
+    let stream = new web3.eth.Contract(config.streamABI, config.streams[i]);
+    stream.address = config.streams[i];
+    let state = {
+      stream: stream,
+      source: await stream.methods.source().call(),
+      selector: await stream.methods.selector().call(),
+      windowSize: parseInt(await stream.methods.windowSize().call()),
+      deviation: parseInt(await stream.methods.deviation().call()),
+      decimal: parseInt(await stream.methods.decimal().call()),
+      lastUpdated: 0,
+      lastPrice: BN(0),
+    }
+    let len = parseInt(await stream.methods.numPoints().call());
+    if (len > 0) {
+      let last = await stream.methods.latestResult().call();
+      state.lastPrice = BN(last._lastPrice);
+      state.lastUpdated = parseInt(last._lastUpdatedTime);
+    }
+    states.push(state);
+  }
+  if (debug) console.log('+++++ streams inited ...');
 }
 
-async function query(timestamp, debug = false) {
+async function sync() {
+  for (let i = 0; i < states.length; i++) {
+    let last = await states[i].stream.methods.latestResult().call();
+    states[i].lastPrice = BN(last._lastPrice);
+    states[i].lastUpdated = parseInt(last._lastUpdatedTime);
+  }
+}
+
+async function queryDecimalData(debug = false) {
+  let ret = [];
   let resp = await fetch(config.coingeckoMetaSource);
   let respJson = await resp.json();
-  let data = jp.value(respJson, states.selector);
-  if (debug) {
-    console.log(`+++ Time ${timestamp}, coingecko ${states.selector}: ${data}`);
+  for (let i = 0; i < states.length; i++) {
+    let data = jp.value(respJson, states[i].selector);
+    data = BN(data).times(BN(10).pow(states[i].decimal));
+    ret.push(data);
+    if (debug) {
+      console.log(`+++++ coingecko ${states[i].selector}: ${data}`);
+    }
   }
-  return data;
+  return ret;
 }
 
 // Returns true if Bignumber p1 is beyond the upper/lower threshold of Bignumber p0.
@@ -64,18 +75,14 @@ function sleep(ms) {
 }
 
 function reschedule() {
-  for (let i = 0; i < states.timers.length; i++) {
-    clearTimeout(states.timers[i]);
-  }
-  states.timers = [];
-  states.timers.push(setTimeout(heartbeat, config.heartbeat));
+  setTimeout(heartbeat, config.heartbeat);
 }
 
-async function pullTriggerThenReschedule(debug) {
-  let callData = Stream.methods.pullTrigger().encodeABI();
-  //  let estimatedGas = await Stream.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
+async function pullTrigger(state, debug) {
+  let callData = state.stream.methods.pullTrigger().encodeABI();
+  //  let estimatedGas = await state.stream.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
   let txObj = await web3.eth.accounts.signTransaction({
-    to: config.ethusdStreamAddr,
+    to: state.stream.address,
     data: callData,
     value: '0',
     gas: config.triggerMaxGas
@@ -85,42 +92,42 @@ async function pullTriggerThenReschedule(debug) {
       // Fired for every confirmation up to the 12th confirmation (0-indexed). We treat 2 confirmations as finalized state.
       if (confirmationNumber == 1) {
         if (debug) {
-          console.log(`+++++ tx ${receipt.transactionHash} 2 confirmations, gasUsed ${receipt.gasUsed}`);
+          console.log(`+++++ ${state.selector} tx ${receipt.transactionHash} 2 confirmations, gasUsed ${receipt.gasUsed}`);
         }
-        reschedule();
       }
     })
     .on('error', async function(err) {
       console.error(err);
-      reschedule();
     });
 }
 
 async function heartbeat(debug = process.env.DEBUG) {
-  if (!states.inited) {
+  if (config.streams.length == 0) {
+    console.error('@@@@@@ No stream to watch, exit!');
+    process.exit(1);
+  } else if (states.length == 0) {
     await init(debug);
   } else {
-    let last = await Stream.methods.latestResult().call();
-    states.lastPrice = BN(last._lastPrice);
-    states.lastUpdated = parseInt(last._lastUpdatedTime);
+    await sync();
   }
 
-  let now = parseInt((new Date()).getTime() / 1000);
-  let data = await query(now);
-  data = BN(data).times(BN(10).pow(states.decimal));
-  let isDeviated = deviated(data, states.lastPrice, states.deviation);
-  let isExpired = now > states.lastUpdated + states.windowSize;
-  if (!isDeviated && !isExpired) {
-    if (debug) console.log(`----- heartbeat ${now}, ${data} ...`);
-    reschedule();
-  } else {
-    if (isDeviated) {
-      console.log(`+++++ Time ${now} data ${data}, beyond +/- ${states.deviation}/1000 of last data ${states.lastPrice}, Deviation trigger`);
+  let data = await queryDecimalData();
+  for (let i = 0; i < states.length; i++) {
+    let now = parseInt((new Date()).getTime() / 1000);
+    let now_str = (new Date()).toTimeString().split(' ')[0];
+    if (i == 0 && debug) console.log(`----- heartbeat ${now_str} ...`);
+    let isDeviated = deviated(data[i], states[i].lastPrice, states[i].deviation);
+    let isExpired = now > states[i].lastUpdated + states[i].windowSize;
+    if (!isDeviated && !isExpired) {
+      continue;
+    } else if (isDeviated) {
+      console.log(`+++++ Stream ${states[i].selector} ${now_str} d(${data[i]}), beyond last data (${states[i].lastPrice}) +/- ${states[i].deviation}/1000, Deviation trigger`);
     } else if (isExpired) {
-      console.log(`+++++ Time ${now} data ${data}, last data ${states.lastPrice} outdated (${states.lastUpdated}), Timer trigger`);
+      console.log(`+++++ Stream ${states[i].selector} ${now_str} d(${data[i]}), last data (${states[i].lastPrice}) outdated, Timer trigger`);
     }
-    await pullTriggerThenReschedule(debug);
+    await pullTrigger(states[i], debug);
   }
+  setTimeout(heartbeat, config.heartbeat);
 }
 
 heartbeat();
