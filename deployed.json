@@ -34,6 +34,9 @@
       "CoingeckoParserV1" : "0xef846585ea20ae6e9cd346e15bb3a7edcf446321",
       "CoingeckoETHUSDStream" : "0x038d3Ee0e97a47085b749a100F39d7ac658cCf90",
       "CoingeckoBTCUSDStream" : "0x72d4107d9345188f552950FD4b25a7119c71899E",
+      "CoingeckoDOTUSDStream" : "0xc68349491A4d452D7a7FD29690A51F2F36c3e0CA",
+      "CoingeckoHTUSDStream" : "0xCe1c6938ba9df7Bc2EDc171da6dE2528d0199002",
+      "CoingeckoDOSUSDStream" : "0x407881Cc7542271fED6DFA268c1Ae67c5fe8277E",
       "CoingeckoStreamsManager": "0xe828E09d2BDE3bdB9bDa2e2A76437A15E6E86690"
    }
 

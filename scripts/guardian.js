@@ -39,18 +39,32 @@ async function init(debug) {
 
 async function sync() {
   for (let i = 0; i < states.length; i++) {
+    states[i].deviation = parseInt(await states[i].stream.methods.deviation().call());
     let last = await states[i].stream.methods.latestResult().call();
     states[i].lastPrice = BN(last._lastPrice);
     states[i].lastUpdated = parseInt(last._lastUpdatedTime);
   }
 }
 
-async function queryDecimalData(debug = false) {
+// Normalize selector string to equivalent format in case of special characters.
+// e.g. '$.huobi-token.usd' => '$["huobi-token"]["usd"]'
+function normalizeSelector(selector) {
+  if (selector.indexOf('-') == -1) return selector;
+  return selector
+    .split('.')
+    .map((val, i) => {
+      if (i == 0) return val;
+      return '[\"' + val + '\"]';
+    })
+    .join('');
+}
+
+async function queryCoingeckoDecimalData(debug = false) {
   let ret = [];
   let resp = await fetch(config.coingeckoMetaSource);
   let respJson = await resp.json();
   for (let i = 0; i < states.length; i++) {
-    let data = jp.value(respJson, states[i].selector);
+    let data = jp.value(respJson, normalizeSelector(states[i].selector));
     data = BN(data).times(BN(10).pow(states[i].decimal));
     ret.push(data);
     if (debug) {
@@ -72,10 +86,6 @@ function sleep(ms) {
       resolve(ms)
     }, ms)
   })
-}
-
-function reschedule() {
-  setTimeout(heartbeat, config.heartbeat);
 }
 
 async function pullTrigger(state, debug) {
@@ -111,7 +121,7 @@ async function heartbeat(debug = process.env.DEBUG) {
     await sync();
   }
 
-  let data = await queryDecimalData();
+  let data = await queryCoingeckoDecimalData();
   for (let i = 0; i < states.length; i++) {
     let now = parseInt((new Date()).getTime() / 1000);
     let now_str = (new Date()).toTimeString().split(' ')[0];
