@@ -59,9 +59,18 @@ function normalizeSelector(selector) {
     .join('');
 }
 
-async function queryCoingeckoDecimalData(debug = false) {
+// Sort response json by object keys. This is to normalize the jsonpath
+// behavior between client software and this guardian bot.
+function normalizeResponseJson(respJson) {
+  return Object.keys(respJson).sort().reduce(function (result, key) {
+    result[key] = respJson[key];
+    return result;
+  }, {});
+}
+
+async function queryCoingeckoStreamsData(debug = false) {
   let ret = [];
-  let resp = await fetch(config.coingeckoMetaSource);
+  let resp = await fetch(config.coingeckoMegaSource);
   let respJson = await resp.json();
   for (let i = 0; i < states.length; i++) {
     let data = jp.value(respJson, normalizeSelector(states[i].selector));
@@ -72,6 +81,17 @@ async function queryCoingeckoDecimalData(debug = false) {
     }
   }
   return ret;
+}
+
+async function queryCoingeckoMegaData(megaDecimal, debug = false) {
+  let resp = await fetch(config.coingeckoMegaSource);
+  let respJson = await resp.json();
+  respJson = normalizeResponseJson(respJson);
+  let data = jp.query(respJson, config.coingeckoMegaSelector);
+  data.map((val) => {
+    return BN(data).times(BN(10).pow(megaDecimal))
+  });
+  return data;
 }
 
 // Returns true if Bignumber p1 is beyond the upper/lower threshold of Bignumber p0.
@@ -88,7 +108,7 @@ function sleep(ms) {
   })
 }
 
-async function pullTrigger(state, debug) {
+async function pullTriggerStream(state, debug) {
   let callData = state.stream.methods.pullTrigger().encodeABI();
   //  let estimatedGas = await state.stream.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
   let txObj = await web3.eth.accounts.signTransaction({
@@ -121,7 +141,7 @@ async function heartbeat(debug = process.env.DEBUG) {
     await sync();
   }
 
-  let data = await queryCoingeckoDecimalData();
+  let data = await queryCoingeckoStreamsData();
   for (let i = 0; i < states.length; i++) {
     let now = parseInt((new Date()).getTime() / 1000);
     let now_str = (new Date()).toTimeString().split(' ')[0];
@@ -135,9 +155,10 @@ async function heartbeat(debug = process.env.DEBUG) {
     } else if (isExpired) {
       console.log(`+++++ Stream ${states[i].selector} ${now_str} d(${data[i]}), last data (${states[i].lastPrice}) outdated, Timer trigger`);
     }
-    await pullTrigger(states[i], debug);
+    await pullTriggerStream(states[i], debug);
   }
   setTimeout(heartbeat, config.heartbeat);
 }
 
-heartbeat();
+// heartbeat();
+queryCoingeckoMegaData(8);

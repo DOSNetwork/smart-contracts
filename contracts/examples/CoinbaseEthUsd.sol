@@ -34,9 +34,9 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
 
         price_str = string(result);
         prices.integral = price_str.subStr(1).str2Uint();
-        int delimit_idx = price_str.indexOf('.');
-        if (delimit_idx != -1) {
-            prices.fractional = price_str.subStr(uint(delimit_idx + 1)).str2Uint();
+        uint delimit_idx = price_str.indexOf('.');
+        if (delimit_idx != result.length) {
+            prices.fractional = price_str.subStr(delimit_idx + 1).str2Uint();
         }
         emit GetPrice(prices.integral, prices.fractional);
     }

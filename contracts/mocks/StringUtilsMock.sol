@@ -60,7 +60,7 @@ contract StringUtilsMock {
         return StringUtils.strEqual(a, b);
     }
 
-    function indexOf(string memory haystack, string memory needle) public pure returns(int) {
+    function indexOf(string memory haystack, string memory needle) public pure returns(uint) {
         return StringUtils.indexOf(haystack, needle);
     }
 

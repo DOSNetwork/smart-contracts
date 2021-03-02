@@ -124,8 +124,8 @@ contract("StringUtils test", async() => {
         let result2 = await stringUtils.indexOf(haystack2,needle2);
         let result3 = await stringUtils.indexOf(haystack3,needle3);
         assert.equal(result0,0,"get index");
-        assert.equal(result1,-1,"get index");
-        assert.equal(result2,-1,"get index");
+        assert.equal(result1,haystack1.length,"get index");
+        assert.equal(result2,haystack2.length,"get index");
         assert.equal(result3,3,"get index");
     })
 

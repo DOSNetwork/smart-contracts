@@ -4,7 +4,7 @@ import "./lib/SafeMath.sol";
 import "./DOSOnChainSDK.sol";
 
 contract IParser {
-    function parse(string memory raw, uint decimal) public view returns(uint);
+    function floatBytes2UintArray(bytes memory raw, uint decimal) public view returns(uint[] memory);
 }
 
 contract Stream is DOSOnChainSDK {
@@ -19,12 +19,14 @@ contract Stream is DOSOnChainSDK {
     string public description;
     string public source;
     string public selector;
+    uint public sId;
     // Absolute price deviation percentage * 1000, i.e. 1 represents 1/1000 price change.
-    uint public deviation = 3;
+    uint public deviation = 5;
     // Number of decimals the reported price data use.
     uint public decimal;
     // Data parser, may be configured along with data source change
     address public parser;
+    address public streamManager;
     // Reader whitelist
     mapping(address => bool) private whitelist;
     // Stream data is either updated once per windowSize or the deviation requirement is met, whichever comes first.
@@ -69,7 +71,23 @@ contract Stream is DOSOnChainSDK {
         _;
     }
 
-    constructor(string memory _description, string memory _source, string memory _selector, uint _decimal, address _parser) public isContract(_parser) {
+    modifier onlyUpdater {
+        require(msg.sender == streamManager, "!updater");
+        _;
+    }
+
+    constructor(
+        string memory _description,
+        string memory _source,
+        string memory _selector,
+        uint _decimal,
+        address _parser,
+        address _manager
+    )
+        public
+        isContract(_parser)
+        isContract(_manager)
+    {
         // @dev: setup and then transfer DOS tokens into deployed contract
         // as oracle fees.
         // Unused fees can be reclaimed by calling DOSRefund() function of SDK contract.
@@ -79,31 +97,34 @@ contract Stream is DOSOnChainSDK {
         selector = _selector;
         decimal = _decimal;
         parser = _parser;
+        streamManager = _manager;
+        addReader(_manager);
         emit ParamsUpdated("", _description, "", _source, "", _selector, 0, _decimal);
         emit ParserUpdated(address(0), _parser);
     }
     
-    function strEqual(string memory a, string memory b) public pure returns (bool) {
+    function strEqual(string memory a, string memory b) private pure returns (bool) {
         return keccak256(abi.encodePacked(a)) == keccak256(abi.encodePacked(b));
     }
 
-    function updateParams(string memory _description, string memory _source, string memory _selector, uint _decimal) public onlyOwner {
+    function updateParams(string memory _description, string memory _source, string memory _selector, uint _decimal, uint _sId) public onlyOwner {
         emit ParamsUpdated(
             description, _description,
             source, _source,
             selector, _selector,
             decimal, _decimal
         );
-        if (!strEqual(description, _description))
+        if (!strEqual(description, _description)) description = _description;
         if (!strEqual(source, _source)) source = _source;
         if (!strEqual(selector, _selector)) selector = _selector;
         if (decimal != _decimal) decimal = _decimal;
+        if (sId != _sId) sId = _sId;
     }
     // This will erase all observed data!
     function updateWindowSize(uint newWindow) public onlyOwner {
         emit WindowUpdated(windowSize, newWindow);
         windowSize = newWindow;
-        delete observations;
+        observations.length = 0;
     }
     function updateDeviation(uint newDeviation) public onlyOwner {
         require(newDeviation >= 0 && newDeviation <= 1000, "should-be-in-0-1000");
@@ -146,6 +167,11 @@ contract Stream is DOSOnChainSDK {
     function numPoints() public view returns(uint) {
         return observations.length;
     }
+    function num24hPoints() public view returns(uint) {
+        uint idx = binarySearch(ONEDAY);
+        if (idx == UINT_MAX) return observations.length;
+        return observations.length - idx;
+    }
 
     // Observation[] is sorted by timestamp in ascending order. Return the maximum index {i}, satisfying that: observations[i].timestamp <= observations[end].timestamp.sub(timedelta)
     // Return UINT_MAX if not enough data points.
@@ -184,20 +210,28 @@ contract Stream is DOSOnChainSDK {
 
     function __callback__(uint id, bytes calldata result) external auth {
         require(_valid[id], "invalid-request-id");
-        uint priceData = IParser(parser).parse(string(result), decimal);
-        if (update(priceData)) emit BulletCaught(id);
+        uint[] memory priceData = IParser(parser).floatBytes2UintArray(result, decimal);
+        if (update(priceData[sId])) emit BulletCaught(id);
         delete _valid[id];
     }
 
-    function update(uint price) private returns (bool) {
+    function shouldUpdate(uint price) public view returns(bool) {
         uint lastPrice = observations.length > 0 ? observations[observations.length - 1].price : 0;
         uint delta = price > lastPrice ? (price - lastPrice) : (lastPrice - price);
-        if (stale(windowSize) || (deviation > 0 && delta >= lastPrice.mul(deviation).div(1000))) {
+        return stale(windowSize) || (deviation > 0 && delta >= lastPrice.mul(deviation).div(1000));
+    }
+
+    function update(uint price) private returns(bool) {
+        if (shouldUpdate(price)) {
             observations.push(Observation(block.timestamp, price));
             emit DataUpdated(block.timestamp, price);
             return true;
         }
         return false;
+    }
+
+    function megaUpdate(uint price) public onlyUpdater returns(bool) {
+        return update(price);
     }
 
     // @dev Returns any specific historical data point.
