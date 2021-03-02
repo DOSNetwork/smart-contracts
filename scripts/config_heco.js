@@ -1,18 +1,17 @@
 const deployed = require('../deployed.json');
 const stream = require('../build/contracts/Stream.json');
+const manager = require('../build/contracts/StreamsManager.json');
+const mega = require('../build/contracts/MegaStream.json');
 
 module.exports = {
   httpProvider: 'https://http-testnet.hecochain.com',
   coingeckoMegaSource: 'https://api.coingecko.com/api/v3/simple/price?vs_currencies=usd&ids=bitcoin,dos-network,ethereum,huobi-token,polkadot',
   coingeckoMegaSelector: '$..usd',
-  streams: [
-    deployed.hecoTestnet.CoingeckoETHUSDStream,
-    deployed.hecoTestnet.CoingeckoBTCUSDStream,
-    deployed.hecoTestnet.CoingeckoDOTUSDStream,
-    deployed.hecoTestnet.CoingeckoHTUSDStream,
-    deployed.hecoTestnet.CoingeckoDOSUSDStream,
-  ],
+  coingeckoStreamsManagerAddr: deployed.hecoTestnet.CoingeckoStreamsManager,
+  managerABI: manager.abi,
   streamABI: stream.abi,
+  megaStreamABI: mega.abi,
   triggerMaxGas: 600000,
-  heartbeat: 90 * 1000,  // 90 seconds
+  heartbeatStreams: 60 * 1000,  // 60 seconds
+  heartbeatMega: 90 * 1000,     // 90 seconds
 };

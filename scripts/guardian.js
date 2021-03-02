@@ -8,14 +8,29 @@ const web3 = new Web3(new Web3.providers.HttpProvider(config.httpProvider));
 const privateKey = '0x' + process.env.PK;
 // streams' state
 const states = [];
+var streamsManager = null;
+var megaStream = null;
 
 async function init(debug) {
   assert(privateKey.length == 66,
     "Please export hex-formatted private key into env without leading '0x'");
 
-  for (let i = 0; i < config.streams.length; i++) {
-    let stream = new web3.eth.Contract(config.streamABI, config.streams[i]);
-    stream.address = config.streams[i];
+  streamsManager = new web3.eth.Contract(config.managerABI, config.coingeckoStreamsManagerAddr);
+  streamsManager.address = config.coingeckoStreamsManagerAddr;
+  let sortedStreams = await streamsManager.methods.sortedStreams().call();
+  if (sortedStreams.length == 0) {
+    console.log('@@@@@@ No stream to watch, exit!');
+    process.exit(1);
+  }
+
+  let megaStreamAddr = await streamsManager.methods._streams(0).call();
+  megaStream = new web3.eth.Contract(config.megaStreamABI, megaStreamAddr);
+  megaStream.address = megaStreamAddr;
+  megaStream.decimal = await megaStream.methods.decimal().call();
+
+  for (let i = 0; i < sortedStreams.length; i++) {
+    let stream = new web3.eth.Contract(config.streamABI, sortedStreams[i]);
+    stream.address = sortedStreams[i];
     let state = {
       stream: stream,
       source: await stream.methods.source().call(),
@@ -83,15 +98,14 @@ async function queryCoingeckoStreamsData(debug = false) {
   return ret;
 }
 
-async function queryCoingeckoMegaData(megaDecimal, debug = false) {
+async function queryCoingeckoMegaData(megaDecimal) {
   let resp = await fetch(config.coingeckoMegaSource);
   let respJson = await resp.json();
   respJson = normalizeResponseJson(respJson);
   let data = jp.query(respJson, config.coingeckoMegaSelector);
-  data.map((val) => {
-    return BN(data).times(BN(10).pow(megaDecimal))
+  return data.map((val) => {
+    return BN(val).times(BN(10).pow(megaDecimal))
   });
-  return data;
 }
 
 // Returns true if Bignumber p1 is beyond the upper/lower threshold of Bignumber p0.
@@ -131,11 +145,31 @@ async function pullTriggerStream(state, debug) {
     });
 }
 
-async function heartbeat(debug = process.env.DEBUG) {
-  if (config.streams.length == 0) {
-    console.error('@@@@@@ No stream to watch, exit!');
-    process.exit(1);
-  } else if (states.length == 0) {
+async function pullTriggerMega(debug) {
+  let callData = megaStream.methods.pullTrigger().encodeABI();
+  //  let estimatedGas = await state.stream.methods.pullTrigger().estimateGas({gas: config.triggerMaxGas});
+  let txObj = await web3.eth.accounts.signTransaction({
+    to: megaStream.address,
+    data: callData,
+    value: '0',
+    gas: config.triggerMaxGas
+  }, privateKey);
+  await web3.eth.sendSignedTransaction(txObj.rawTransaction)
+    .on('confirmation', async function(confirmationNumber, receipt) {
+      // Fired for every confirmation up to the 12th confirmation (0-indexed). We treat 2 confirmations as finalized state.
+      if (confirmationNumber == 1) {
+        if (debug) {
+          console.log(`+++++ tx ${receipt.transactionHash} 2 confirmations, gasUsed ${receipt.gasUsed}`);
+        }
+      }
+    })
+    .on('error', async function(err) {
+      console.error(err);
+    });
+}
+
+async function heartbeatStreams(debug = process.env.DEBUG) {
+  if (states.length == 0) {
     await init(debug);
   } else {
     await sync();
@@ -145,7 +179,7 @@ async function heartbeat(debug = process.env.DEBUG) {
   for (let i = 0; i < states.length; i++) {
     let now = parseInt((new Date()).getTime() / 1000);
     let now_str = (new Date()).toTimeString().split(' ')[0];
-    if (i == 0 && debug) console.log(`----- heartbeat ${now_str} ...`);
+    if (i == 0 && debug) console.log(`----- heartbeatStreams ${now_str} ...`);
     let isDeviated = deviated(data[i], states[i].lastPrice, states[i].deviation);
     let isExpired = now > states[i].lastUpdated + states[i].windowSize;
     if (!isDeviated && !isExpired) {
@@ -157,8 +191,47 @@ async function heartbeat(debug = process.env.DEBUG) {
     }
     await pullTriggerStream(states[i], debug);
   }
-  setTimeout(heartbeat, config.heartbeat);
+  setTimeout(heartbeatStreams, config.heartbeatStreams);
 }
 
-// heartbeat();
-queryCoingeckoMegaData(8);
+async function heartbeatMega(debug = process.env.DEBUG) {
+  if (states.length == 0) {
+    await init(debug);
+  } else {
+    await sync();
+  }
+
+  let data = await queryCoingeckoMegaData(megaStream.decimal);
+  if (data.length != states.length) {
+    console.log('@@@@@ Mega data & Mega query / selector mismatch, exit!');
+    process.exit(1);
+  }
+
+  let trigger = false;
+  for (let i = 0; i < states.length; i++) {
+    let now = parseInt((new Date()).getTime() / 1000);
+    let now_str = (new Date()).toTimeString().split(' ')[0];
+    if (i == 0 && debug) console.log(`----- heartbeatMega ${now_str} ...`);
+    let isDeviated = deviated(data[i], states[i].lastPrice, states[i].deviation);
+    let isExpired = now > states[i].lastUpdated + states[i].windowSize;
+    if (!isDeviated && !isExpired) {
+      continue;
+    } else if (isDeviated) {
+      console.log(`+++++ Mega Stream[${i}] ${states[i].selector} ${now_str} d(${data[i]}), beyond last data (${states[i].lastPrice}) +/- ${states[i].deviation}/1000, Deviation trigger`);
+      trigger = true;
+    } else if (isExpired) {
+      console.log(`+++++ Mega Stream[${i}] ${states[i].selector} ${now_str} d(${data[i]}), last data (${states[i].lastPrice}) outdated, Timer trigger`);
+      trigger = true;
+    }
+  }
+  if (trigger) {
+    await pullTriggerMega(debug);
+    setTimeout(heartbeatMega, config.heartbeatMega);
+  } else {
+    setTimeout(heartbeatMega, config.heartbeatStreams);
+  }
+}
+
+// heartbeatStreams();
+
+heartbeatMega();
