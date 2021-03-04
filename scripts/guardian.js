@@ -133,7 +133,7 @@ async function pullTriggerStream(state, debug) {
     gas: config.triggerMaxGas
   }, privateKey);
   await web3.eth.sendSignedTransaction(txObj.rawTransaction)
-    .on('confirmation', async function(confirmationNumber, receipt) {
+    .on('confirmation', function(confirmationNumber, receipt) {
       // Fired for every confirmation up to the 12th confirmation (0-indexed). We treat 2 confirmations as finalized state.
       if (confirmationNumber == 1) {
         if (debug) {
@@ -141,8 +141,14 @@ async function pullTriggerStream(state, debug) {
         }
       }
     })
-    .on('error', async function(err) {
-      console.error(err);
+    .on('error', function(err, receipt) {
+      if (debug) {
+        console.log(`@@@@@ Error (${errCnt}): tx ${receipt.transactionHash} error, gasUsed ${receipt.gasUsed}`);
+      }
+      if (++errCnt > 5) {
+        states = [];  // re-Init
+        errCnt = 0;
+      }
     });
 }
 
@@ -156,7 +162,7 @@ async function pullTriggerMega(debug) {
     gas: config.triggerMaxGas
   }, privateKey);
   await web3.eth.sendSignedTransaction(txObj.rawTransaction)
-    .on('confirmation', async function(confirmationNumber, receipt) {
+    .on('confirmation', function(confirmationNumber, receipt) {
       // Fired for every confirmation up to the 12th confirmation (0-indexed). We treat 2 confirmations as finalized state.
       if (confirmationNumber == 1) {
         if (debug) {
@@ -164,8 +170,10 @@ async function pullTriggerMega(debug) {
         }
       }
     })
-    .on('error', async function(err) {
-      console.error('----- err: ', err);
+    .on('error', function(err, receipt) {
+      if (debug) {
+        console.log(`@@@@@ Error (${errCnt}): tx ${receipt.transactionHash} error, gasUsed ${receipt.gasUsed}`);
+      }
       if (++errCnt > 5) {
         states = [];  // re-Init
         errCnt = 0;
@@ -190,7 +198,7 @@ async function heartbeatStreams(debug = process.env.DEBUG) {
     if (!isDeviated && !isExpired) {
       continue;
     } else if (isDeviated) {
-      console.log(`+++++ Stream ${states[i].selector} ${now_str} d(${data[i]}), beyond last data (${states[i].lastPrice}) +/- ${states[i].deviation}/1000, Deviation trigger`);
+      console.log(`+++++ Stream ${states[i].selector} ${now_str} d(${data[i]}), beyond last data (${states[i].lastPrice}) ±${states[i].deviation / 1000}, Deviation trigger`);
     } else if (isExpired) {
       console.log(`+++++ Stream ${states[i].selector} ${now_str} d(${data[i]}), last data (${states[i].lastPrice}) outdated, Timer trigger`);
     }
@@ -222,7 +230,7 @@ async function heartbeatMega(debug = process.env.DEBUG) {
     if (!isDeviated && !isExpired) {
       continue;
     } else if (isDeviated) {
-      console.log(`+++++ Mega Stream[${i}] ${states[i].selector} ${now_str} d(${data[i]}), beyond last data (${states[i].lastPrice}) +/- ${states[i].deviation}/1000, Deviation trigger`);
+      console.log(`+++++ Mega Stream[${i}] ${states[i].selector} ${now_str} d(${data[i]}), beyond last data (${states[i].lastPrice}) ±${states[i].deviation / 1000}, Deviation trigger`);
       trigger = true;
     } else if (isExpired) {
       console.log(`+++++ Mega Stream[${i}] ${states[i].selector} ${now_str} d(${data[i]}), last data (${states[i].lastPrice}) outdated, Timer trigger`);
@@ -237,6 +245,17 @@ async function heartbeatMega(debug = process.env.DEBUG) {
   }
 }
 
-// heartbeatStreams();
+function errorHandler(e) {
+  console.log(e);
+  let now = (new Date()).toTimeString().split(' ')[0];
+  console.log(`@@@@@ Error caught on ${now}, preparing for a restart...`);
+  setTimeout(() => {
+    process.exit(1)
+  }, 3000)
+}
+
+process.on('uncaughtException',  errorHandler);
+process.on('unhandledRejection', errorHandler);
+
 
 heartbeatMega();

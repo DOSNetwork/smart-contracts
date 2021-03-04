@@ -27,6 +27,7 @@ contract Stream is DOSOnChainSDK {
     // Data parser, may be configured along with data source change
     address public parser;
     address public streamManager;
+    bool public whitelistEnabled;
     // Reader whitelist
     mapping(address => bool) private whitelist;
     // Stream data is either updated once per windowSize or the deviation requirement is met, whichever comes first.
@@ -54,11 +55,12 @@ contract Stream is DOSOnChainSDK {
     event BulletCaught(uint qId);
     event AddAccess(address reader);
     event RemoveAccess(address reader);
+    event AccessStatusUpdated(bool oldStatus, bool newStatus);
     event AddGuardian(address guardian);
     event RemoveGuardian(address guardian);
 
     modifier accessible {
-        require(hasAccess(msg.sender), "!accessible");
+        require(!whitelistEnabled || hasAccess(msg.sender), "!accessible");
         _;
     }
 
@@ -146,6 +148,10 @@ contract Stream is DOSOnChainSDK {
             delete whitelist[reader];
             emit RemoveAccess(reader);
         }
+    }
+    function toggleAccessStatus() public onlyOwner {
+        emit AccessStatusUpdated(whitelistEnabled, !whitelistEnabled);
+        whitelistEnabled = !whitelistEnabled;
     }
     function addGuardian(address guardian) public onlyOwner {
         if (!deviationGuardian[guardian]) {
