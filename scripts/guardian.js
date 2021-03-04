@@ -10,6 +10,7 @@ const privateKey = '0x' + process.env.PK;
 const states = [];
 var streamsManager = null;
 var megaStream = null;
+var errCnt = 0;
 
 async function init(debug) {
   assert(privateKey.length == 66,
@@ -164,7 +165,11 @@ async function pullTriggerMega(debug) {
       }
     })
     .on('error', async function(err) {
-      console.error(err);
+      console.error('----- err: ', err);
+      if (++errCnt > 5) {
+        states = [];  // re-Init
+        errCnt = 0;
+      }
     });
 }
 
