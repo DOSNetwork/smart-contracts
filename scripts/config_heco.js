@@ -12,6 +12,5 @@ module.exports = {
   streamABI: stream.abi,
   megaStreamABI: mega.abi,
   triggerMaxGas: 800000,
-  heartbeatStreams: 60 * 1000,  // 60 seconds
-  heartbeatMega: 90 * 1000,     // 90 seconds
+  heartbeat: 60 * 1000,  // 60 seconds
 };

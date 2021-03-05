@@ -204,7 +204,7 @@ async function heartbeatStreams(debug = process.env.DEBUG) {
     }
     await pullTriggerStream(states[i], debug);
   }
-  setTimeout(heartbeatStreams, config.heartbeatStreams);
+  setTimeout(heartbeatStreams, config.heartbeat);
 }
 
 async function heartbeatMega(debug = process.env.DEBUG) {
@@ -239,9 +239,9 @@ async function heartbeatMega(debug = process.env.DEBUG) {
   }
   if (trigger) {
     await pullTriggerMega(debug);
-    setTimeout(heartbeatMega, config.heartbeatMega);
+    setTimeout(heartbeatMega, config.heartbeat);
   } else {
-    setTimeout(heartbeatMega, config.heartbeatStreams);
+    setTimeout(heartbeatMega, config.heartbeat);
   }
 }
 
