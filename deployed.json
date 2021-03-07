@@ -33,12 +33,12 @@
       "Staking Implementation":"0xAA06934e959efa9F8E41B8c6D3CA49a8Da0Ca37e",
       "CoingeckoParserV2" : "0xBF8295AF9c26618Fb48c4fEF38571268413147F0",
       "CoingeckoMegaStream": "0x8d2cf53d3c9635DC0f73B4Ca4cbf3191DBeC29b8",
-      "CoingeckoStreamsManager": "0xeFC5cc56bf9a52acdb073c291382E815C78b5153",
-      "CoingeckoETHUSDStream" : "0xa60C9987704e9A2e6e5EAf2609AF2C9102f7E47C",
-      "CoingeckoBTCUSDStream" : "0xd0ad1BE0D66803af941F1beb7808fb6b884E9aE7",
-      "CoingeckoDOTUSDStream" : "0xD6A9f680DA24e0Aec350560AE448145600486874",
-      "CoingeckoHTUSDStream" : "0xFdb1C1efcBbA3fCf8e071F4ad97d79a993Ce2342",
-      "CoingeckoDOSUSDStream" : "0x865128E43BF56120cDF0B59354D1B8bd77aF3d7a"
+      "CoingeckoStreamsManager": "0x51D657f6000190Ba785e30344E9987028c1CF025",
+      "CoingeckoBTCUSDStream" : "0x9E45a6ba8035de28885fC511D58Ef8c48cD51c10",
+      "CoingeckoETHUSDStream" : "0x40b84bf9d51fFb7BAf1e84E1C5F32602e5055a4D",
+      "CoingeckoDOTUSDStream" : "0xEc9B00b611e0DE08094bC8deB51a0Aed5f30667F",
+      "CoingeckoHTUSDStream" : "0xEBC40b94bD5e16DE21163568C05A05C45C927da5",
+      "CoingeckoDOSUSDStream" : "0x85167c54BFf2a039E1084f1DC229A1BEAf15Ff27"
    }
 
 }

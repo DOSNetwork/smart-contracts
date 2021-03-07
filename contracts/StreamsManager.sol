@@ -1,28 +1,8 @@
 pragma solidity ^0.5.0;
+pragma experimental ABIEncoderV2;
 
 import "./lib/StringUtils.sol";
-
-contract IStream {
-    function decimal() public view returns (uint);
-    function windowSize() public view returns (uint);
-    function description() public view returns (string memory);
-    function selector() public view returns (string memory);
-    function deviation() public view returns (uint);
-    function numPoints() public view returns(uint);
-    function num24hPoints() public view returns(uint);
-    function hasAccess(address reader) public view returns(bool);
-    function shouldUpdate(uint price) public view returns(bool);
-    function megaUpdate(uint price) public returns(bool);
-    function latestResult() public view returns (uint, uint);
-    function TWAP1Hour() public view returns (uint);
-    function TWAP2Hour() public view returns (uint);
-    function TWAP4Hour() public view returns (uint);
-    function TWAP6Hour() public view returns (uint);
-    function TWAP8Hour() public view returns (uint);
-    function TWAP12Hour() public view returns (uint);
-    function TWAP1Day() public view returns (uint);
-    function TWAP1Week() public view returns (uint);
-}
+import "./interfaces/StreamInterface.sol";
 
 // StreamsManager manages group of data streams from the same meta data source (e.g. Coingecko, Coinbase, etc.)
 // Readable only by Data Stream UI or EOAs, not by dependant smart contracts / projects.
@@ -168,6 +148,12 @@ contract StreamsManager {
     }
     function latestResult(address stream) public view accessible(stream) returns(uint, uint) {
         return IStream(stream).latestResult();
+    }
+    function last24hResults(address stream) public view accessible(stream) returns(IStream.Observation[] memory) {
+        return IStream(stream).last24hResults();
+    }
+    function results(address stream, uint startIdx, uint lastIdx) public view accessible(stream) returns(IStream.Observation[] memory) {
+        return IStream(stream).results(startIdx, lastIdx);
     }
     function TWAP1Hour(address stream) public view accessible(stream) returns(uint) {
         return IStream(stream).TWAP1Hour();

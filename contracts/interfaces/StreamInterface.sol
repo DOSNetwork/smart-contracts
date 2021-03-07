@@ -1,6 +1,11 @@
 pragma solidity ^0.5.0;
+pragma experimental ABIEncoderV2;
 
-interface StreamInterface {
+interface IStream {
+    struct Observation {
+        uint timestamp;
+        uint price;
+    }
     function description() external view returns (string memory);
     function decimal() external view returns (uint);
     function windowSize() external view returns (uint);
@@ -11,6 +16,10 @@ interface StreamInterface {
     function num24hPoints() external view returns(uint);
     function latestResult() external view returns (uint lastPrice, uint lastUpdatedTime);
     function result(uint idx) external view returns (uint price, uint timestamp);
+    function results(uint startIdx, uint lastIdx) external view returns(Observation[] memory);
+    function last24hResults() external view returns (Observation[] memory);
+    function shouldUpdate(uint price) external view returns(bool);
+    function megaUpdate(uint price) external returns(bool);
     function TWAP1Hour() external view returns (uint);
     function TWAP2Hour() external view returns (uint);
     function TWAP4Hour() external view returns (uint);

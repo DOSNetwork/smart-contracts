@@ -1,4 +1,5 @@
 pragma solidity ^0.5.0;
+pragma experimental ABIEncoderV2;
 
 import "./lib/SafeMath.sol";
 import "./DOSOnChainSDK.sol";
@@ -182,6 +183,8 @@ contract Stream is DOSOnChainSDK {
     // Observation[] is sorted by timestamp in ascending order. Return the maximum index {i}, satisfying that: observations[i].timestamp <= observations[end].timestamp.sub(timedelta)
     // Return UINT_MAX if not enough data points.
     function binarySearch(uint timedelta) public view returns (uint) {
+        if (observations.length == 0) return uint(-1);
+
         int index = -1;
         int l = 0;
         int r = int(observations.length.sub(1));
@@ -247,6 +250,22 @@ contract Stream is DOSOnChainSDK {
         return (observations[idx].price, observations[idx].timestamp);
     }
     
+    // @dev Returns data [observations[startIdx], observations[lastIdx]], inclusive.
+    function results(uint startIdx, uint lastIdx) public view accessible returns (Observation[] memory) {
+        require(startIdx <= lastIdx && lastIdx < observations.length);
+        Observation[] memory ret = new Observation[](lastIdx - startIdx + 1);
+        for (uint i = startIdx; i <= lastIdx; i++) {
+            ret[i - startIdx] = observations[i];
+        }
+        return ret;
+    }
+    function last24hResults() public view accessible returns (Observation[] memory) {
+        uint lastIdx = observations.length - 1;
+        uint startIdx = binarySearch(ONEDAY);
+        if (startIdx == UINT_MAX) startIdx = observations.length - 1;
+        return results(startIdx, lastIdx);
+    }
+
     // @dev Returns the most freshed (latest reported) data point.
     // Accessible by whitelisted contracts or EOA.
     // Return latest reported price & timestamp data.
