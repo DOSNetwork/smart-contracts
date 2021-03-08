@@ -260,9 +260,11 @@ contract Stream is DOSOnChainSDK {
         return ret;
     }
     function last24hResults() public view accessible returns (Observation[] memory) {
+        if (observations.length == 0) return (new Observation[](0));
+
         uint lastIdx = observations.length - 1;
         uint startIdx = binarySearch(ONEDAY);
-        if (startIdx == UINT_MAX) startIdx = observations.length - 1;
+        if (startIdx == UINT_MAX) startIdx = 0;
         return results(startIdx, lastIdx);
     }
 
