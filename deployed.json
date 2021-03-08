@@ -4,7 +4,7 @@
       "DBToken":"0x9456d6a22c8bdFF613366d51e3d60402cB8cFd8F",
       "DOSAddressBridge":"0x98a0e7026778840aacd28b9c03137d32e06f5ff1",
       "Commit Reveal":"0x144ed0555269628049f76da2adbdcdf3aa488e0e",
-      "DOSProxy":"0x1402c061e2AeC7b41AE4911b40F7B340489dD1da",
+      "DOSProxy":"0x557B3CE8891D4ef5D6ad2A66445993a035FEdb5c",
       "DOSPayment Gateway":"0x7B8D5a37008382B2C7e8e15EcF3C2727e38A6aC6",
       "DOSPayment Implementation":"0x24286C5a340bF99EDB2d7e7D114477987d34816F",
       "Staking Gateway":"0x5DBeF8E9e83A17D4D1D4c65a1E26133EDAE851Dc",
@@ -20,5 +20,25 @@
       "DOSPayment Implementation":"0x6b89f9C6bD11B14ae17DAfba4C578DdA527E7EF3",
       "Staking Gateway":"0x064fa6a739580a9bA8cfeFDc271fa5585BC274e3",
       "Staking Implementation":"0x9FAAebE59eaf3132c3cf42a947bAb11408D12296"
+   },
+   "hecoTestnet":{
+      "DOSToken":"0x3bca354b33e0a0ca6487fb51d1150f6e9c0e0e5e",
+      "DBToken":"0x84c6be700f2db040ed1455ac980538003cda90dd",
+      "DOSAddressBridge":"0x797D0f474dDcAa8F4066A263684B540C074801b3",
+      "Commit Reveal":"0x9DC5A7FE9cE5136Cfd2c4B2FfCAe38c7d2b1819A",
+      "DOSProxy":"0x56e315c15506d4fdfc4bfcd895802c35f9dfd903",
+      "DOSPayment Gateway":"0x4eCECeCDCFC068643252b46F86bA1Dc30dccB1dD",
+      "DOSPayment Implementation":"0x7e6a95eb1d5f2f9c89b3e6eb78afd08770cc18d8",
+      "Staking Gateway":"0xFd9B8A33756A9De4E2bBd9cc066dB912bb5c5499",
+      "Staking Implementation":"0xAA06934e959efa9F8E41B8c6D3CA49a8Da0Ca37e",
+      "CoingeckoParserV2" : "0xBF8295AF9c26618Fb48c4fEF38571268413147F0",
+      "CoingeckoMegaStream": "0x8d2cf53d3c9635DC0f73B4Ca4cbf3191DBeC29b8",
+      "CoingeckoStreamsManager": "0x51D657f6000190Ba785e30344E9987028c1CF025",
+      "CoingeckoBTCUSDStream" : "0x2022737ddC95b15d55E452C9E8418899063fc196",
+      "CoingeckoETHUSDStream" : "0x9E39eF90EfE2eF833a9bB1F149be17477cdFA4d0",
+      "CoingeckoDOTUSDStream" : "0x4bBe16963C98553416114846e77696680F7cB812",
+      "CoingeckoHTUSDStream" : "0x438A5CC6A2b5E14A81e196fa32356a3705db10Fa",
+      "CoingeckoDOSUSDStream" : "0xfBc42FA54b3dc107f76978436b46542E3876229F"
    }
+
 }

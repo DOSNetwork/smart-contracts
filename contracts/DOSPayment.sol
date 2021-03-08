@@ -1,6 +1,6 @@
 pragma solidity ^0.5.0;
 
-contract ERC20I {
+contract ERC20 {
     function balanceOf(address who) public view returns (uint);
     function decimals() public view returns (uint);
     function transfer(address to, uint value) public returns (bool);
@@ -151,7 +151,7 @@ contract DOSPayment {
         address tokenAddr = paymentMethods[payer];
         // Get fee by tokenAddr and serviceType
         uint fee = feeLists[tokenAddr].serviceFee[serviceType];
-        return ERC20I(tokenAddr).balanceOf(payer) >= fee;
+        return ERC20(tokenAddr).balanceOf(payer) >= fee;
     }
 
     function chargeServiceFee(address payer, uint requestID, uint serviceType) public onlyFromProxy {
@@ -160,7 +160,7 @@ contract DOSPayment {
         uint fee = feeLists[tokenAddr].serviceFee[serviceType];
         payments[requestID] = Payment(payer, tokenAddr, serviceType, fee);
         emit LogChargeServiceFee(payer, tokenAddr, requestID, serviceType, fee);
-        ERC20I(tokenAddr).transferFrom(payer, address(this), fee);
+        ERC20(tokenAddr).transferFrom(payer, address(this), fee);
     }
 
     function refundServiceFee(uint requestID) public onlyAdmin hasPayment(requestID) {
@@ -170,7 +170,7 @@ contract DOSPayment {
         address payer = payments[requestID].payer;
         delete payments[requestID];
         emit LogRefundServiceFee(payer, tokenAddr, requestID, serviceType, fee);
-        ERC20I(tokenAddr).transfer(payer, fee);
+        ERC20(tokenAddr).transfer(payer, fee);
     }
 
     function recordServiceFee(uint requestID, address submitter, address[] memory workers) public onlyFromProxy hasPayment(requestID) {
@@ -197,7 +197,7 @@ contract DOSPayment {
         require(guardianFundsTokenAddr != address(0x0), "not-valid-guardian-token-addr");
         uint fee = feeLists[guardianFundsTokenAddr].guardianFee;
         emit LogClaimGuardianFee(guardianAddr, guardianFundsTokenAddr, fee, msg.sender);
-        ERC20I(guardianFundsTokenAddr).transferFrom(guardianFundsAddr, guardianAddr,fee);
+        ERC20(guardianFundsTokenAddr).transferFrom(guardianFundsAddr, guardianAddr,fee);
     }
 
     // @dev: node runners call to withdraw recorded service fees.
@@ -214,7 +214,7 @@ contract DOSPayment {
         uint amount = _balances[nodeAddr][tokenAddr];
         if (amount != 0) {
             delete _balances[nodeAddr][tokenAddr];
-            ERC20I(tokenAddr).transfer(to, amount);
+            ERC20(tokenAddr).transfer(to, amount);
         }
         return amount;
     }

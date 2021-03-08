@@ -25,7 +25,7 @@ contract IERC20 {
 
 contract DOSOnChainSDK is Ownable {
     IProxy dosProxy;
-    IAddressBridge dosAddrBridge = IAddressBridge(0x98A0E7026778840Aacd28B9c03137D32e06F5ff1);
+    IAddressBridge dosAddrBridge = IAddressBridge(0x797D0f474dDcAa8F4066A263684B540C074801b3);
 
     modifier resolveAddress {
         address proxyAddr = dosAddrBridge.getProxyAddress();

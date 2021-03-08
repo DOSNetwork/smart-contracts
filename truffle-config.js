@@ -3,6 +3,7 @@ const assert = require('assert');
 const infura_token = "8e609c76fce442f8a1735fbea9999747";
 const mainnetInfura = `https://mainnet.infura.io/v3/${infura_token}`;
 const rinkebyInfura = `https://rinkeby.infura.io/v3/${infura_token}`;
+const hecoTestnet = 'https://http-testnet.hecochain.com';
 const pk = process.env.PK;
 
 module.exports = {
@@ -17,6 +18,12 @@ module.exports = {
       network_id: 4,
       gas: 8000000
     },
+    hecoTestnet: {
+      provider: () => new HDWalletProvider(pk, hecoTestnet),
+      network_id: 256,
+      gas: 8000000,
+      gasPrice: 1e9  // 1 Gwei
+    },
     live: {
       provider: () => new HDWalletProvider(pk, mainetInfura),
       network_id: 1,
@@ -29,7 +36,7 @@ module.exports = {
       settings: {
         optimizer: {
           enabled: true,
-          runs: 100
+          runs: 200
         },
       }
     }

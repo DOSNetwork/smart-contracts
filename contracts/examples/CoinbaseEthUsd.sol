@@ -1,11 +1,11 @@
 pragma solidity ^0.5.0;
 
-import "../lib/utils.sol";
+import "../lib/StringUtils.sol";
 import "../DOSOnChainSDK.sol";
 
 // An example get latest ETH-USD price from Coinbase
 contract CoinbaseEthUsd is DOSOnChainSDK {
-    using utils for *;
+    using StringUtils for *;
 
     // Struct to hold parsed floating string "123.45"
     struct ethusd {
@@ -34,9 +34,9 @@ contract CoinbaseEthUsd is DOSOnChainSDK {
 
         price_str = string(result);
         prices.integral = price_str.subStr(1).str2Uint();
-        int delimit_idx = price_str.indexOf('.');
-        if (delimit_idx != -1) {
-            prices.fractional = price_str.subStr(uint(delimit_idx + 1)).str2Uint();
+        uint delimit_idx = price_str.indexOf('.');
+        if (delimit_idx != result.length) {
+            prices.fractional = price_str.subStr(delimit_idx + 1).str2Uint();
         }
         emit GetPrice(prices.integral, prices.fractional);
     }

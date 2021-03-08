@@ -1,7 +1,7 @@
 pragma solidity ^0.5.0;
 
-// Util functions imported in OnChainSDK for caller to use.
-library utils {
+// Util functions caller to process strings.
+library StringUtils {
     uint constant UINT256MAX = ~uint(0);
 
     // A decimal byte to uint. Return value of 10 indicating invalid input.
@@ -31,7 +31,11 @@ library utils {
     // 1. processing stops once encountering character not in charset c.
     // 2. returns UINT256MAX when overflow.
     function str2Uint(string memory a) internal pure returns(uint) {
-        bytes memory b = bytes(a);
+        return bytes2Uint(bytes(a));
+    }
+
+    // A decimal bytes string (charset c in [0-9]) to uint. Like atoi().
+    function bytes2Uint(bytes memory b) internal pure returns(uint) {
         uint res = 0;
         for (uint i = 0; i < b.length; i++) {
             uint8 tmp = byte2Uint(b[i]);
@@ -208,25 +212,26 @@ library utils {
         return bytesEqual(aa, bb);
     }
 
-    // Return the index of needle's first occurrance in haystack. Return value
-    // of -1 indicating no occurrance.
+    // Return the index of needle's first occurrance in haystack; or return index of the first byte
+    // after haystack if not found.
     // Useful in case of parsing float string "123.45".
     // Example:
     //   indexOf('123', '') => 0
-    //   indexOf('', '45') => -1
-    //   indexOf('123', '1234') => -1
+    //   indexOf('', '45') => 1
+    //   indexOf('123', '1234') => 3
+    //   indexOf('12345', '34') => 2
     //   indexOf('123.45', '.') => 3
-    function indexOf(string memory haystack, string memory needle) internal pure returns(int) {
+    function indexOf(string memory haystack, string memory needle) internal pure returns(uint) {
         bytes memory b_haystack = bytes(haystack);
         bytes memory b_needle = bytes(needle);
         return indexOf(b_haystack, b_needle);
     }
 
-    function indexOf(bytes memory haystack, bytes memory needle) internal pure returns(int) {
+    function indexOf(bytes memory haystack, bytes memory needle) internal pure returns(uint) {
         if (needle.length == 0) {
             return 0;
         } else if (haystack.length < needle.length) {
-            return -1;
+            return haystack.length;
         }
         // Instead of O(haystack.length x needle.length), saving gas using KMP:
         // O(haystack.length + needle.length)
@@ -255,18 +260,20 @@ library utils {
             }
             // Match
             if(q == needle.length) {
-                return int(i - q + 1);
+                return i - q + 1;
             }
         }
         // No match
-        return -1;
+        return haystack.length;
     }
 
-    // subStr("1234567890", 2, 5) => "34567"
+    // subStr("123456789", 2, 5)   => "34567"
+    // subStr("123456789", 2, 100) => "3456789"
     // [start, start + len), index starting from 0.
     function subStr(bytes memory a, uint start, uint len) internal pure returns(bytes memory) {
-        require(start < a.length && start + len > start && start + len <= a.length,
-                "Invalid start index or length out of range");
+        if (start >= a.length) return "";
+
+        if (a.length - start < len) len = a.length - start;
         bytes memory res = new bytes(len);
         for (uint i = 0; i < len; i++) {
             res[i] = a[start + i];
@@ -277,8 +284,7 @@ library utils {
     // string num = "123.4567";
     // subStr(num, indexOf(num, '.') + 1) => "4567"
     function subStr(bytes memory a, uint start) internal pure returns(bytes memory) {
-        require(start < a.length, "Invalid start index out of range");
-        return subStr(a, start, a.length - start);
+        return subStr(a, start, a.length);
     }
 
     function subStr(string memory a, uint start, uint len) internal pure returns(string memory) {
@@ -289,5 +295,43 @@ library utils {
     function subStr(string memory a, uint start) internal pure returns(string memory) {
         bytes memory aa = bytes(a);
         return string(subStr(aa, start));
+    }
+
+    function count(bytes memory str, bytes memory delimiter) internal pure returns(uint) {
+        uint cnt = 0;
+        while(str.length > 0) {
+            uint idx = indexOf(str, delimiter);
+            if (idx != str.length) {
+                cnt++;
+                str = subStr(str, idx + delimiter.length);
+            } else {
+                return cnt;
+            }
+        }
+        return cnt;
+    }
+
+    function count(string memory str, string memory delimiter) internal pure returns(uint) {
+        return count(bytes(str), bytes(delimiter));
+    }
+
+    function split(string memory str, string memory delimiter) internal pure returns(string[] memory) {
+        bytes[] memory r = split(bytes(str), bytes(delimiter));
+        string[] memory ret = new string[](r.length);
+        for (uint i = 0; i < r.length; i++) {
+            ret[i] = string(r[i]);
+        }
+        return ret;
+    }
+
+    function split(bytes memory str, bytes memory delimiter) internal pure returns(bytes[] memory) {
+        uint len = count(str, delimiter) + 1;
+        bytes[] memory ret = new bytes[](len);
+        for (uint i = 0; i < len; i++) {
+            uint idx = indexOf(str, delimiter);
+            ret[i] = subStr(str, 0, idx);
+            str = subStr(str, idx + delimiter.length);
+        }
+        return ret;
     }
 }
