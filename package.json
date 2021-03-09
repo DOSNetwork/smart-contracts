@@ -10,7 +10,7 @@
   "devDependencies": {
     "@openzeppelin/test-helpers": "^0.5.3",
     "bl": ">=1.2.3",
-    "elliptic": ">=6.5.3",
+    "elliptic": ">=6.5.4",
     "lodash": ">=4.17.19",
     "minimist": ">=1.2.2",
     "node-fetch": ">=2.6.1",
