@@ -27,6 +27,13 @@ const configs = {
     GatewayAdmin: '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6',
     BootstrapList: 'https://dashboard.dos.network/api/bootStrapHeco',
   },
+  heco: {
+    DOSToken: '0xF50821F0A136A4514D476dC4Cc2a731e7728aFaF',
+    DBToken: '0x1B7BEaa5107Ac5Fb2E8ADCAE2B64B0Ba1997EFd9',
+    RewardsVault: '0xC25079a8A14FCA9a588616ebACD7b68745a3f709',
+    GatewayAdmin: '0x78DBae2489CD0E961893788272AF2C85Fc03d418',
+    BootstrapList: 'https://dashboard.dos.network/api/bootStrapHeco',
+  },
 }
 
 module.exports = function(deployer, network, accounts) {
@@ -34,7 +41,7 @@ module.exports = function(deployer, network, accounts) {
     await deployer.deploy(DOSAddressBridge);
     let bridgeInstance = await DOSAddressBridge.deployed();
 
-    if (network === 'rinkeby' || network === 'live' || network === 'hecoTestnet') {
+    if (network === 'rinkeby' || network === 'live' || network === 'hecoTestnet' || network === 'heco') {
       await bridgeInstance.setBootStrapUrl(configs[network].BootstrapList);
       // Deploying CommitReveal contracts.
       await deployer.deploy(CommitReveal, DOSAddressBridge.address);

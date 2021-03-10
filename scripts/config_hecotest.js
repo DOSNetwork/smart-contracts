@@ -4,10 +4,10 @@ const manager = require('../build/contracts/StreamsManager.json');
 const mega = require('../build/contracts/MegaStream.json');
 
 module.exports = {
-  httpProvider: 'https://http-mainnet.hecochain.com',
+  httpProvider: 'https://http-testnet.hecochain.com',
   coingeckoMegaSource: 'https://api.coingecko.com/api/v3/simple/price?vs_currencies=usd&ids=bitcoin,dos-network,ethereum,huobi-token,polkadot',
   coingeckoMegaSelector: '$..usd',
-  coingeckoStreamsManagerAddr: deployed.heco.CoingeckoStreamsManager,
+  coingeckoStreamsManagerAddr: deployed.hecoTestnet.CoingeckoStreamsManager,
   managerABI: manager.abi,
   streamABI: stream.abi,
   megaStreamABI: mega.abi,

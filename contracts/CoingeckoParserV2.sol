@@ -44,6 +44,9 @@ contract CoingeckoParserV2 {
         return uint_arr;
     }
 
+    // e.g.:
+    // floatStrs2UintArray("[48766,1524.21,13.99,34.64]", 8) => [4876600000000,152421000000,1399000000,3464000000]
+    // floatStrs2UintArray("[12.34]", 8) => [1234000000]
     function floatStrs2UintArray(string memory raw, uint decimal) public pure returns (uint[] memory) {
         return floatBytes2UintArray(bytes(raw), decimal);
     }
