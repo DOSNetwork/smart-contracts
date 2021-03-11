@@ -3,6 +3,7 @@ const assert = require('assert');
 const infura_token = "8e609c76fce442f8a1735fbea9999747";
 const mainnetInfura = `https://mainnet.infura.io/v3/${infura_token}`;
 const rinkebyInfura = `https://rinkeby.infura.io/v3/${infura_token}`;
+const okchainTest = 'https://exchaintest.okexcn.com';
 const hecoTestnet = 'https://http-testnet.hecochain.com';
 const heco = 'https://http-mainnet.hecochain.com';
 const pk = process.env.PK;
@@ -18,6 +19,12 @@ module.exports = {
       provider: () => new HDWalletProvider(pk, rinkebyInfura),
       network_id: 4,
       gas: 8000000
+    },
+    okchainTest: {
+      provider: () => new HDWalletProvider(pk, okchainTest),
+      network_id: 65,
+      gas: 8000000,
+      gasPrice: 1e9  // 1 Gwei
     },
     hecoTestnet: {
       provider: () => new HDWalletProvider(pk, hecoTestnet),

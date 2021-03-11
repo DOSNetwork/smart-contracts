@@ -58,5 +58,16 @@
       "CoingeckoDOTUSDStream" : "0xB01c89Effe80c29782d50CBE09160F20BA9Bc4F7",
       "CoingeckoHTUSDStream" : "0xB6D103f142A3f493f1d00478F64159591d82c92a",
       "CoingeckoDOSUSDStream" : "0xdB2831118407367d9116E509bC7AeED325c21B59"
+   },
+   "okchainTest":{
+      "DOSToken":"0x51147d0bc5be0a9d487a412e59ece23bb699461a",
+      "DBToken":"0x7c013b34d07ab263233372a2f385460fdedd902a",
+      "DOSAddressBridge":"0xD1aFEa6D7745c9d168A77Abd80124A0592B0D48e",
+      "Commit Reveal":"0x6510aA8EF75e409f8139084B5ec1D0Ef39759A91",
+      "DOSProxy":"0x365b9F766a54d161f260bB806e6E97043Ee8668c",
+      "DOSPayment Gateway":"0x7e6A95EB1D5F2f9c89B3E6eb78AFD08770cc18D8",
+      "DOSPayment Implementation":"0x6863D706861d7ce7ADB1e1AD5AB54E1784bB670d",
+      "Staking Gateway":"0xAA06934e959efa9F8E41B8c6D3CA49a8Da0Ca37e",
+      "Staking Implementation":"0x9aEB6F0BD24962C44FdAD317DF9f5C6FD0d46C9E"
    }
 }

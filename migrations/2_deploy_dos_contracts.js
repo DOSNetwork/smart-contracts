@@ -34,6 +34,13 @@ const configs = {
     GatewayAdmin: '0x78DBae2489CD0E961893788272AF2C85Fc03d418',
     BootstrapList: 'https://dashboard.dos.network/api/bootStrapHeco',
   },
+  okchainTest: {
+    DOSToken: '0x51147d0bc5be0a9d487a412e59ece23bb699461a',
+    DBToken: '0x7c013b34d07ab263233372a2f385460fdedd902a',
+    RewardsVault: '0xE222f441cb42bCFE8E46Fdecad0e633C70246BD3',
+    GatewayAdmin: '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6',
+    BootstrapList: 'https://dashboard.dos.network/api/bootStrapOkchain',
+  },
 }
 
 module.exports = function(deployer, network, accounts) {
@@ -41,7 +48,7 @@ module.exports = function(deployer, network, accounts) {
     await deployer.deploy(DOSAddressBridge);
     let bridgeInstance = await DOSAddressBridge.deployed();
 
-    if (network === 'rinkeby' || network === 'live' || network === 'hecoTestnet' || network === 'heco') {
+    if (network === 'rinkeby' || network === 'live' || network === 'hecoTestnet' || network === 'heco' || network === 'okchainTest') {
       await bridgeInstance.setBootStrapUrl(configs[network].BootstrapList);
       // Deploying CommitReveal contracts.
       await deployer.deploy(CommitReveal, DOSAddressBridge.address);
