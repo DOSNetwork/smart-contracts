@@ -58,7 +58,8 @@
       "CoingeckoDOTUSDStream" : "0xB01c89Effe80c29782d50CBE09160F20BA9Bc4F7",
       "CoingeckoHTUSDStream" : "0xB6D103f142A3f493f1d00478F64159591d82c92a",
       "CoingeckoDOSUSDStream" : "0xdB2831118407367d9116E509bC7AeED325c21B59",
-      "CoingeckoFILUSDStream" : "0x0bC3E19138F8B0CaB31F369565e4fd5A90bD79f8"
+      "CoingeckoFILUSDStream" : "0x0bC3E19138F8B0CaB31F369565e4fd5A90bD79f8",
+      "CoingeckoHPTUSDStream" : "0x27CF3f3C05188Fb61696d0a6Aad1a1013126cA89"
    },
    "okchainTest":{
       "DOSToken":"0x51147d0bc5be0a9d487a412e59ece23bb699461a",
