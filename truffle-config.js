@@ -6,6 +6,8 @@ const rinkebyInfura = `https://rinkeby.infura.io/v3/${infura_token}`;
 const okchainTest = 'https://exchaintest.okexcn.com';
 const hecoTestnet = 'https://http-testnet.hecochain.com';
 const heco = 'https://http-mainnet.hecochain.com';
+const bscTestnet = 'https://data-seed-prebsc-1-s2.binance.org:8545/';
+const bsc = 'https://bsc-dataseed.binance.org';
 const pk = process.env.PK;
 
 module.exports = {
@@ -37,6 +39,22 @@ module.exports = {
       network_id: 128,
       gas: 8000000,
       gasPrice: 2e9  // 2 Gwei
+    },
+    bscTestnet: {
+      provider: () => new HDWalletProvider(pk, bscTestnet),
+      networkCheckTimeout: 100000,
+      timeoutBlocks: 2000,
+      network_id: 97,
+      gas: 8000000,
+      gasPrice: 10e9  // 10 Gwei
+    },
+    bsc: {
+      provider: () => new HDWalletProvider(pk, bsc),
+      networkCheckTimeout: 100000,
+      timeoutBlocks: 200,
+      network_id: 56,
+      gas: 8000000,
+      gasPrice: 5e9  // 5 Gwei
     },
     live: {
       provider: () => new HDWalletProvider(pk, mainetInfura),
