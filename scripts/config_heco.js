@@ -12,5 +12,6 @@ module.exports = {
   streamABI: stream.abi,
   megaStreamABI: mega.abi,
   triggerMaxGas: 800000,
+  gasPriceGwei: 1.01,    // Gwei
   heartbeat: 60 * 1000,  // 60 seconds
 };
