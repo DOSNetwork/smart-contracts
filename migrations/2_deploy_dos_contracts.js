@@ -48,6 +48,13 @@ const configs = {
     GatewayAdmin: '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6',
     BootstrapList: 'https://dashboard.dos.network/api/bootStrapBSC',
   },
+  bsc: {
+    DOSToken: '0xDc0f0a5719c39764b011eDd02811BD228296887C',
+    DBToken: '0x4250A5022C4372e3f16cfa47Ac6449C48eC719b6',
+    RewardsVault: '0x76cEc0b88FD0F109C04F0475EBdF1648DF1c60B4',
+    GatewayAdmin: '0x250f871e3ccafde7b5053f321241fd8bb67a54f8',
+    BootstrapList: 'https://dashboard.dos.network/api/bootStrapBSC',
+  },
 }
 
 module.exports = function(deployer, network, accounts) {

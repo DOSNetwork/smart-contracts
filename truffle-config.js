@@ -7,7 +7,7 @@ const okchainTest = 'https://exchaintest.okexcn.com';
 const hecoTestnet = 'https://http-testnet.hecochain.com';
 const heco = 'https://http-mainnet.hecochain.com';
 const bscTestnet = 'https://data-seed-prebsc-1-s2.binance.org:8545/';
-const bsc = 'https://bsc-dataseed.binance.org';
+const bsc = 'https://bsc-dataseed.binance.org/';
 const pk = process.env.PK;
 
 module.exports = {
@@ -51,10 +51,10 @@ module.exports = {
     bsc: {
       provider: () => new HDWalletProvider(pk, bsc),
       networkCheckTimeout: 100000,
-      timeoutBlocks: 200,
+      timeoutBlocks: 2000,
       network_id: 56,
       gas: 8000000,
-      gasPrice: 5e9  // 5 Gwei
+      gasPrice: 6e9  // 6 Gwei
     },
     live: {
       provider: () => new HDWalletProvider(pk, mainetInfura),
