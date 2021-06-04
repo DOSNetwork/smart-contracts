@@ -43,10 +43,10 @@ contract DOSPayment {
     mapping(address => mapping(address => uint)) private _balances;
 
     uint constant public defaultSubmitterCut = 4;
-    uint constant public defaultSystemRandomFee = 50 * 1e18;  // 50 tokens
-    uint constant public defaultUserRandomFee = 50 * 1e18;    // 50 tokens
-    uint constant public defaultUserQueryFee = 50 * 1e18;     // 50 tokens
-    uint constant public defaultGuardianFee = 50 * 1e18;      // 50 tokens
+    uint constant public defaultSystemRandomFee = 5 * 1e18;  // 5 tokens
+    uint constant public defaultUserRandomFee = 5 * 1e18;    // 5 tokens
+    uint constant public defaultUserQueryFee = 5 * 1e18;     // 5 tokens
+    uint constant public defaultGuardianFee = 5 * 1e18;      // 5 tokens
 
     address public guardianFundsAddr;
     address public guardianFundsTokenAddr;

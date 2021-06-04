@@ -70,9 +70,9 @@ contract DOSProxy {
     mapping(uint => PendingRequest) PendingRequests;
 
     uint public relayRespondLimit = 128; // in blocks
-    uint public refreshSystemRandomHardLimit = 2048; // in blocks
+    uint public refreshSystemRandomHardLimit = 8192; // in blocks
     uint public groupMaturityPeriod = refreshSystemRandomHardLimit * 32; // in blocks
-    uint public lifeDiversity = refreshSystemRandomHardLimit * 4; // in blocks
+    uint public lifeDiversity = refreshSystemRandomHardLimit; // in blocks
     // avoid looping in a big loop that causing over gas.
     uint public loopLimit = 50;
 
@@ -83,8 +83,8 @@ contract DOSProxy {
     uint public groupSize = 3;
 
     // Bootstrapping related arguments, in blocks.
-    uint public bootstrapCommitDuration = 40;
-    uint public bootstrapRevealDuration = 40;
+    uint public bootstrapCommitDuration = 60;
+    uint public bootstrapRevealDuration = 60;
     uint public bootstrapStartThreshold = groupSize * bootstrapGroups;
     uint public bootstrapRound;
     uint public bootstrapEndBlk;

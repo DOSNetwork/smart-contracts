@@ -159,7 +159,8 @@ async function pullTriggerMega(debug) {
     to: megaStream.address,
     data: callData,
     value: '0',
-    gas: config.triggerMaxGas
+    gas: config.triggerMaxGas,
+    gasPrice: web3.utils.toWei(Number(config.gasPriceGwei).toString(), 'Gwei')
   }, privateKey);
   await web3.eth.sendSignedTransaction(txObj.rawTransaction)
     .on('confirmation', function(confirmationNumber, receipt) {

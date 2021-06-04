@@ -34,6 +34,27 @@ const configs = {
     GatewayAdmin: '0x78DBae2489CD0E961893788272AF2C85Fc03d418',
     BootstrapList: 'https://dashboard.dos.network/api/bootStrapHeco',
   },
+  okchainTest: {
+    DOSToken: '0x51147d0bc5be0a9d487a412e59ece23bb699461a',
+    DBToken: '0x7c013b34d07ab263233372a2f385460fdedd902a',
+    RewardsVault: '0xE222f441cb42bCFE8E46Fdecad0e633C70246BD3',
+    GatewayAdmin: '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6',
+    BootstrapList: 'https://dashboard.dos.network/api/bootStrapOkchain',
+  },
+  bscTestnet: {
+    DOSToken: '0x4eCECeCDCFC068643252b46F86bA1Dc30dccB1dD',
+    DBToken: '0xCEF1EE1049903B727cc60d6990cd48567AA7D983',
+    RewardsVault: '0xE222f441cb42bCFE8E46Fdecad0e633C70246BD3',
+    GatewayAdmin: '0xebef930796883E0A1D2f8964AEd7a59FE64e68E6',
+    BootstrapList: 'https://dashboard.dos.network/api/bootStrapBSC',
+  },
+  bsc: {
+    DOSToken: '0xDc0f0a5719c39764b011eDd02811BD228296887C',
+    DBToken: '0x4250A5022C4372e3f16cfa47Ac6449C48eC719b6',
+    RewardsVault: '0x76cEc0b88FD0F109C04F0475EBdF1648DF1c60B4',
+    GatewayAdmin: '0x250f871e3ccafde7b5053f321241fd8bb67a54f8',
+    BootstrapList: 'https://dashboard.dos.network/api/bootStrapBSC',
+  },
 }
 
 module.exports = function(deployer, network, accounts) {
@@ -41,7 +62,8 @@ module.exports = function(deployer, network, accounts) {
     await deployer.deploy(DOSAddressBridge);
     let bridgeInstance = await DOSAddressBridge.deployed();
 
-    if (network === 'rinkeby' || network === 'live' || network === 'hecoTestnet' || network === 'heco') {
+    if (network === 'rinkeby' || network === 'live' || network === 'hecoTestnet' ||
+        network === 'heco' || network === 'okchainTest' || network === 'bscTestnet' || network === 'bsc') {
       await bridgeInstance.setBootStrapUrl(configs[network].BootstrapList);
       // Deploying CommitReveal contracts.
       await deployer.deploy(CommitReveal, DOSAddressBridge.address);
